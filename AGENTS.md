@@ -54,9 +54,10 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
 
 ## CI / quality gates
 
-- Pre-commit: lint-staged with Prettier + typecheck + unit tests (see `setup-pre-commit` skill when ready).
-- CI: GitHub Actions — typecheck, unit, integration, E2E against preview.
+- Pre-commit: lint-staged with Prettier + typecheck (Worker + SPA + E2E tsconfigs) + `vitest related`.
+- CI: GitHub Actions — `verify` (typecheck, build, unit + integration tests, coverage) → `preview` (Wrangler `versions upload --preview-alias=pr-<N>`) → `e2e-smoke` (Playwright against the preview URL). Preview + E2E only run on `pull_request`; `main` pushes skip them.
 - Husky + `lint-staged` wired from day one.
+- When adding an E2E test, put it under `tests/e2e/` (own `tsconfig.e2e.json`; uses `@playwright/test` + DOM). Keep specs few — use integration tests for single-route behaviour.
 
 ## How to work in this repo
 
