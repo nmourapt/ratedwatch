@@ -18,6 +18,7 @@
     "types:check": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --check",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.e2e.json",
     "db:seed:movements": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false tsx scripts/db/seed-movements.ts",
+    "flags:set": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false tsx scripts/flags/set.ts",
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run --passWithNoTests",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest --passWithNoTests",
     "test:coverage": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run --coverage --passWithNoTests",
