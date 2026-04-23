@@ -495,3 +495,29 @@ describe("GET /leaderboard — public HTML", () => {
     expect(body).not.toMatch(/<script\b/i);
   });
 });
+
+// ---- Home hero top-5 extension ------------------------------------
+
+describe("GET / — home hero: top verified watches", () => {
+  it("surfaces the top verified watch brand + model on the landing page", async () => {
+    const res = await exports.default.fetch(new Request("https://ratedwatch.test/"));
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // gold is verified + rank 1 so its brand + model must appear.
+    expect(body).toContain(SEED.watches.gold.brand);
+    expect(body).toContain(SEED.watches.gold.model);
+  });
+
+  it("omits unverified watches (silver)", async () => {
+    const res = await exports.default.fetch(new Request("https://ratedwatch.test/"));
+    const body = await res.text();
+    // silver has verified_ratio 0 → must not appear in the verified top-5 hero.
+    expect(body).not.toContain(SEED.watches.silver.brand);
+  });
+
+  it("still renders with zero client JS (<script> count stays zero)", async () => {
+    const res = await exports.default.fetch(new Request("https://ratedwatch.test/"));
+    const body = await res.text();
+    expect(body).not.toMatch(/<script\b/i);
+  });
+});
