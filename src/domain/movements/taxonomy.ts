@@ -31,15 +31,21 @@ export interface MovementSearchOptions {
   limit?: number;
   /** When true, pending rows are included in `approved`. Defaults to false. */
   includePending?: boolean;
+  /**
+   * When set, pending movements submitted by this user id are surfaced
+   * in the `suggestions` array of the result. Used by the authed
+   * typeahead: a user can attach a watch to their own pending caliber
+   * before an admin approves it (slice #10).
+   */
+  suggestionsForUserId?: string;
 }
 
 export interface MovementSearchResult {
   approved: Movement[];
   /**
-   * Reserved for the submission flow in slice #10 — surfaced in the
-   * response shape from day one so the SPA consumer doesn't need a
-   * subsequent breaking change when suggestions start landing. Always
-   * an empty array for now.
+   * Pending movements visible to the caller. Populated only when
+   * `suggestionsForUserId` is passed — other users' pending rows are
+   * never leaked.
    */
   suggestions: Movement[];
 }
@@ -122,9 +128,34 @@ export function createMovementTaxonomy(db: Kysely<Database>) {
         .limit(limit)
         .execute();
 
+      // Slice #10: an authed caller also sees their own pending rows in
+      // the `suggestions` array. We intentionally issue a second query
+      // rather than union them into `approved` so the caller can render
+      // them differently (e.g. a "pending approval" badge).
+      let suggestions: Movement[] = [];
+      if (opts.suggestionsForUserId && !opts.includePending) {
+        const suggestionRows = await db
+          .selectFrom("movements")
+          .select([...MOVEMENT_COLUMNS])
+          .where("status", "=", "pending")
+          .where("submitted_by_user_id", "=", opts.suggestionsForUserId)
+          .where((eb) =>
+            eb.or([
+              sql<boolean>`LOWER(canonical_name) LIKE ${likeNeedle}`,
+              sql<boolean>`LOWER(manufacturer || ' ' || caliber) LIKE ${likeNeedle}`,
+              sql<boolean>`LOWER(REPLACE(REPLACE(canonical_name, '-', ''), ' ', '')) LIKE ${likeNormalized}`,
+            ]),
+          )
+          .orderBy("manufacturer")
+          .orderBy("canonical_name")
+          .limit(limit)
+          .execute();
+        suggestions = suggestionRows.map(toMovement);
+      }
+
       return {
         approved: rows.map(toMovement),
-        suggestions: [],
+        suggestions,
       };
     },
 
