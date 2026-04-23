@@ -10,17 +10,19 @@
   },
   "scripts": {
     "dev": "concurrently -n worker,vite -c blue,magenta \"npm:dev:worker\" \"npm:dev:vite\"",
-    "dev:worker": "wrangler dev",
+    "dev:worker": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler dev",
     "dev:vite": "vite",
     "build": "vite build",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler deploy",
+    "types:gen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types",
+    "types:check": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --check",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest --passWithNoTests"
+    "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run --passWithNoTests",
+    "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest --passWithNoTests"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.14.9",
-    "@cloudflare/workers-types": "^4.20260423.1",
+    "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

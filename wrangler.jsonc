@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ratedwatch",
-  "main": "./src/worker/index.ts",
+  "main": "./src/worker/index.tsx",
   "compatibility_date": "2026-04-17",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
