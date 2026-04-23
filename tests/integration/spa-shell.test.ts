@@ -15,12 +15,7 @@ import { describe, it, expect } from "vitest";
 // ASSETS binding instead of exports.default.fetch (which bypasses
 // assets routing — see vitest-pool-workers docs).
 
-const routes = [
-  "/app/login",
-  "/app/register",
-  "/app/dashboard",
-  "/app/settings",
-];
+const routes = ["/app/login", "/app/register", "/app/dashboard", "/app/settings"];
 
 describe("SPA shell — /app/*", () => {
   for (const path of routes) {
@@ -73,5 +68,37 @@ describe("SPA shell — /app/*", () => {
     // Dark-mode media query must be present — slice 3 ships no theme
     // toggle, so OS preference is the only signal.
     expect(css).toMatch(/prefers-color-scheme\s*:\s*dark/i);
+  });
+
+  // Slice 5 surfaced a Google OAuth button on the login and register
+  // pages. We can't drive a browser in vitest-pool-workers, so we
+  // inspect the built JS bundle: the button's label literal must be
+  // present (reachable from both pages via the shared
+  // GoogleSignInButton component) and the Better Auth social sign-in
+  // endpoint URL must be referenced from the compiled api.ts helper.
+  it("SPA bundle includes the Google sign-in button wiring", async () => {
+    const shell = await env.ASSETS.fetch(
+      new Request("https://ratedwatch.test/app/login"),
+    );
+    const shellBody = await shell.text();
+    const match = shellBody.match(
+      /<script[^>]+type="module"[^>]+src="(\/assets\/[^"]+)"/,
+    );
+    expect(match).not.toBeNull();
+    const jsHref = match![1]!;
+
+    const jsResponse = await env.ASSETS.fetch(
+      new Request(`https://ratedwatch.test${jsHref}`),
+    );
+    expect(jsResponse.status).toBe(200);
+    const js = await jsResponse.text();
+
+    // Button copy — proves GoogleSignInButton was tree-shaken INTO the
+    // bundle rather than dropped. Vite keeps user-visible strings
+    // intact through minification, so this is a stable check.
+    expect(js).toContain("Continue with Google");
+    // api.ts wiring — proves the button actually posts to Better
+    // Auth's social endpoint rather than a no-op stub.
+    expect(js).toContain("/api/v1/auth/sign-in/social");
   });
 });
