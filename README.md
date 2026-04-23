@@ -113,11 +113,28 @@ Worker-side runtime secrets (operator provisions once, via Wrangler):
 
 ```bash
 # Run from a trusted workstation with the scoped API token loaded.
-# Subsequent version uploads inherit this secret automatically —
+# Subsequent version uploads inherit these secrets automatically —
 # no per-PR provisioning needed.
 wrangler secret put BETTER_AUTH_SECRET
 # paste a 32+ char value from `openssl rand -base64 32`
+
+# Google OAuth (slice 5). Obtain both from the Google Cloud Console:
+#   APIs & Services → Credentials → Create OAuth client ID
+#   → "Web application" → add the Authorized Redirect URIs below.
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
 ```
+
+Authorized Redirect URIs to register on the Google OAuth client:
+
+- Production: `https://ratedwatch.nmoura.workers.dev/api/v1/auth/callback/google`
+- Previews: `https://pr-<N>-ratedwatch.nmoura.workers.dev/api/v1/auth/callback/google`
+
+Google does not support wildcard redirect URIs, so each preview number
+has to be pre-registered (register a pool like `pr-1` … `pr-50` up
+front, or add URIs on demand). When the Google pair is not yet set
+the Worker still boots cleanly — email+password sign-in keeps working
+and Google sign-in attempts return 404 "provider not found".
 
 **Branch protection (manual GH UI step).** Once the workflow above is
 green on a PR, enable branch protection on `main`:
