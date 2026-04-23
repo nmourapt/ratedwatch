@@ -23,11 +23,17 @@ import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
 import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
 import { submitMovement } from "@/domain/movements/submit";
+import { logEvent } from "@/observability/events";
 import { formatSubmitMovementErrors, submitMovementSchema } from "@/schemas/movement";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
 
-type Bindings = AuthEnv & { DB: D1Database; [key: string]: unknown };
+type Bindings = AuthEnv & {
+  DB: D1Database;
+  // Analytics Engine (slice #19). Optional — logEvent handles absence.
+  ANALYTICS?: AnalyticsEngineDataset;
+  [key: string]: unknown;
+};
 
 const movementsQuerySchema = z.object({
   q: z.string().trim().min(1).max(100).optional(),
@@ -144,6 +150,15 @@ movementsRoute.post("/", requireAuth, async (c) => {
 
   switch (result.status) {
     case "created":
+      // Product telemetry (slice #19). Only emit on a genuinely new
+      // submission — `exists_*` branches are either idempotent
+      // re-submits or collisions, neither of which represent
+      // intent-to-add.
+      await logEvent(
+        "movement_suggested",
+        { userId: user.id, movementId: result.movement.id },
+        c.env,
+      );
       return c.json({ movement: result.movement }, 201);
     case "exists_pending_own":
       // Idempotent re-submit — same user, same slug, still pending.

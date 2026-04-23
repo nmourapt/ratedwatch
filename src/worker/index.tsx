@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
 import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
+import { logEvent } from "@/observability/events";
 import { LandingPage } from "@/public/landing";
 import { LeaderboardPage } from "@/public/leaderboard/page";
 import { MovementNotFoundPage, MovementPage } from "@/public/movement/page";
@@ -39,6 +40,7 @@ app.get("/", async (c) => {
   // to an empty-state card when nobody has crossed the threshold yet.
   const db = createDb(c.env);
   const topVerified = await queryLeaderboard({ verified_only: true, limit: 5 }, db);
+  await logEvent("page_view_home", {}, c.env);
   return c.html(<LandingPage topVerified={topVerified} />);
 });
 
@@ -51,6 +53,7 @@ app.get("/leaderboard", async (c) => {
   const db = createDb(c.env);
   const verifiedOnly = c.req.query("verified") === "1";
   const watches = await queryLeaderboard({ verified_only: verifiedOnly, limit: 50 }, db);
+  await logEvent("page_view_leaderboard", { verifiedOnly }, c.env);
   c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
   return c.html(<LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} />);
 });
