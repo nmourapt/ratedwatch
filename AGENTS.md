@@ -39,7 +39,8 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
   - E2E: Playwright against a deployed preview.
   - Tests live next to source (`foo.test.ts` beside `foo.ts`) for unit, and in `tests/integration/**` / `tests/e2e/**` for the other tiers.
 - **Feature flags:** KV-backed, single service with `isEnabled(flag, ctx)` signature. Default to off.
-- **Secrets:** `wrangler secret put` for Worker-side secrets; `.dev.vars` for local dev (gitignored). Never hardcode.
+- **Secrets:** `wrangler secret put` for Worker-side secrets; `.dev.vars` for local dev (gitignored). Never hardcode. Required production secrets:
+  - `BETTER_AUTH_SECRET` — 32+ char high-entropy value used by Better Auth for cookie signing. Set once per environment with `wrangler secret put BETTER_AUTH_SECRET` **before** any `wrangler deploy`. Generate with `openssl rand -base64 32`.
 - **Infra as code:** Terraform owns zone, route, D1, R2 bucket, access policies. Wrangler owns the Worker script. No overlap. State in the user's nmoura.cf R2 backend if possible.
 
 ## Things NOT to do
