@@ -10,7 +10,11 @@ import { expect, test } from "@playwright/test";
 // (watches CRUD + SPA pages) end-to-end against a real Worker, so
 // it additionally verifies:
 //   * The movements seed is present on the preview D1 database
-//     (so the typeahead returns something for "ETA").
+//     (so the typeahead returns something for "ETA"). IMPORTANT:
+//     migrations 0002 (movements) + 0003 (watches) must have run
+//     against the production D1 before this test can pass on a
+//     preview — preview deploys reuse the prod D1. The PR body
+//     calls this out as a pre-merge operator action.
 //   * The SPA's dashboard re-fetches after a post-submit redirect
 //     (the new watch really is persisted, not just a render-local
 //     optimistic state).
@@ -20,6 +24,29 @@ import { expect, test } from "@playwright/test";
 // across the browser boundary.
 
 test("register → add watch via typeahead → dashboard shows it", async ({ page }) => {
+  // Early check: ensure the movements taxonomy is reachable before we
+  // waste minutes driving a full register + form fill. On a preview
+  // deploy whose D1 hasn't had migration 0002 applied, this call
+  // returns 500 and the typeahead will never populate.
+  const healthRes = await page.request.get("/api/v1/movements?q=eta");
+  if (healthRes.status() !== 200) {
+    throw new Error(
+      `Movements API returned ${healthRes.status()} for ?q=eta. ` +
+        "Operator needs to run `wrangler d1 migrations apply rated-watch-db --remote` " +
+        "before the preview deploy can serve the add-watch flow.",
+    );
+  }
+  const healthBody = (await healthRes.json()) as {
+    approved: Array<{ id: string; canonical_name: string }>;
+  };
+  if (!healthBody.approved.some((m) => m.canonical_name === "ETA 2824-2")) {
+    throw new Error(
+      "Movements taxonomy is reachable but does not include ETA 2824-2. " +
+        "Run `npm run db:seed:movements` against the production D1 before " +
+        "this E2E can pass.",
+    );
+  }
+
   const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const email = `e2e-watch-${uniqueSuffix}@rated.watch.test`;
   const password = "e2e-smoke-password";
