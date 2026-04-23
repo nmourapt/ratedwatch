@@ -42,6 +42,7 @@ npm install
 | `npm run test`          | Runs Vitest with `@cloudflare/vitest-pool-workers` (integration tests)        |
 | `npm run test:watch`    | Vitest in watch mode                                                          |
 | `npm run test:coverage` | Vitest with Istanbul coverage — writes `coverage/` (text + HTML + JSON)       |
+| `npm run test:e2e`      | Runs Playwright against `PLAYWRIGHT_BASE_URL` (defaults to `localhost:8787`)  |
 | `npm run typecheck`     | `tsc --noEmit` for both the Worker and the SPA configs                        |
 | `npm run format`        | Prettier writes the whole tree                                                |
 | `npm run format:check`  | Prettier check mode — fails if anything is unformatted                        |
@@ -67,8 +68,74 @@ src/
   app/        Vite + React SPA
 tests/
   integration/  Vitest + @cloudflare/vitest-pool-workers
-  e2e/          Playwright (later slice)
+  e2e/          Playwright — browser-level smoke tests
 ```
+
+### End-to-end tests (Playwright)
+
+The integration suite covers the API and SPA shell in-process (vitest +
+Miniflare). For flows that need a real browser — JS execution, React
+Router redirects, cookie persistence — we use Playwright against a live
+Worker:
+
+```bash
+npm run dev                 # terminal 1: wrangler dev on :8787 + vite
+npm run test:e2e            # terminal 2: runs tests/e2e/*.test.ts
+```
+
+The first run downloads Chromium via `npx playwright install
+--with-deps chromium`. Browser bundles are not tracked in the lockfile
+and don't ship in CI-bound `npm ci` installs; CI runs the same
+`playwright install` step in the `e2e-smoke` job.
+
+E2E specs live under `tests/e2e/`, have their own tsconfig
+(`tsconfig.e2e.json`) and are intentionally few. Single-route
+behaviour belongs in `tests/integration/`; E2E is reserved for
+genuinely cross-boundary assertions.
+
+### CI preview deploys
+
+Every pull request against `main` triggers a Wrangler preview
+deployment: the workflow uploads a new Worker _version_ (via
+`wrangler versions upload --preview-alias=pr-<N>`) and exposes a
+stable URL of the form `https://pr-<N>-ratedwatch.<subdomain>.workers.dev`.
+The Playwright `e2e-smoke` job then runs against that URL.
+
+Required repository-level secrets (operator provisions once, in
+**Settings → Secrets and variables → Actions → New repository secret**):
+
+| Secret                  | Value                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `CLOUDFLARE_API_TOKEN`  | The same scoped token currently in `.env` as `CLOUDFLARE_API_TOKEN`. Needs `Workers Scripts:Edit`.     |
+| `CLOUDFLARE_ACCOUNT_ID` | The account ID hosting the `ratedwatch` Worker. Non-sensitive but kept as a secret to keep logs clean. |
+
+Worker-side runtime secrets (operator provisions once, via Wrangler):
+
+```bash
+# Run from a trusted workstation with the scoped API token loaded.
+# Subsequent version uploads inherit this secret automatically —
+# no per-PR provisioning needed.
+wrangler secret put BETTER_AUTH_SECRET
+# paste a 32+ char value from `openssl rand -base64 32`
+```
+
+**Branch protection (manual GH UI step).** Once the workflow above is
+green on a PR, enable branch protection on `main`:
+
+1. Settings → Branches → Add branch ruleset (or Branch protection rule)
+   targeting `main`.
+2. Required status checks before merging — pick these from the dropdown:
+   - `Typecheck, build, test`
+   - `Preview deploy`
+   - `E2E smoke`
+3. Require branches to be up to date before merging: **on**.
+4. Require a pull request before merging: **on** (1 approval; stricter
+   as team grows).
+
+This cannot be scripted via `gh` reliably (the GitHub API for rulesets
+is inconsistent between UI and CLI for required-check names, which
+vary by job display name). Keep this paragraph in sync with the job
+names in `.github/workflows/ci.yml`.
 
 ### Pre-commit hook
 
@@ -76,8 +143,8 @@ tests/
 it runs, for staged files only:
 
 - `prettier --write` over JS/TS/TSX/JSON/JSONC/MD/YML/YAML
-- `tsc --noEmit` against both the Worker and the SPA tsconfigs (full-project;
-  the type graph can't be checked per-file)
+- `tsc --noEmit` against the Worker, the SPA, and the E2E tsconfigs
+  (full-project; the type graph can't be checked per-file)
 - `vitest related --run` against changed TS/TSX files
 
 If any of these fail, the commit is aborted and the original worktree state is
