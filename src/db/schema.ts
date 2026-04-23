@@ -97,6 +97,10 @@ export interface WatchesTable {
   // `number` on SELECT.
   is_public: Generated<number>; // 0 | 1
   created_at: Generated<string>; // ISO 8601, populated by DEFAULT
+  // Slice 10 (issue #11): R2 key for the watch photo (format
+  // `watches/{watchId}/image`). NULL when no image is set. See
+  // migrations/0005_watch_images.sql.
+  image_r2_key: string | null;
 }
 
 // Slice 12 (issue #13): readings. Columns mirror

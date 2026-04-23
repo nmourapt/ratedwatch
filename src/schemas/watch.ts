@@ -74,6 +74,10 @@ export const watchResponseSchema = z.object({
   notes: z.string().nullable(),
   is_public: z.boolean(),
   created_at: z.string(),
+  // Slice 10 (issue #11). Non-null when the watch has a photo in R2;
+  // the SPA keys its uploader UI off this flag (present → show
+  // /images/watches/:id + delete button, absent → show uploader).
+  image_r2_key: z.string().nullable(),
 });
 
 export type WatchResponse = z.infer<typeof watchResponseSchema>;

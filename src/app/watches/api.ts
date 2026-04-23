@@ -18,6 +18,10 @@ export interface Watch {
   notes: string | null;
   is_public: boolean;
   created_at: string;
+  // Slice #10 (issue #11). Non-null when a photo has been uploaded.
+  // The SPA renders the <img> only when this is set; the src still
+  // points at the stable /images/watches/:id route.
+  image_r2_key: string | null;
 }
 
 export interface WatchError {
@@ -242,4 +246,92 @@ export async function submitMovement(
     status: "unknown",
     message: `Request failed with status ${response.status}`,
   };
+}
+
+// -------------------------------------------------------------------
+// Slice #10 (issue #11): image upload + delete.
+// -------------------------------------------------------------------
+
+export type ImageUploadError = {
+  code:
+    | "payload_too_large"
+    | "unsupported_media_type"
+    | "invalid_input"
+    | "unauthorized"
+    | "forbidden"
+    | "not_found"
+    | "unknown";
+  message: string;
+};
+
+/** Human-readable mapping for the server's image-upload error codes. */
+function mapUploadError(status: number, errorCode?: string): ImageUploadError {
+  if (status === 413) {
+    return {
+      code: "payload_too_large",
+      message: "Image is too large — the maximum is 5 MB",
+    };
+  }
+  if (status === 415) {
+    return {
+      code: "unsupported_media_type",
+      message: "Unsupported image type — use JPEG, PNG, WebP, or HEIC",
+    };
+  }
+  if (status === 400) {
+    return { code: "invalid_input", message: "Please choose an image file" };
+  }
+  if (status === 401) {
+    return { code: "unauthorized", message: "Your session has expired" };
+  }
+  if (status === 403) {
+    return { code: "forbidden", message: "You do not own this watch" };
+  }
+  if (status === 404) {
+    return { code: "not_found", message: "Watch not found" };
+  }
+  return {
+    code: "unknown",
+    message: errorCode
+      ? `Upload failed: ${errorCode}`
+      : `Upload failed with status ${status}`,
+  };
+}
+
+export async function uploadWatchImage(
+  watchId: string,
+  file: File,
+): Promise<{ ok: true; key: string } | { ok: false; error: ImageUploadError }> {
+  const form = new FormData();
+  form.append("image", file);
+  const response = await fetch(`/api/v1/watches/${encodeURIComponent(watchId)}/image`, {
+    method: "PUT",
+    body: form,
+    credentials: "include",
+  });
+  if (!response.ok) {
+    let code: string | undefined;
+    try {
+      const parsed = (await response.json()) as { error?: string };
+      code = parsed.error;
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, error: mapUploadError(response.status, code) };
+  }
+  const body = (await response.json()) as { ok: boolean; key: string };
+  return { ok: true, key: body.key };
+}
+
+export async function deleteWatchImage(
+  watchId: string,
+): Promise<{ ok: true } | { ok: false; error: ImageUploadError }> {
+  const response = await fetch(`/api/v1/watches/${encodeURIComponent(watchId)}/image`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    return { ok: false, error: mapUploadError(response.status) };
+  }
+  return { ok: true };
 }

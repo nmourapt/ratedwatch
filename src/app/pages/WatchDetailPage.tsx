@@ -12,6 +12,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { LogReadingForm } from "../watches/LogReadingForm";
 import { ReadingList } from "../watches/ReadingList";
 import { SessionStatsPanel } from "../watches/SessionStatsPanel";
+import { WatchPhotoPanel } from "../watches/WatchPhotoPanel";
 import { deleteWatch, getWatch, type Watch } from "../watches/api";
 import { listReadings, type Reading, type SessionStats } from "../watches/readings";
 
@@ -59,6 +60,16 @@ export function WatchDetailPage() {
         error: result.error.message,
         loading: false,
       });
+    }
+  }, [id]);
+
+  const reloadWatch = useCallback(async () => {
+    if (!id) return;
+    const result = await getWatch(id);
+    if (result.ok) {
+      setState({ kind: "loaded", watch: result.watch });
+    } else {
+      setState({ kind: "error", message: result.error.message });
     }
   }, [id]);
 
@@ -181,6 +192,12 @@ export function WatchDetailPage() {
           {readings.error}
         </p>
       ) : null}
+
+      <WatchPhotoPanel
+        watchId={watch.id}
+        imageKey={watch.image_r2_key}
+        onChanged={reloadWatch}
+      />
 
       <SessionStatsPanel stats={readings.session_stats} />
       <LogReadingForm watchId={watch.id} onLogged={reloadReadings} />
