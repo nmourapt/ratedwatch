@@ -10,17 +10,17 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
 
 ## Ubiquitous language
 
-| Term | Meaning |
-|---|---|
-| **Reading** | A record of the watch's displayed time vs an authoritative reference time at a specific moment. |
-| **Deviation** | Signed seconds the watch is ahead (+) or behind (−) of the reference, at a single reading. |
-| **Drift rate** | Change in deviation per day, computed between two readings. Unit: seconds per day (s/d). |
-| **Baseline reading** | A reading with `is_baseline = true`, marking the start of a new tracking session (watch just set to the exact time; deviation is 0). |
-| **Session** | The sequence of readings from the most recent baseline to the latest reading for a given watch. |
-| **Manual reading** | A reading whose deviation was typed by the user. Not trusted for competitive rankings. |
-| **Verified reading** | A reading whose deviation was computed from an in-app camera capture, with the server timestamp at receipt as the reference time. Spoof-resistant. |
-| **Verified watch** | A watch whose current session has at least 25 % verified readings. Displays a verified badge on leaderboards. |
-| **Movement** (or **caliber**) | The mechanical/quartz/electronic time-keeping mechanism inside a watch. First-class domain object. Leaderboards are grouped by movement. |
+| Term                          | Meaning                                                                                                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reading**                   | A record of the watch's displayed time vs an authoritative reference time at a specific moment.                                                    |
+| **Deviation**                 | Signed seconds the watch is ahead (+) or behind (−) of the reference, at a single reading.                                                         |
+| **Drift rate**                | Change in deviation per day, computed between two readings. Unit: seconds per day (s/d).                                                           |
+| **Baseline reading**          | A reading with `is_baseline = true`, marking the start of a new tracking session (watch just set to the exact time; deviation is 0).               |
+| **Session**                   | The sequence of readings from the most recent baseline to the latest reading for a given watch.                                                    |
+| **Manual reading**            | A reading whose deviation was typed by the user. Not trusted for competitive rankings.                                                             |
+| **Verified reading**          | A reading whose deviation was computed from an in-app camera capture, with the server timestamp at receipt as the reference time. Spoof-resistant. |
+| **Verified watch**            | A watch whose current session has at least 25 % verified readings. Displays a verified badge on leaderboards.                                      |
+| **Movement** (or **caliber**) | The mechanical/quartz/electronic time-keeping mechanism inside a watch. First-class domain object. Leaderboards are grouped by movement.           |
 
 ## Stack + conventions
 
@@ -67,13 +67,13 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
 
 ## Glossary of routes (planned)
 
-| Path | Kind | Purpose |
-|---|---|---|
-| `/` | public HTML | Marketing / top-watches hero. |
-| `/leaderboard` | public HTML | Global verified leaderboard. |
-| `/m/:movementId` | public HTML | Per-movement leaderboard, Chrono24 CTA. |
-| `/u/:username` | public HTML | Public user profile, their watches. |
-| `/w/:watchId` | public HTML | Public watch page, reading history chart. |
-| `/app/*` | SPA | Authed dashboard, add watch, log readings. |
-| `/api/v1/*` | JSON | REST API consumed by the SPA and (later) the Expo app. |
-| `/api/v1/auth/*` | JSON | Better Auth routes. |
+| Path             | Kind        | Purpose                                                |
+| ---------------- | ----------- | ------------------------------------------------------ |
+| `/`              | public HTML | Marketing / top-watches hero.                          |
+| `/leaderboard`   | public HTML | Global verified leaderboard.                           |
+| `/m/:movementId` | public HTML | Per-movement leaderboard, Chrono24 CTA.                |
+| `/u/:username`   | public HTML | Public user profile, their watches.                    |
+| `/w/:watchId`    | public HTML | Public watch page, reading history chart.              |
+| `/app/*`         | SPA         | Authed dashboard, add watch, log readings.             |
+| `/api/v1/*`      | JSON        | REST API consumed by the SPA and (later) the Expo app. |
+| `/api/v1/auth/*` | JSON        | Better Auth routes.                                    |
