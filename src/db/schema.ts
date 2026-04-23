@@ -99,6 +99,25 @@ export interface WatchesTable {
   created_at: Generated<string>; // ISO 8601, populated by DEFAULT
 }
 
+// Slice 12 (issue #13): readings. Columns mirror
+// migrations/0004_readings.sql. Booleans are stored as INTEGER 0/1
+// and converted to `boolean` at the API boundary. `reference_timestamp`
+// is unix milliseconds (not ISO) so drift math works directly on the
+// stored value.
+export interface ReadingsTable {
+  id: string;
+  watch_id: string;
+  // Denormalised from watches.user_id for per-user queries — always
+  // set from the authed session at INSERT time; never trust client.
+  user_id: string;
+  reference_timestamp: number; // unix ms
+  deviation_seconds: number; // signed REAL
+  is_baseline: Generated<number>; // 0 | 1, default 0
+  verified: Generated<number>; // 0 | 1, default 0 (slice #16 flips this)
+  notes: string | null;
+  created_at: Generated<string>; // ISO 8601, populated by DEFAULT
+}
+
 export interface Database {
   user: UserTable;
   session: SessionTable;
@@ -106,4 +125,5 @@ export interface Database {
   verification: VerificationTable;
   movements: MovementsTable;
   watches: WatchesTable;
+  readings: ReadingsTable;
 }
