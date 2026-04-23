@@ -75,10 +75,30 @@ export interface MovementsTable {
   created_at: string; // ISO 8601, populated by DEFAULT
 }
 
+// Slice 8 (issue #9): watches. Columns mirror migrations/0003_watches.sql.
+// `is_public` is stored as INTEGER 0/1 (SQLite has no native boolean)
+// and converted to/from `boolean` at the API boundary — see the mapper
+// in src/server/routes/watches.ts. `movement_id` + `custom_movement_name`
+// are both nullable because the add-watch flow allows a user-submitted
+// pending caliber (slice #10) to land before the movement is approved.
+export interface WatchesTable {
+  id: string;
+  user_id: string;
+  name: string;
+  brand: string | null;
+  model: string | null;
+  movement_id: string | null;
+  custom_movement_name: string | null;
+  notes: string | null;
+  is_public: number; // 0 | 1
+  created_at: string; // ISO 8601, populated by DEFAULT
+}
+
 export interface Database {
   user: UserTable;
   session: SessionTable;
   account: AccountTable;
   verification: VerificationTable;
   movements: MovementsTable;
+  watches: WatchesTable;
 }
