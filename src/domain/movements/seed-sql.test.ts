@@ -7,7 +7,7 @@ import seed from "./seed.json" with { type: "json" };
 // at merge-time by the operator (`npm run db:seed:movements -- --local`).
 
 describe("buildSeedSql", () => {
-  it("wraps the inserts in a BEGIN/COMMIT transaction", () => {
+  it("does NOT wrap the inserts in an explicit transaction (D1 rejects these)", () => {
     const rows: SeedRow[] = [
       {
         id: "eta-2892-a2",
@@ -19,8 +19,11 @@ describe("buildSeedSql", () => {
       },
     ];
     const sql = buildSeedSql(rows);
-    expect(sql).toContain("BEGIN TRANSACTION;");
-    expect(sql).toContain("COMMIT;");
+    // D1 rejects BEGIN/COMMIT/SAVEPOINT in SQL (workerd surfaces it as a
+    // DO-transaction error). Each INSERT auto-commits; idempotency comes
+    // from INSERT OR IGNORE, not a transaction wrapper.
+    expect(sql).not.toContain("BEGIN TRANSACTION;");
+    expect(sql).not.toContain("COMMIT;");
   });
 
   it("uses INSERT OR IGNORE so re-running is idempotent", () => {
@@ -170,8 +173,9 @@ describe("seed.json", () => {
 
   it("produces valid SQL end-to-end via buildSeedSql", () => {
     const sql = buildSeedSql(rows);
-    expect(sql).toContain("BEGIN TRANSACTION;");
-    expect(sql).toContain("COMMIT;");
+    // No explicit transaction wrapper — D1 rejects those.
+    expect(sql).not.toContain("BEGIN TRANSACTION;");
+    expect(sql).not.toContain("COMMIT;");
     const inserts = sql.match(/INSERT OR IGNORE INTO movements/g) ?? [];
     expect(inserts.length).toBe(rows.length);
   });
