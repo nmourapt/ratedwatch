@@ -19,6 +19,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Fail fast if a secrets file made it into the repository.
+      # Runtime Worker vars belong in .dev.vars (untracked); Terraform
+      # reads .env (also untracked); these filenames are the usual
+      # suspects when someone accidentally `git add -f`s a secret.
+      - name: Secrets sanity check
+        run: |
+          set -euo pipefail
+          # Any path ending in .dev.vars, .env, or .env.local is a secret.
+          # .env.example (anywhere) is the only allowed .env-prefixed file.
+          leaked=$(git ls-files -z \
+            | tr '\0' '\n' \
+            | grep -E '(^|/)(\.dev\.vars|\.env|\.env\.local)$|\.dev\.vars$' \
+            | grep -v -E '(^|/)\.env\.example$' || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::Secret file(s) are tracked in git:"
+            echo "$leaked"
+            exit 1
+          fi
+          echo "No committed secret files found."
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
