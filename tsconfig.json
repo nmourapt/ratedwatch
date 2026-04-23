@@ -34,6 +34,7 @@
     "src/db/**/*",
     "src/schemas/**/*",
     "tests/integration/**/*",
+    "scripts/**/*",
     "vitest.config.ts",
     "worker-configuration.d.ts"
   ],
