@@ -1,0 +1,201 @@
+// Shared leaderboard table component. Rendered by the global
+// /leaderboard page and the per-movement /m/:id page (slice #14).
+//
+// Kept as a pure component that takes a ranked list and emits the
+// table markup + the small empty-state block. Page-level chrome
+// (hero, filter nav, footnote, Chrono24 CTA) is NOT this component's
+// concern — each page wraps the table with its own context.
+//
+// The styles both pages need are colocated here too, exported as
+// <LeaderboardStyles /> so a page mounting the table picks up the
+// CSS automatically without duplicating the stylesheet.
+
+import type { RankedWatch } from "@/domain/leaderboard-query";
+import { formatDriftRate, formatWatchLabel } from "./format";
+
+export interface LeaderboardTableProps {
+  watches: RankedWatch[];
+  /**
+   * Copy shown when `watches` is empty. Different pages have different
+   * reasons for an empty list (no verified watches yet, no watches on
+   * this movement yet), so the caller supplies the copy.
+   */
+  emptyStateTitle: string;
+  emptyStateBody: string;
+  /**
+   * Whether to show the Movement column. The global leaderboard needs
+   * it (watches come from many movements); the per-movement page
+   * doesn't (everything on the page is the same movement by
+   * definition).
+   */
+  showMovementColumn?: boolean;
+}
+
+export const LeaderboardTable = ({
+  watches,
+  emptyStateTitle,
+  emptyStateBody,
+  showMovementColumn = true,
+}: LeaderboardTableProps) => {
+  if (watches.length === 0) {
+    return (
+      <div class="cf-card">
+        <div class="cf-brackets" aria-hidden="true">
+          <span />
+        </div>
+        <h2 class="cf-card__title">{emptyStateTitle}</h2>
+        <div class="cf-card__body">
+          <p>{emptyStateBody}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <table class="cf-lb-table">
+      <thead>
+        <tr>
+          <th scope="col" class="cf-lb-col-rank">
+            #
+          </th>
+          <th scope="col">Watch</th>
+          {showMovementColumn ? <th scope="col">Movement</th> : null}
+          <th scope="col">Owner</th>
+          <th scope="col" class="cf-lb-col-num">
+            Drift
+          </th>
+          <th scope="col">Badge</th>
+        </tr>
+      </thead>
+      <tbody>
+        {watches.map((w) => (
+          <tr>
+            <td class="cf-lb-col-rank">{String(w.rank)}</td>
+            <td>
+              <a href={`/w/${w.watch_id}`}>
+                {formatWatchLabel({
+                  name: w.watch_name,
+                  brand: w.watch_brand,
+                  model: w.watch_model,
+                })}
+              </a>
+            </td>
+            {showMovementColumn ? (
+              <td>
+                <a href={`/m/${w.movement_id}`}>{w.movement_canonical_name}</a>
+              </td>
+            ) : null}
+            <td>
+              <a href={`/u/${w.owner_username}`}>@{w.owner_username}</a>
+            </td>
+            <td class="cf-lb-col-num">
+              {formatDriftRate(w.session_stats.avg_drift_rate_spd)}
+            </td>
+            <td>
+              {w.session_stats.verified_badge ? (
+                <span class="cf-lb-badge" title="25 %+ verified readings this session">
+                  Verified
+                </span>
+              ) : (
+                <span class="cf-lb-badge cf-lb-badge--muted">—</span>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+/**
+ * Scoped stylesheet for the leaderboard table + surrounding page
+ * chrome (filter nav, badge, footnote). Inlined because we already
+ * inline the design-tokens sheet — one extra <style> tag beats a
+ * second round-trip.
+ */
+export function LeaderboardStyles() {
+  const css = `
+.cf-lb-filters {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  font-size: 0.875rem;
+}
+.cf-lb-filters a {
+  color: var(--cf-text-muted);
+  padding: 6px 12px;
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius-full);
+}
+.cf-lb-filters a:hover { color: var(--cf-text); background: var(--cf-bg-300); }
+.cf-lb-filter--active {
+  color: var(--cf-text) !important;
+  border-color: var(--cf-orange) !important;
+  background: var(--cf-bg-200);
+}
+
+.cf-lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.cf-lb-table thead th {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid var(--cf-border);
+  font-weight: 500;
+  color: var(--cf-text-muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cf-lb-table tbody td {
+  padding: 12px;
+  border-bottom: 1px solid var(--cf-border-light);
+  vertical-align: middle;
+}
+.cf-lb-col-rank {
+  width: 3rem;
+  font-family: var(--cf-font-mono);
+  color: var(--cf-text-muted);
+}
+.cf-lb-col-num {
+  font-family: var(--cf-font-mono);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cf-lb-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: var(--cf-radius-full);
+  background: var(--cf-orange);
+  color: #FFFBF5;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.cf-lb-badge--muted {
+  background: transparent;
+  color: var(--cf-text-subtle);
+}
+
+.cf-lb-verified-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cf-orange);
+  vertical-align: middle;
+  margin: 0 4px;
+}
+
+.cf-lb-footnote {
+  padding: 24px 24px 48px;
+  color: var(--cf-text-muted);
+  font-size: 0.9rem;
+}
+.cf-lb-footnote p { max-width: 70ch; margin: 0; }
+`;
+  return <style>{css}</style>;
+}
