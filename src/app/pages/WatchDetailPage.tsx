@@ -1,21 +1,66 @@
-// Read-only view of a single watch with Edit + Delete affordances.
-// Readings / drift charts land in a later slice; the layout here
-// leaves room for that section beneath the metadata.
+// Detail view of a single watch. Read-only metadata at the top,
+// then — slice #13 — session stats, a "log a reading" form, and the
+// reading log itself. Delete-watch still lives at the bottom.
+//
+// The readings section fetches in parallel with the watch lookup so
+// the page doesn't need two sequential round-trips to render. Every
+// mutation (log, delete) calls `reloadReadings()` to re-pull both
+// the list and the server-computed session stats.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { LogReadingForm } from "../watches/LogReadingForm";
+import { ReadingList } from "../watches/ReadingList";
+import { SessionStatsPanel } from "../watches/SessionStatsPanel";
 import { deleteWatch, getWatch, type Watch } from "../watches/api";
+import { listReadings, type Reading, type SessionStats } from "../watches/readings";
 
 type LoadState =
   | { kind: "loading" }
   | { kind: "loaded"; watch: Watch }
   | { kind: "error"; message: string };
 
+interface ReadingsState {
+  readings: Reading[];
+  session_stats: SessionStats | null;
+  error: string | null;
+  loading: boolean;
+}
+
+const EMPTY_READINGS_STATE: ReadingsState = {
+  readings: [],
+  session_stats: null,
+  error: null,
+  loading: true,
+};
+
 export function WatchDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [readings, setReadings] = useState<ReadingsState>(EMPTY_READINGS_STATE);
   const [deleting, setDeleting] = useState(false);
+
+  const reloadReadings = useCallback(async () => {
+    if (!id) return;
+    setReadings((prev) => ({ ...prev, loading: true }));
+    const result = await listReadings(id);
+    if (result.ok) {
+      setReadings({
+        readings: result.readings,
+        session_stats: result.session_stats,
+        error: null,
+        loading: false,
+      });
+    } else {
+      setReadings({
+        readings: [],
+        session_stats: null,
+        error: result.error.message,
+        loading: false,
+      });
+    }
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -33,6 +78,13 @@ export function WatchDetailPage() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    // Don't wait on the watch lookup — fetch readings in parallel.
+    // Errors are stored in-panel, not propagated to the whole page.
+    void reloadReadings();
+  }, [id, reloadReadings]);
 
   async function handleDelete() {
     if (!id) return;
@@ -81,7 +133,7 @@ export function WatchDetailPage() {
       : "—";
 
   return (
-    <section className="mx-auto max-w-2xl">
+    <section className="mx-auto max-w-3xl">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="mb-1 text-4xl font-medium tracking-tight text-cf-text">
@@ -121,11 +173,24 @@ export function WatchDetailPage() {
         </dd>
       </dl>
 
-      <div className="mb-10 rounded-md border border-cf-border bg-cf-bg-200 px-4 py-3 text-sm text-cf-text-muted">
-        Readings, drift charts, and session stats ship in a later slice.
-      </div>
+      {readings.error ? (
+        <p
+          role="alert"
+          className="mb-4 rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+        >
+          {readings.error}
+        </p>
+      ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <SessionStatsPanel stats={readings.session_stats} />
+      <LogReadingForm watchId={watch.id} onLogged={reloadReadings} />
+      <ReadingList
+        readings={readings.readings}
+        perInterval={readings.session_stats?.per_interval ?? []}
+        onDeleted={reloadReadings}
+      />
+
+      <div className="mt-10 flex flex-wrap items-center gap-3">
         <Link
           to={`/app/watches/${watch.id}/edit`}
           className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-orange hover:text-cf-orange"
