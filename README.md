@@ -25,7 +25,49 @@ Log readings of how far your mechanical or quartz watch drifts from accurate tim
 
 ## Local development
 
-Scaffolding in progress. Run targets will be documented as each slice lands.
+Prerequisites: Node 22+ and npm. Clone, then:
+
+```bash
+npm install
+```
+
+### Run targets
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Starts `wrangler dev` (Worker) and `vite` (SPA) concurrently |
+| `npm run dev:worker` | Worker only, on http://localhost:8787 |
+| `npm run dev:vite` | Vite dev server only, for fast SPA iteration |
+| `npm run build` | `vite build` — produces `dist/` with the SPA bundle |
+| `npm run test` | Runs Vitest with `@cloudflare/vitest-pool-workers` (integration tests) |
+| `npm run test:watch` | Vitest in watch mode |
+| `npm run typecheck` | `tsc --noEmit` for both the Worker and the SPA configs |
+| `npm run types:gen` | Regenerates `worker-configuration.d.ts` from `wrangler.jsonc` |
+| `npm run types:check` | Verifies the committed types are in sync with `wrangler.jsonc` (CI runs this) |
+| `npm run deploy` | Builds the SPA, then `wrangler deploy` |
+
+### Secrets and environment variables
+
+- **Worker runtime secrets** (JWT keys, Google OAuth client secret, Sentry DSN, etc.) go in `wrangler secret put <KEY>` for production and `.dev.vars` for local dev. Both are gitignored.
+- **Local tooling vars** (Terraform, scripts, CI bootstrap) live in `.env`, copied from `.env.example`. `.env` is *not* a source of Worker runtime vars — wrangler is explicitly configured (via `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false` in every npm script that invokes it) to skip it.
+
+### Project layout
+
+```
+src/
+  worker/     Worker entry — Hono app composition
+  server/     API handlers (/api/*)
+  public/     Public SSR pages (hono/jsx)
+  domain/     Shared domain logic (drift calc, scoring, types)
+  db/         Data layer (Kysely)
+  schemas/    Zod schemas
+  app/        Vite + React SPA
+tests/
+  integration/  Vitest + @cloudflare/vitest-pool-workers
+  e2e/          Playwright (later slice)
+```
+
+See [AGENTS.md](AGENTS.md) for the full stack rationale and conventions.
 
 ## License
 
