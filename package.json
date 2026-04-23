@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.app.json",
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run --passWithNoTests",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest --passWithNoTests",
+    "test:coverage": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run --coverage --passWithNoTests",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
@@ -29,6 +30,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-istanbul": "4.1.5",
     "concurrently": "^9.2.1",
     "husky": "9.1.7",
     "lint-staged": "16.4.0",
