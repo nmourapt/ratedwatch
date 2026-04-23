@@ -22,6 +22,33 @@
     "run_worker_first": ["/", "/api/*"]
   },
 
+  // Data layer bindings. IDs come from `terraform output` in
+  // infra/terraform/. Keep in sync; `npm run types:gen` regenerates
+  // worker-configuration.d.ts whenever this file changes.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rated-watch-db",
+      "database_id": "476d116f-b684-4f23-bdfb-119ad08f1e55"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "rated-watch-images"
+    },
+    {
+      "binding": "LOGS",
+      "bucket_name": "rated-watch-logs"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "FLAGS",
+      "id": "b4298bd1887d4dae8d1c113ec99cea56"
+    }
+  ],
+
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
