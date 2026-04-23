@@ -9,7 +9,7 @@ import { Footer } from "../components/footer";
 import { Header } from "../components/header";
 import { Layout } from "../components/layout";
 import type { RankedWatch } from "@/domain/leaderboard-query";
-import { LeaderboardStyles, LeaderboardTable } from "./table";
+import { LeaderboardStyles, LeaderboardTable, VerifiedFilterToggle } from "./table";
 
 export interface LeaderboardPageProps {
   watches: RankedWatch[];
@@ -31,17 +31,7 @@ export const LeaderboardPage = ({ watches, verifiedOnly }: LeaderboardPageProps)
           Ranked by absolute drift rate since each watch's most recent baseline. Lower is
           better — a drift of 0 s/d means the watch is keeping time perfectly.
         </p>
-        <nav class="cf-lb-filters" aria-label="Leaderboard filters">
-          <a href="/leaderboard" class={verifiedOnly ? "" : "cf-lb-filter--active"}>
-            All watches
-          </a>
-          <a
-            href="/leaderboard?verified=1"
-            class={verifiedOnly ? "cf-lb-filter--active" : ""}
-          >
-            Verified only
-          </a>
-        </nav>
+        <VerifiedFilterToggle basePath="/leaderboard" verifiedOnly={verifiedOnly} />
       </section>
 
       <section class="cf-container cf-section" aria-label="Leaderboard rankings">

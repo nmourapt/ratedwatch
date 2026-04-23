@@ -13,14 +13,19 @@ import { Header } from "../components/header";
 import { Layout } from "../components/layout";
 import type { Movement } from "@/domain/movements/taxonomy";
 import type { RankedWatch } from "@/domain/leaderboard-query";
-import { LeaderboardStyles, LeaderboardTable } from "../leaderboard/table";
+import {
+  LeaderboardStyles,
+  LeaderboardTable,
+  VerifiedFilterToggle,
+} from "../leaderboard/table";
 
 export interface MovementPageProps {
   movement: Movement;
   watches: RankedWatch[];
+  verifiedOnly: boolean;
 }
 
-export const MovementPage = ({ movement, watches }: MovementPageProps) => {
+export const MovementPage = ({ movement, watches, verifiedOnly }: MovementPageProps) => {
   const title = `Most accurate ${movement.canonical_name} watches — rated.watch`;
   const description = `Drift rate leaderboard for the ${movement.canonical_name} ${movement.type} movement.`;
   // Route the CTA through /out/chrono24/:movementId so the Worker can
@@ -54,14 +59,26 @@ export const MovementPage = ({ movement, watches }: MovementPageProps) => {
               Shop on Chrono24 →
             </a>
           </div>
+          <VerifiedFilterToggle
+            basePath={`/m/${movement.id}`}
+            verifiedOnly={verifiedOnly}
+          />
         </section>
 
         <section class="cf-container cf-section" aria-label="Movement rankings">
           <LeaderboardTable
             watches={watches}
             showMovementColumn={false}
-            emptyStateTitle="No ranked watches on this movement yet"
-            emptyStateBody={`Nobody with a ${movement.canonical_name} has logged enough readings to appear here yet. Create an account, add your watch, and start logging.`}
+            emptyStateTitle={
+              verifiedOnly
+                ? "No verified watches on this movement yet"
+                : "No ranked watches on this movement yet"
+            }
+            emptyStateBody={
+              verifiedOnly
+                ? `Nobody running a ${movement.canonical_name} has crossed the 25 % verified-reading threshold. Switch to "All watches" to see everyone ranked, or log verified readings yourself to be first.`
+                : `Nobody with a ${movement.canonical_name} has logged enough readings to appear here yet. Create an account, add your watch, and start logging.`
+            }
           />
         </section>
 

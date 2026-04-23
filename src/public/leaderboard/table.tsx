@@ -13,6 +13,49 @@
 import type { RankedWatch } from "@/domain/leaderboard-query";
 import { formatDriftRate, formatWatchLabel } from "./format";
 
+/**
+ * Toggle UI for the "All watches / Verified only" filter.
+ *
+ * Rendered as a pair of GET-link buttons — zero client JS, the server
+ * computes which one is active from the request (query param + cookie
+ * state) and feeds `verifiedOnly` in. Clicking emits a GET to the
+ * same path with the flipped `?verified=…` param so the handler can
+ * also set/clear the `rw_verified_filter` cookie.
+ *
+ * Used by both /leaderboard and /m/:id so the copy stays in sync.
+ */
+export interface VerifiedFilterToggleProps {
+  /** Base path to link to. The component adds the `?verified=…` param. */
+  basePath: string;
+  /** Current filter state (derived server-side from query param + cookie). */
+  verifiedOnly: boolean;
+}
+
+export const VerifiedFilterToggle = ({
+  basePath,
+  verifiedOnly,
+}: VerifiedFilterToggleProps) => (
+  <nav class="cf-lb-filters" aria-label="Leaderboard filters">
+    <a
+      href={`${basePath}?verified=0`}
+      class={verifiedOnly ? "" : "cf-lb-filter--active"}
+      aria-pressed={verifiedOnly ? "false" : "true"}
+    >
+      All watches
+    </a>
+    <a
+      href={`${basePath}?verified=1`}
+      class={verifiedOnly ? "cf-lb-filter--active" : ""}
+      aria-pressed={verifiedOnly ? "true" : "false"}
+    >
+      <span class="cf-lb-filter__check" aria-hidden="true">
+        ✓
+      </span>{" "}
+      Verified only
+    </a>
+  </nav>
+);
+
 export interface LeaderboardTableProps {
   watches: RankedWatch[];
   /**
@@ -93,11 +136,24 @@ export const LeaderboardTable = ({
             </td>
             <td>
               {w.session_stats.verified_badge ? (
-                <span class="cf-lb-badge" title="25 %+ verified readings this session">
+                <span
+                  class="cf-lb-badge"
+                  title="25 %+ verified readings this session"
+                  data-verified-badge="true"
+                >
+                  <span class="cf-lb-badge__check" aria-hidden="true">
+                    ✓
+                  </span>{" "}
                   Verified
                 </span>
               ) : (
-                <span class="cf-lb-badge cf-lb-badge--muted">—</span>
+                <span
+                  class="cf-lb-badge cf-lb-badge--muted"
+                  title="Fewer than 25 % of readings in this session are verified"
+                  aria-label="Unverified"
+                >
+                  —
+                </span>
               )}
             </td>
           </tr>
@@ -133,6 +189,10 @@ export function LeaderboardStyles() {
   border-color: var(--cf-orange) !important;
   background: var(--cf-bg-200);
 }
+.cf-lb-filter__check {
+  color: var(--cf-orange);
+  font-weight: 700;
+}
 
 .cf-lb-table {
   width: 100%;
@@ -167,6 +227,8 @@ export function LeaderboardStyles() {
 
 .cf-lb-badge {
   display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
   background: var(--cf-orange);
@@ -178,6 +240,10 @@ export function LeaderboardStyles() {
 .cf-lb-badge--muted {
   background: transparent;
   color: var(--cf-text-subtle);
+}
+.cf-lb-badge__check {
+  font-weight: 700;
+  line-height: 1;
 }
 
 .cf-lb-verified-dot {
