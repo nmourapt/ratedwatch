@@ -63,6 +63,7 @@ function toResponse(watch: Watch, movementCanonicalName: string | null): WatchRe
     notes: watch.notes,
     is_public: watch.is_public === 1,
     created_at: watch.created_at,
+    image_r2_key: watch.image_r2_key,
   };
 }
 
@@ -173,6 +174,7 @@ watchesRoute.get("/", async (c) => {
       "watches.notes",
       "watches.is_public",
       "watches.created_at",
+      "watches.image_r2_key",
       "movements.canonical_name as movement_canonical_name",
     ])
     .where("watches.user_id", "=", user.id)
