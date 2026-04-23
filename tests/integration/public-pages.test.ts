@@ -216,15 +216,18 @@ describe("GET /w/:watchId — public watch page", () => {
     expect(circleCount).toBe(3);
   });
 
-  it("contains a Chrono24 CTA with the correct search URL", async () => {
+  it("contains a Chrono24 CTA that routes through the click-tracked /out redirect", async () => {
     const res = await exports.default.fetch(
       new Request(`https://ratedwatch.test/w/${SEED.publicWatch.id}`),
     );
     const body = await res.text();
-    // The href is what buildChrono24Url returns for Rolex 126610LN.
-    expect(body).toContain(
-      "https://www.chrono24.com/search/index.htm?query=Rolex+126610LN",
-    );
+    // Watches with a movement route the CTA through
+    // /out/chrono24/:movementId so the Worker can emit a
+    // `chrono24_click` Analytics Engine event before the 302. The
+    // direct Chrono24 URL is only used as a fallback when the watch
+    // has no movement id.
+    expect(body).toContain(`/out/chrono24/${SEED.movement.id}`);
+    expect(body).not.toContain("https://www.chrono24.com/search/index.htm");
   });
 
   it("returns 404 for a private watch (even shape-indistinguishable from unknown)", async () => {
