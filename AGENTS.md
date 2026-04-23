@@ -1,0 +1,79 @@
+# rated.watch — Agent context
+
+This file provides repo-specific instructions to AI agents (OpenCode, Claude Code, Codex, etc.) working in this project. Complements, does not replace, the user's global `~/AGENTS.md`.
+
+## Product one-liner
+
+**rated.watch** is a competitive accuracy-tracking platform for watch enthusiasts. Watches compete on leaderboards grouped by movement caliber. Revenue thesis: Chrono24 affiliate links on movement pages (stubbed as plain search URLs in phase 1).
+
+Full product spec: see the `product-requirements` issue labelled `prd` on GitHub (currently [#1](../../issues/1)).
+
+## Ubiquitous language
+
+| Term | Meaning |
+|---|---|
+| **Reading** | A record of the watch's displayed time vs an authoritative reference time at a specific moment. |
+| **Deviation** | Signed seconds the watch is ahead (+) or behind (−) of the reference, at a single reading. |
+| **Drift rate** | Change in deviation per day, computed between two readings. Unit: seconds per day (s/d). |
+| **Baseline reading** | A reading with `is_baseline = true`, marking the start of a new tracking session (watch just set to the exact time; deviation is 0). |
+| **Session** | The sequence of readings from the most recent baseline to the latest reading for a given watch. |
+| **Manual reading** | A reading whose deviation was typed by the user. Not trusted for competitive rankings. |
+| **Verified reading** | A reading whose deviation was computed from an in-app camera capture, with the server timestamp at receipt as the reference time. Spoof-resistant. |
+| **Verified watch** | A watch whose current session has at least 25 % verified readings. Displays a verified badge on leaderboards. |
+| **Movement** (or **caliber**) | The mechanical/quartz/electronic time-keeping mechanism inside a watch. First-class domain object. Leaderboards are grouped by movement. |
+
+## Stack + conventions
+
+- **Language:** TypeScript, strict mode, ES2022+.
+- **Runtime:** Cloudflare Workers. Never assume Node APIs.
+- **HTTP routing:** Hono. Module per domain area (`routes/auth.ts`, `routes/watches.ts`, …).
+- **Public SSR:** `hono/jsx` for server-rendered public pages (`/`, `/leaderboard`, `/m/:id`, `/u/:name`, `/w/:id`). No client runtime on public pages.
+- **Authed SPA:** Vite + React at `/app/*`. Served via Workers Assets.
+- **Data access:** Kysely (`kysely-d1` dialect) with a single generated `Database` type. No raw `db.prepare(...)` outside the data layer.
+- **Auth:** Better Auth with its Kysely adapter. Own tables live in the same D1. Never roll custom session code.
+- **Validation:** Zod schemas at every API boundary (request body, query, form). Compose request-type and response-type from the schemas.
+- **Styling:** Tailwind + the CF Workers design system tokens (see user's `~/design/CF-WORKERS-DESIGN.md`). Never pure white backgrounds or pure black text.
+- **Tests:**
+  - Unit: Vitest for pure functions (drift calc, scoring, EXIF parsing, zod parsing).
+  - Integration: `@cloudflare/vitest-pool-workers` for Worker + D1 + R2 end-to-end. Real Miniflare runtime.
+  - E2E: Playwright against a deployed preview.
+  - Tests live next to source (`foo.test.ts` beside `foo.ts`) for unit, and in `tests/integration/**` / `tests/e2e/**` for the other tiers.
+- **Feature flags:** KV-backed, single service with `isEnabled(flag, ctx)` signature. Default to off.
+- **Secrets:** `wrangler secret put` for Worker-side secrets; `.dev.vars` for local dev (gitignored). Never hardcode.
+- **Infra as code:** Terraform owns zone, route, D1, R2 bucket, access policies. Wrangler owns the Worker script. No overlap. State in the user's nmoura.cf R2 backend if possible.
+
+## Things NOT to do
+
+- **No React Native / Expo in this repo.** A separate future repo will host the native app; both hit the same Worker API.
+- **No Next.js, Remix, TanStack Start, or other SSR frameworks** — the Hono JSX + Vite SPA split is the architecture.
+- **No Prisma, Sequelize, or heavy ORMs.** Kysely only.
+- **No rolling our own crypto.** Better Auth handles all auth primitives; never touch PBKDF2 / JWT hand-crafted code like the archived watchdrift prototype did.
+- **No trusting client-supplied EXIF / client timestamps** for verified readings. Server receipt time is the source of truth.
+- **No placeholder strings in committed config** (e.g. `YOUR_WORKER_URL.workers.dev` — that's an archived-watchdrift crime).
+
+## CI / quality gates
+
+- Pre-commit: lint-staged with Prettier + typecheck + unit tests (see `setup-pre-commit` skill when ready).
+- CI: GitHub Actions — typecheck, unit, integration, E2E against preview.
+- Husky + `lint-staged` wired from day one.
+
+## How to work in this repo
+
+1. Read this file AND the PRD issue before starting anything.
+2. For any non-trivial change, write the failing test FIRST (red → green → refactor loop from the `tdd` skill).
+3. Keep each commit tiny. Each commit should leave the tree in a state where `npm run test` passes.
+4. Public pages belong in `src/public/` (Hono JSX). Authed SPA code belongs in `src/app/`. Shared domain logic (drift calc, scoring, types) belongs in `src/domain/`. API handlers in `src/server/routes/`.
+5. PR before merge. Merge to `main` triggers production deploy.
+
+## Glossary of routes (planned)
+
+| Path | Kind | Purpose |
+|---|---|---|
+| `/` | public HTML | Marketing / top-watches hero. |
+| `/leaderboard` | public HTML | Global verified leaderboard. |
+| `/m/:movementId` | public HTML | Per-movement leaderboard, Chrono24 CTA. |
+| `/u/:username` | public HTML | Public user profile, their watches. |
+| `/w/:watchId` | public HTML | Public watch page, reading history chart. |
+| `/app/*` | SPA | Authed dashboard, add watch, log readings. |
+| `/api/v1/*` | JSON | REST API consumed by the SPA and (later) the Expo app. |
+| `/api/v1/auth/*` | JSON | Better Auth routes. |
