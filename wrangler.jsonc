@@ -20,7 +20,14 @@
     "directory": "./dist/",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/", "/leaderboard", "/m/*", "/api/*"]
+    "run_worker_first": [
+      "/",
+      "/leaderboard",
+      "/m/*",
+      "/u/*",
+      "/w/*",
+      "/api/*"
+    ]
   },
 
   // Data layer bindings. IDs come from `terraform output` in

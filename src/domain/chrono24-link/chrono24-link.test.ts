@@ -6,11 +6,11 @@
 // affiliate migration is a one-line change.
 
 import { describe, it, expect } from "vitest";
-import { buildChrono24Url } from "./index";
+import { buildChrono24UrlForMovement } from "./index";
 
-describe("buildChrono24Url", () => {
+describe("buildChrono24UrlForMovement", () => {
   it("returns a URL pointing at chrono24.com search", () => {
-    const url = buildChrono24Url({
+    const url = buildChrono24UrlForMovement({
       canonical_name: "ETA 2892-A2",
       manufacturer: "ETA",
       caliber: "2892-A2",
@@ -21,7 +21,7 @@ describe("buildChrono24Url", () => {
   });
 
   it("encodes the canonical name as the `query` search parameter", () => {
-    const url = buildChrono24Url({
+    const url = buildChrono24UrlForMovement({
       canonical_name: "ETA 2892-A2",
       manufacturer: "ETA",
       caliber: "2892-A2",
@@ -34,7 +34,7 @@ describe("buildChrono24Url", () => {
   });
 
   it("url-encodes reserved characters (ampersand, slash, spaces)", () => {
-    const url = buildChrono24Url({
+    const url = buildChrono24UrlForMovement({
       canonical_name: "Brand & Co / Caliber 42",
       manufacturer: "Brand & Co",
       caliber: "42",
@@ -50,7 +50,7 @@ describe("buildChrono24Url", () => {
   });
 
   it("handles unicode in the canonical name", () => {
-    const url = buildChrono24Url({
+    const url = buildChrono24UrlForMovement({
       canonical_name: "Omega Cøaxial 8800 — ∞",
       manufacturer: "Omega",
       caliber: "8800",
@@ -64,7 +64,7 @@ describe("buildChrono24Url", () => {
     // A pending movement could have sparse fields — the function must
     // never throw. It uses canonical_name only in phase 1 so empty
     // ancillary fields have no effect on the output.
-    const url = buildChrono24Url({
+    const url = buildChrono24UrlForMovement({
       canonical_name: "Unknown Movement",
       manufacturer: "",
       caliber: "",
@@ -73,7 +73,7 @@ describe("buildChrono24Url", () => {
   });
 
   it("trims whitespace from the canonical name before encoding", () => {
-    const url = buildChrono24Url({
+    const url = buildChrono24UrlForMovement({
       canonical_name: "  Seiko 6R35  ",
       manufacturer: "Seiko",
       caliber: "6R35",

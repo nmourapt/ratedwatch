@@ -51,7 +51,7 @@ export default defineConfig(async (_env): Promise<ViteUserConfig> => {
       alias: { "@": srcDir },
     },
     test: {
-      include: ["tests/integration/**/*.test.ts", "src/**/*.test.ts"],
+      include: ["tests/integration/**/*.test.{ts,tsx}", "src/**/*.test.{ts,tsx}"],
       exclude: ["tests/e2e/**", "node_modules/**", "dist/**", ".wrangler/**"],
       setupFiles: ["./tests/integration/setup/apply-migrations.ts"],
       // Better Auth signup uses a slow KDF (scrypt/bcrypt equivalent).

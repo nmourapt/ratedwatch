@@ -13,7 +13,7 @@ import { Header } from "../components/header";
 import { Layout } from "../components/layout";
 import type { Movement } from "@/domain/movements/taxonomy";
 import type { RankedWatch } from "@/domain/leaderboard-query";
-import { buildChrono24Url } from "@/domain/chrono24-link";
+import { buildChrono24UrlForMovement } from "@/domain/chrono24-link";
 import { LeaderboardStyles, LeaderboardTable } from "../leaderboard/table";
 
 export interface MovementPageProps {
@@ -24,7 +24,7 @@ export interface MovementPageProps {
 export const MovementPage = ({ movement, watches }: MovementPageProps) => {
   const title = `Most accurate ${movement.canonical_name} watches — rated.watch`;
   const description = `Drift rate leaderboard for the ${movement.canonical_name} ${movement.type} movement.`;
-  const chrono24Url = buildChrono24Url({
+  const chrono24Url = buildChrono24UrlForMovement({
     canonical_name: movement.canonical_name,
     manufacturer: movement.manufacturer,
     caliber: movement.caliber,
