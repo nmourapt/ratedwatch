@@ -29,7 +29,12 @@
     {
       "binding": "DB",
       "database_name": "rated-watch-db",
-      "database_id": "476d116f-b684-4f23-bdfb-119ad08f1e55"
+      "database_id": "476d116f-b684-4f23-bdfb-119ad08f1e55",
+      // Schema lives in ./migrations. `wrangler d1 migrations apply` and
+      // vitest-pool-workers' readD1Migrations() both read from this
+      // directory. Files are numbered (0001_…, 0002_…, …) and applied
+      // in lexical order.
+      "migrations_dir": "./migrations"
     }
   ],
   "r2_buckets": [
