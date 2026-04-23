@@ -26,6 +26,7 @@
       "/m/*",
       "/u/*",
       "/w/*",
+      "/out/*",
       "/api/*"
     ]
   },
@@ -74,7 +75,20 @@
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
-  }
+  },
+
+  // Analytics Engine — product-event firehose (slice #19). All domain
+  // events (user_registered, watch_added, reading_submitted,
+  // chrono24_click, page_view_*, …) flow through
+  // src/observability/events.ts → env.ANALYTICS.writeDataPoint. The
+  // `rw_events` dataset is queryable via the Analytics Engine SQL API.
+  // See https://developers.cloudflare.com/analytics/analytics-engine/.
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANALYTICS",
+      "dataset": "rw_events"
+    }
+  ]
 
   // ---------------------------------------------------------------
   // Runtime secrets (NOT stored here — set via `wrangler secret put`)
