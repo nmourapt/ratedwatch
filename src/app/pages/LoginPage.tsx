@@ -6,6 +6,7 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { login } from "../auth/api";
+import { GoogleSignInButton } from "../components/GoogleSignInButton";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -70,6 +71,17 @@ export function LoginPage() {
           {submitting ? "Signing in…" : "Sign in"}
         </button>
       </form>
+      {/* OAuth divider + Google button. The divider is decorative
+          (aria-hidden) so screen readers just hear the two actions. */}
+      <div
+        className="my-6 flex items-center gap-3 text-xs uppercase tracking-wide text-cf-text-muted"
+        aria-hidden="true"
+      >
+        <span className="h-px flex-1 bg-cf-border" />
+        <span>or</span>
+        <span className="h-px flex-1 bg-cf-border" />
+      </div>
+      <GoogleSignInButton label="Continue with Google" />
       <p className="mt-6 text-sm text-cf-text-muted">
         New here?{" "}
         <Link to="/app/register" className="text-cf-orange hover:underline">

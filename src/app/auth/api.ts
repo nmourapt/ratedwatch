@@ -58,6 +58,45 @@ export async function login(body: {
   return { ok: true };
 }
 
+/**
+ * Kick off Google OAuth. Posts to Better Auth's /sign-in/social with
+ * `provider: "google"`; the Worker returns either
+ *   { redirect: true, url: "https://accounts.google.com/..." }
+ * (the normal browser flow) or a session payload directly (only on
+ * the ID-token branch, which we don't use from the SPA).
+ *
+ * On success we navigate the window to the returned URL so Google can
+ * present its consent screen. The user will come back via
+ *   /api/v1/auth/callback/google
+ * which Better Auth handles internally and then redirects to
+ * `callbackURL` below. We point that at /app/dashboard so a freshly
+ * authed user lands on the same page as email/password signup.
+ */
+export async function signInWithGoogle(): Promise<
+  { ok: true } | { ok: false; error: AuthError }
+> {
+  const response = await fetch("/api/v1/auth/sign-in/social", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      provider: "google",
+      callbackURL: "/app/dashboard",
+      errorCallbackURL: "/app/login",
+    }),
+  });
+  if (!response.ok) return { ok: false, error: await readError(response) };
+  const data = (await response.json()) as { redirect?: boolean; url?: string };
+  if (data.redirect && data.url) {
+    // Hard navigation — we're leaving the SPA to visit Google.
+    window.location.href = data.url;
+    return { ok: true };
+  }
+  // Unexpected shape (e.g. the Worker handled the sign-in inline);
+  // fall through as "ok" and let the caller refresh /me.
+  return { ok: true };
+}
+
 export async function logout(): Promise<void> {
   await fetch("/api/v1/auth/sign-out", {
     method: "POST",
