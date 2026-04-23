@@ -36,6 +36,13 @@ export default defineConfig(async (_env): Promise<ViteUserConfig> => {
       include: ["tests/integration/**/*.test.ts", "src/**/*.test.ts"],
       exclude: ["tests/e2e/**", "node_modules/**", "dist/**", ".wrangler/**"],
       setupFiles: ["./tests/integration/setup/apply-migrations.ts"],
+      // Better Auth signup uses a slow KDF (scrypt/bcrypt equivalent).
+      // Under miniflare + workerd on GitHub runners, each signup adds
+      // 1-3s; tests that do signup + sign-in + API call in one test
+      // exceed the 5s vitest default. 15s covers the slowest paths
+      // with headroom.
+      testTimeout: 15_000,
+      hookTimeout: 30_000,
       coverage: {
         // Istanbul (source instrumentation) works with workerd; v8
         // requires a Node inspector Session that the Workers pool
