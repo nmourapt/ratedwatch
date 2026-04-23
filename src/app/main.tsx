@@ -7,6 +7,9 @@ import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { NewWatchPage } from "./pages/NewWatchPage";
+import { WatchDetailPage } from "./pages/WatchDetailPage";
+import { EditWatchPage } from "./pages/EditWatchPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import "./styles.css";
 
@@ -33,6 +36,9 @@ createRoot(rootElement).render(
             <Route index element={<DashboardPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="watches/new" element={<NewWatchPage />} />
+            <Route path="watches/:id" element={<WatchDetailPage />} />
+            <Route path="watches/:id/edit" element={<EditWatchPage />} />
           </Route>
         </Route>
         {/* SPA fallback: any path the Worker let fall through to the
