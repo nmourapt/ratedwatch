@@ -8,10 +8,13 @@
 // instead of throwing so route handlers can map each state to the
 // right HTTP status (404 vs 403) without try/catch plumbing.
 
-import type { Kysely } from "kysely";
+import type { Kysely, Selectable } from "kysely";
 import type { Database, WatchesTable } from "@/db/schema";
 
-export type Watch = WatchesTable;
+// The `Selectable<>` helper resolves `Generated<T>` columns to their
+// runtime T — so on read, `is_public` is `number` and `created_at`
+// is `string` without any unwrap ceremony at call sites.
+export type Watch = Selectable<WatchesTable>;
 
 export type WatchOwnershipResult =
   | { status: "ok"; watch: Watch }

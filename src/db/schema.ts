@@ -9,6 +9,8 @@
 // Future slices extend this interface with rated.watch's own tables
 // (movement, watch, reading, …).
 
+import type { Generated } from "kysely";
+
 export interface UserTable {
   id: string;
   name: string;
@@ -90,8 +92,11 @@ export interface WatchesTable {
   movement_id: string | null;
   custom_movement_name: string | null;
   notes: string | null;
-  is_public: number; // 0 | 1
-  created_at: string; // ISO 8601, populated by DEFAULT
+  // `Generated<number>` lets Kysely treat `is_public` as an optional
+  // column on INSERT (it has a SQL DEFAULT of 1) while still emitting
+  // `number` on SELECT.
+  is_public: Generated<number>; // 0 | 1
+  created_at: Generated<string>; // ISO 8601, populated by DEFAULT
 }
 
 export interface Database {
