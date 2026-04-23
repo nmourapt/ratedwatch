@@ -1,28 +1,40 @@
 // Server-rendered public home page. Zero client JS (asserted by the
 // "no <script> tag" integration test). The shared <Layout> owns the
-// design-system tokens and OG meta; this file only owns copy.
-import { Layout } from "./components/layout";
-import { Header } from "./components/header";
-import { Footer } from "./components/footer";
+// design-system tokens and OG meta; this file only owns copy and the
+// top-verified-watches hero section that sits below the main CTA.
+//
+// Slice #13 extended the page from pure copy into a data-backed hero:
+// the Worker fetches the current top-5 verified watches via
+// queryLeaderboard and passes them in as a prop so /‎ stays a single
+// HTML response with no client fetching.
+import type { RankedWatch } from "@/domain/leaderboard-query";
 import { Button } from "./components/button";
 import { Card } from "./components/card";
+import { Footer } from "./components/footer";
+import { Header } from "./components/header";
+import { Layout } from "./components/layout";
+import { formatDriftRate, formatWatchLabel } from "./leaderboard/format";
 
 const TITLE = "rated.watch — competitive accuracy tracking for watch enthusiasts";
 const DESCRIPTION =
   "Competitive accuracy tracking for watch enthusiasts. Verified deviation, drift-rate leaderboards, grouped by movement.";
 
-export const LandingPage = () => (
+export interface LandingPageProps {
+  /** Top-5 verified watches from the global leaderboard. May be empty
+   *  during the cold-start phase when nobody has crossed the verified
+   *  threshold yet. */
+  topVerified?: RankedWatch[];
+}
+
+export const LandingPage = ({ topVerified = [] }: LandingPageProps) => (
   <Layout title={TITLE} description={DESCRIPTION} pathname="/">
     <Header />
     <main>
       <section class="cf-container cf-hero" aria-labelledby="hero-title">
-        <h1 id="hero-title">
-          Competitive accuracy tracking for watch enthusiasts.
-        </h1>
+        <h1 id="hero-title">Competitive accuracy tracking for watch enthusiasts.</h1>
         <p>
-          Log verified readings, watch your drift rate settle, and climb the
-          leaderboards grouped by movement caliber. Spoof-resistant, public,
-          and mechanical-first.
+          Log verified readings, watch your drift rate settle, and climb the leaderboards
+          grouped by movement caliber. Spoof-resistant, public, and mechanical-first.
         </p>
         <div style="display:flex;gap:12px;flex-wrap:wrap">
           <Button as="a" href="/leaderboard" variant="primary">
@@ -34,22 +46,45 @@ export const LandingPage = () => (
         </div>
       </section>
 
-      <section class="cf-container cf-section" aria-labelledby="next-title">
-        <h2 id="next-title" style="margin:0 0 24px;font-size:1.25rem;font-weight:500;letter-spacing:-0.02em;color:var(--cf-text-muted)">
-          Coming soon
+      <section class="cf-container cf-section" aria-labelledby="top-verified-title">
+        <h2
+          id="top-verified-title"
+          style="margin:0 0 24px;font-size:1.25rem;font-weight:500;letter-spacing:-0.02em;color:var(--cf-text-muted)"
+        >
+          Top verified watches
         </h2>
-        <div class="cf-grid-2">
-          <Card title="Leaderboards by movement">
-            Watches compete within their own caliber — a Calibre 3135 is judged
-            against other 3135s, not a quartz HAQ. Fair, apples-to-apples
-            rankings by drift rate over the last session.
+        {topVerified.length === 0 ? (
+          <Card title="Be the first to log a verified reading!">
+            Nobody's crossed the 25 % verified-reading threshold yet. Sign up, log your
+            first baseline through the app camera flow, and you could be the watch
+            everyone else is chasing.
           </Card>
-          <Card title="Verified readings only">
-            In-app camera captures are timestamped by the server at receipt.
-            No trusting client clocks. Watches hit a verified badge when 25 %
-            of their current session is camera-sourced.
-          </Card>
-        </div>
+        ) : (
+          <div class="cf-grid-2">
+            {topVerified.map((w) => (
+              <Card
+                title={formatWatchLabel({
+                  name: w.watch_name,
+                  brand: w.watch_brand,
+                  model: w.watch_model,
+                })}
+              >
+                <p style="margin:0 0 8px">
+                  <a href={`/m/${w.movement_id}`}>{w.movement_canonical_name}</a>
+                  <span style="color:var(--cf-text-subtle)"> · </span>
+                  <a href={`/u/${w.owner_username}`}>@{w.owner_username}</a>
+                </p>
+                <p style="margin:0;font-family:var(--cf-font-mono)">
+                  Drift{" "}
+                  <strong>{formatDriftRate(w.session_stats.avg_drift_rate_spd)}</strong>{" "}
+                  <span style="color:var(--cf-text-subtle)">
+                    · rank #{String(w.rank)}
+                  </span>
+                </p>
+              </Card>
+            ))}
+          </div>
+        )}
       </section>
     </main>
     <Footer />

@@ -25,8 +25,13 @@ type Bindings = AuthEnv & {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-app.get("/", (c) => {
-  return c.html(<LandingPage />);
+app.get("/", async (c) => {
+  // Hero extension (slice #13): surface the top-5 verified watches so
+  // first-time visitors see the social proof immediately. Falls back
+  // to an empty-state card when nobody has crossed the threshold yet.
+  const db = createDb(c.env);
+  const topVerified = await queryLeaderboard({ verified_only: true, limit: 5 }, db);
+  return c.html(<LandingPage topVerified={topVerified} />);
 });
 
 // Public HTML leaderboard. Owned by the Worker (see run_worker_first in
