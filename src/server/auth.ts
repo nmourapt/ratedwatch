@@ -29,6 +29,7 @@
 import { betterAuth } from "better-auth";
 import { createDb } from "@/db";
 import { generateSlugUsername } from "@/domain/username";
+import { logEvent } from "@/observability/events";
 
 // We keep `Auth` a loose alias of betterAuth's return type. Using
 // `ReturnType<typeof betterAuth>` directly was flaky: tsc kept
@@ -52,6 +53,10 @@ export interface AuthEnv {
   // JWTs and still exercise the full sign-in-with-ID-token code path.
   // Never set this binding in production — wrangler.jsonc does not.
   OAUTH_TEST_SKIP_VERIFY?: string;
+  // Analytics Engine (slice #19). Optional — logEvent defaults to a
+  // silent no-op when the binding is absent, so local dev + early
+  // previews boot cleanly without it.
+  ANALYTICS?: AnalyticsEngineDataset;
 }
 
 const cache = new WeakMap<AuthEnv, Auth>();
@@ -150,6 +155,12 @@ export function getAuth(env: AuthEnv): Auth {
               },
             });
             return { data: { ...user, username } };
+          },
+          // Product telemetry (slice #19). Fires for every new user
+          // row, regardless of origin (email+password OR social), so
+          // the registration funnel counts match the user table.
+          after: async (user: { id: string }) => {
+            await logEvent("user_registered", { userId: user.id }, env);
           },
         },
       },

@@ -277,22 +277,21 @@ describe("GET /m/:movementId — public HTML", () => {
     expect(body).not.toContain(SEED.watches.betaOnly.model);
   });
 
-  it("emits a Chrono24 link with the movement canonical name as the query", async () => {
+  it("emits a Chrono24 CTA that routes through the click-tracked /out redirect", async () => {
     const res = await exports.default.fetch(
       new Request(`https://ratedwatch.test/m/${SEED.movements.alpha.id}`),
     );
     const body = await res.text();
-    // The link must point at chrono24.com/search/index.htm and carry
-    // an encoded `query=` parameter with the movement's canonical name.
-    expect(body).toMatch(/https:\/\/www\.chrono24\.com\/search\/index\.htm\?query=/);
-    const encoded = encodeURIComponent(SEED.movements.alpha.canonical_name).replace(
-      /%20/g,
-      "+",
-    );
-    expect(body).toContain(encoded);
+    // The CTA routes through /out/chrono24/:movementId so each click
+    // emits a `chrono24_click` Analytics Engine event before the 302
+    // to Chrono24 itself. See src/server/routes/out.ts.
+    expect(body).toContain(`/out/chrono24/${SEED.movements.alpha.id}`);
     // Security hardening on the anchor: noopener + new tab.
     expect(body).toMatch(/target="_blank"/);
     expect(body).toMatch(/rel="[^"]*noopener[^"]*"/);
+    // And the raw Chrono24 URL is no longer embedded on the page —
+    // users always go through the tracked redirect.
+    expect(body).not.toMatch(/https:\/\/www\.chrono24\.com\/search\/index\.htm\?query=/);
   });
 
   it("includes the movement-specific OG title and description", async () => {

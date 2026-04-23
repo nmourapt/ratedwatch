@@ -32,6 +32,7 @@ import {
 import { isEnabled } from "@/domain/feature-flags";
 import { verifyReading } from "@/domain/reading-verifier/verifier";
 import { assertWatchOwnership } from "@/domain/watches/ownership";
+import { logEvent } from "@/observability/events";
 import {
   createReadingSchema,
   formatReadingErrors,
@@ -46,6 +47,9 @@ type Bindings = AuthEnv & {
   AI: Ai;
   IMAGES: R2Bucket;
   FLAGS: KVNamespace;
+  // Analytics Engine (slice #19). Optional because logEvent defaults
+  // to a silent no-op when unbound.
+  ANALYTICS?: AnalyticsEngineDataset;
   [key: string]: unknown;
 };
 
@@ -255,6 +259,13 @@ readingsByWatchRoute.post("/", async (c) => {
     watchId,
   });
 
+  // Product telemetry (slice #19). Fire-and-forget.
+  await logEvent(
+    "reading_submitted",
+    { userId: user.id, watchId, is_baseline: input.is_baseline === true },
+    c.env,
+  );
+
   return c.json(toResponse(created as DbReadingRow), 201);
 });
 
@@ -278,12 +289,22 @@ readingsByWatchRoute.post("/verified", async (c) => {
   const watchId = getWatchIdParam(c);
   if (!watchId) return c.json({ error: "not_found" }, 404);
 
+  // Event: attempt counter. Fires regardless of flag state / outcome
+  // so funnel analysis can see how many users are bouncing off the
+  // feature-flagged gate vs the AI step.
+  await logEvent("verified_reading_attempted", { userId: user.id, watchId }, c.env);
+
   // Feature flag gate — check FIRST so a disabled flag doesn't even
   // do a DB lookup. The service default-offs on any error (missing
   // FLAGS binding, malformed KV value, …) so this is safe even in
   // freshly-provisioned environments.
   const enabled = await isEnabled(FLAG_AI_READING_V2, { userId: user.id }, c.env);
   if (!enabled) {
+    await logEvent(
+      "verified_reading_failed",
+      { userId: user.id, watchId, error: "verified_readings_disabled" },
+      c.env,
+    );
     return c.json({ error: "verified_readings_disabled" }, 503);
   }
 
@@ -326,6 +347,11 @@ readingsByWatchRoute.post("/verified", async (c) => {
   });
 
   if (!result.ok) {
+    await logEvent(
+      "verified_reading_failed",
+      { userId: user.id, watchId, error: result.error },
+      c.env,
+    );
     return c.json({ error: result.error, raw_response: result.raw_response }, 422);
   }
 
@@ -341,6 +367,11 @@ readingsByWatchRoute.post("/verified", async (c) => {
     notes: result.reading.notes,
     created_at: result.reading.created_at,
   };
+  await logEvent(
+    "verified_reading_succeeded",
+    { userId: user.id, watchId, is_baseline: result.reading.is_baseline },
+    c.env,
+  );
   return c.json(body, 201);
 });
 

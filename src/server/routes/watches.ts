@@ -26,6 +26,7 @@ import {
   type WatchResponse,
 } from "@/schemas/watch";
 import { assertWatchOwnership, type Watch } from "@/domain/watches/ownership";
+import { logEvent } from "@/observability/events";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { purgeLeaderboardUrls } from "@/server/lib/purge-cache";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
@@ -38,6 +39,9 @@ type Bindings = AuthEnv & {
   // src/server/routes/images.ts. Typed as optional so tests can stand
   // up a Worker without an R2 binding if they ever need to.
   IMAGES?: R2Bucket;
+  // Analytics Engine binding (slice #19). Optional: logEvent treats an
+  // absent binding as a no-op so early-preview environments don't break.
+  ANALYTICS?: AnalyticsEngineDataset;
   [key: string]: unknown;
 };
 
@@ -245,6 +249,13 @@ watchesRoute.post("/", async (c) => {
     .where("id", "=", id)
     .executeTakeFirstOrThrow();
   const movementName = await resolveMovementName(db, created.movement_id);
+
+  // Product telemetry (slice #19). Fire-and-forget.
+  await logEvent(
+    "watch_added",
+    { userId: user.id, movementId: created.movement_id },
+    c.env,
+  );
 
   return c.json(toResponse(created, movementName), 201);
 });
