@@ -1,0 +1,1024 @@
+[
+  {
+    "id": "eta-2824-2",
+    "canonical_name": "ETA 2824-2",
+    "manufacturer": "ETA",
+    "caliber": "2824-2",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Ubiquitous Swiss workhorse; ~25.6mm, 28,800vph, ~38h reserve."
+  },
+  {
+    "id": "eta-2892-a2",
+    "canonical_name": "ETA 2892-A2",
+    "manufacturer": "ETA",
+    "caliber": "2892-A2",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Thin upscale workhorse; common base for modules and chronograph modules."
+  },
+  {
+    "id": "eta-7750",
+    "canonical_name": "ETA 7750",
+    "manufacturer": "ETA",
+    "caliber": "7750",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Valjoux-derived automatic chronograph; cam-actuated."
+  },
+  {
+    "id": "eta-2671",
+    "canonical_name": "ETA 2671",
+    "manufacturer": "ETA",
+    "caliber": "2671",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Small ladies' automatic; 17.2mm."
+  },
+  {
+    "id": "eta-2836-2",
+    "canonical_name": "ETA 2836-2",
+    "manufacturer": "ETA",
+    "caliber": "2836-2",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Day-date variant of the 2824-2."
+  },
+  {
+    "id": "eta-6497-1",
+    "canonical_name": "ETA 6497-1",
+    "manufacturer": "ETA",
+    "caliber": "6497-1",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Large Unitas pocketwatch-style hand-wind; sub-seconds at 9."
+  },
+  {
+    "id": "eta-6498-1",
+    "canonical_name": "ETA 6498-1",
+    "manufacturer": "ETA",
+    "caliber": "6498-1",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Sister to the 6497 with sub-seconds at 6."
+  },
+  {
+    "id": "eta-2000-1",
+    "canonical_name": "ETA 2000-1",
+    "manufacturer": "ETA",
+    "caliber": "2000-1",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Compact automatic; ~19.4mm."
+  },
+  {
+    "id": "eta-a07-111",
+    "canonical_name": "ETA A07.111",
+    "manufacturer": "ETA",
+    "caliber": "A07.111",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Unitas-based large automatic; 36.6mm, 28,800vph."
+  },
+  {
+    "id": "eta-f06-111",
+    "canonical_name": "ETA F06.111",
+    "manufacturer": "ETA",
+    "caliber": "F06.111",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Three-hand date quartz; low-cost Swiss workhorse."
+  },
+  {
+    "id": "eta-f06-115",
+    "canonical_name": "ETA F06.115",
+    "manufacturer": "ETA",
+    "caliber": "F06.115",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Variant of the F06 family."
+  },
+  {
+    "id": "eta-955-112",
+    "canonical_name": "ETA 955.112",
+    "manufacturer": "ETA",
+    "caliber": "955.112",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Three-hand date Swiss quartz."
+  },
+  {
+    "id": "eta-251-264",
+    "canonical_name": "ETA 251.264",
+    "manufacturer": "ETA",
+    "caliber": "251.264",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Chronograph quartz."
+  },
+  {
+    "id": "eta-980-163",
+    "canonical_name": "ETA 980.163",
+    "manufacturer": "ETA",
+    "caliber": "980.163",
+    "type": "quartz",
+    "status": "approved"
+  },
+
+  {
+    "id": "sellita-sw200-1",
+    "canonical_name": "Sellita SW200-1",
+    "manufacturer": "Sellita",
+    "caliber": "SW200-1",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Near-drop-in alternative to the ETA 2824-2."
+  },
+  {
+    "id": "sellita-sw200",
+    "canonical_name": "Sellita SW200",
+    "manufacturer": "Sellita",
+    "caliber": "SW200",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Generic slug for the SW200 family."
+  },
+  {
+    "id": "sellita-sw220-1",
+    "canonical_name": "Sellita SW220-1",
+    "manufacturer": "Sellita",
+    "caliber": "SW220-1",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Day-date sibling of the SW200-1."
+  },
+  {
+    "id": "sellita-sw300-1",
+    "canonical_name": "Sellita SW300-1",
+    "manufacturer": "Sellita",
+    "caliber": "SW300-1",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Thin alternative to the ETA 2892-A2."
+  },
+  {
+    "id": "sellita-sw500",
+    "canonical_name": "Sellita SW500",
+    "manufacturer": "Sellita",
+    "caliber": "SW500",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Valjoux-7750-style automatic chronograph."
+  },
+  {
+    "id": "sellita-sw510",
+    "canonical_name": "Sellita SW510",
+    "manufacturer": "Sellita",
+    "caliber": "SW510",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Chronograph variant."
+  },
+  {
+    "id": "sellita-sw330-1",
+    "canonical_name": "Sellita SW330-1",
+    "manufacturer": "Sellita",
+    "caliber": "SW330-1",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "GMT variant."
+  },
+  {
+    "id": "sellita-sw260-1",
+    "canonical_name": "Sellita SW260-1",
+    "manufacturer": "Sellita",
+    "caliber": "SW260-1",
+    "type": "automatic",
+    "status": "approved"
+  },
+
+  {
+    "id": "seiko-nh35",
+    "canonical_name": "Seiko NH35",
+    "manufacturer": "Seiko",
+    "caliber": "NH35",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Ubiquitous budget Japanese automatic; hack + hand-wind; 21,600vph."
+  },
+  {
+    "id": "seiko-nh36",
+    "canonical_name": "Seiko NH36",
+    "manufacturer": "Seiko",
+    "caliber": "NH36",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Day-date sibling of the NH35."
+  },
+  {
+    "id": "seiko-nh38",
+    "canonical_name": "Seiko NH38",
+    "manufacturer": "Seiko",
+    "caliber": "NH38",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "No-date, open-heart variant."
+  },
+  {
+    "id": "seiko-nh70",
+    "canonical_name": "Seiko NH70",
+    "manufacturer": "Seiko",
+    "caliber": "NH70",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Skeleton variant."
+  },
+  {
+    "id": "seiko-4r35",
+    "canonical_name": "Seiko 4R35",
+    "manufacturer": "Seiko",
+    "caliber": "4R35",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "In-house equivalent to the NH35 in mid-range Seikos."
+  },
+  {
+    "id": "seiko-4r36",
+    "canonical_name": "Seiko 4R36",
+    "manufacturer": "Seiko",
+    "caliber": "4R36",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Day-date variant of the 4R35."
+  },
+  {
+    "id": "seiko-6r15",
+    "canonical_name": "Seiko 6R15",
+    "manufacturer": "Seiko",
+    "caliber": "6R15",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "~50h reserve; predecessor to the 6R35."
+  },
+  {
+    "id": "seiko-6r35",
+    "canonical_name": "Seiko 6R35",
+    "manufacturer": "Seiko",
+    "caliber": "6R35",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "70h power reserve; current Prospex + Presage mid-range."
+  },
+  {
+    "id": "seiko-6r55",
+    "canonical_name": "Seiko 6R55",
+    "manufacturer": "Seiko",
+    "caliber": "6R55",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Higher-end with 72h reserve."
+  },
+  {
+    "id": "seiko-8l35",
+    "canonical_name": "Seiko 8L35",
+    "manufacturer": "Seiko",
+    "caliber": "8L35",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Marinemaster; non-regulated sibling to Grand Seiko 9S55."
+  },
+  {
+    "id": "seiko-8l55",
+    "canonical_name": "Seiko 8L55",
+    "manufacturer": "Seiko",
+    "caliber": "8L55",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Hi-beat variant; 36,000vph."
+  },
+  {
+    "id": "grand-seiko-9s55",
+    "canonical_name": "Grand Seiko 9S55",
+    "manufacturer": "Grand Seiko",
+    "caliber": "9S55",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Historic 9S-series three-hander."
+  },
+  {
+    "id": "grand-seiko-9s65",
+    "canonical_name": "Grand Seiko 9S65",
+    "manufacturer": "Grand Seiko",
+    "caliber": "9S65",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "72h reserve; current three-hand workhorse."
+  },
+  {
+    "id": "grand-seiko-9s85",
+    "canonical_name": "Grand Seiko 9S85",
+    "manufacturer": "Grand Seiko",
+    "caliber": "9S85",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Hi-beat; 36,000vph."
+  },
+  {
+    "id": "grand-seiko-9s86",
+    "canonical_name": "Grand Seiko 9S86",
+    "manufacturer": "Grand Seiko",
+    "caliber": "9S86",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Hi-beat GMT."
+  },
+  {
+    "id": "grand-seiko-9sa5",
+    "canonical_name": "Grand Seiko 9SA5",
+    "manufacturer": "Grand Seiko",
+    "caliber": "9SA5",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Dual-impulse escapement; 80h reserve."
+  },
+  {
+    "id": "seiko-9r65",
+    "canonical_name": "Seiko 9R65",
+    "manufacturer": "Seiko",
+    "caliber": "9R65",
+    "type": "spring-drive",
+    "status": "approved",
+    "notes": "Spring Drive three-hander; ±1s/day."
+  },
+  {
+    "id": "seiko-9r15",
+    "canonical_name": "Seiko 9R15",
+    "manufacturer": "Seiko",
+    "caliber": "9R15",
+    "type": "spring-drive",
+    "status": "approved",
+    "notes": "Regulated Spring Drive; ±0.5s/day."
+  },
+  {
+    "id": "seiko-9r86",
+    "canonical_name": "Seiko 9R86",
+    "manufacturer": "Seiko",
+    "caliber": "9R86",
+    "type": "spring-drive",
+    "status": "approved",
+    "notes": "Spring Drive chronograph GMT."
+  },
+  {
+    "id": "seiko-7s26",
+    "canonical_name": "Seiko 7S26",
+    "manufacturer": "Seiko",
+    "caliber": "7S26",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Classic SKX-era automatic; no hack, no hand-wind."
+  },
+  {
+    "id": "seiko-7s36",
+    "canonical_name": "Seiko 7S36",
+    "manufacturer": "Seiko",
+    "caliber": "7S36",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "5-jewel sibling of the 7S26."
+  },
+
+  {
+    "id": "miyota-9015",
+    "canonical_name": "Miyota 9015",
+    "manufacturer": "Miyota",
+    "caliber": "9015",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Thin (3.9mm), 28,800vph Japanese automatic; hack + hand-wind."
+  },
+  {
+    "id": "miyota-8215",
+    "canonical_name": "Miyota 8215",
+    "manufacturer": "Miyota",
+    "caliber": "8215",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Budget Japanese automatic; unidirectional rotor."
+  },
+  {
+    "id": "miyota-8205",
+    "canonical_name": "Miyota 8205",
+    "manufacturer": "Miyota",
+    "caliber": "8205",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Sibling of the 8215."
+  },
+  {
+    "id": "miyota-9039",
+    "canonical_name": "Miyota 9039",
+    "manufacturer": "Miyota",
+    "caliber": "9039",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "No-date, thin variant of the 9015."
+  },
+  {
+    "id": "miyota-6t51",
+    "canonical_name": "Miyota 6T51",
+    "manufacturer": "Miyota",
+    "caliber": "6T51",
+    "type": "quartz",
+    "status": "approved"
+  },
+  {
+    "id": "miyota-2035",
+    "canonical_name": "Miyota 2035",
+    "manufacturer": "Miyota",
+    "caliber": "2035",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Ubiquitous budget three-hand quartz."
+  },
+
+  {
+    "id": "rolex-3135",
+    "canonical_name": "Rolex 3135",
+    "manufacturer": "Rolex",
+    "caliber": "3135",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Long-serving Submariner/Datejust-era workhorse."
+  },
+  {
+    "id": "rolex-3235",
+    "canonical_name": "Rolex 3235",
+    "manufacturer": "Rolex",
+    "caliber": "3235",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Chronergy escapement; 70h reserve."
+  },
+  {
+    "id": "rolex-3230",
+    "canonical_name": "Rolex 3230",
+    "manufacturer": "Rolex",
+    "caliber": "3230",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "No-date variant of the 3235."
+  },
+  {
+    "id": "rolex-3285",
+    "canonical_name": "Rolex 3285",
+    "manufacturer": "Rolex",
+    "caliber": "3285",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "GMT-Master II; 70h reserve."
+  },
+  {
+    "id": "rolex-4130",
+    "canonical_name": "Rolex 4130",
+    "manufacturer": "Rolex",
+    "caliber": "4130",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Daytona chronograph."
+  },
+  {
+    "id": "rolex-4131",
+    "canonical_name": "Rolex 4131",
+    "manufacturer": "Rolex",
+    "caliber": "4131",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "2023 Daytona chronograph."
+  },
+  {
+    "id": "rolex-2236",
+    "canonical_name": "Rolex 2236",
+    "manufacturer": "Rolex",
+    "caliber": "2236",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Ladies' movement with Syloxi hairspring."
+  },
+
+  {
+    "id": "tudor-mt5602",
+    "canonical_name": "Tudor MT5602",
+    "manufacturer": "Tudor",
+    "caliber": "MT5602",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "In-house Black Bay workhorse; 70h reserve, silicon hairspring."
+  },
+  {
+    "id": "tudor-mt5612",
+    "canonical_name": "Tudor MT5612",
+    "manufacturer": "Tudor",
+    "caliber": "MT5612",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Date variant of the MT5602."
+  },
+  {
+    "id": "tudor-mt5652",
+    "canonical_name": "Tudor MT5652",
+    "manufacturer": "Tudor",
+    "caliber": "MT5652",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "GMT variant."
+  },
+  {
+    "id": "tudor-mt5400",
+    "canonical_name": "Tudor MT5400",
+    "manufacturer": "Tudor",
+    "caliber": "MT5400",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Compact in-house Black Bay 36/58 series."
+  },
+  {
+    "id": "tudor-mt5813",
+    "canonical_name": "Tudor MT5813",
+    "manufacturer": "Tudor",
+    "caliber": "MT5813",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Chronograph; Breitling B01-based."
+  },
+
+  {
+    "id": "omega-8500",
+    "canonical_name": "Omega 8500",
+    "manufacturer": "Omega",
+    "caliber": "8500",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "First in-house Co-Axial movement."
+  },
+  {
+    "id": "omega-8800",
+    "canonical_name": "Omega 8800",
+    "manufacturer": "Omega",
+    "caliber": "8800",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Three-hand Master Chronometer; anti-magnetic to 15,000 gauss."
+  },
+  {
+    "id": "omega-8900",
+    "canonical_name": "Omega 8900",
+    "manufacturer": "Omega",
+    "caliber": "8900",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Master Chronometer; 60h reserve."
+  },
+  {
+    "id": "omega-8912",
+    "canonical_name": "Omega 8912",
+    "manufacturer": "Omega",
+    "caliber": "8912",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "GMT variant; Master Chronometer."
+  },
+  {
+    "id": "omega-8806",
+    "canonical_name": "Omega 8806",
+    "manufacturer": "Omega",
+    "caliber": "8806",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Time-only Master Chronometer."
+  },
+  {
+    "id": "omega-9300",
+    "canonical_name": "Omega 9300",
+    "manufacturer": "Omega",
+    "caliber": "9300",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Co-Axial column-wheel chronograph."
+  },
+  {
+    "id": "omega-3861",
+    "canonical_name": "Omega 3861",
+    "manufacturer": "Omega",
+    "caliber": "3861",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Current Moonwatch Master Chronometer; Lemania-descended."
+  },
+  {
+    "id": "omega-861",
+    "canonical_name": "Omega 861",
+    "manufacturer": "Omega",
+    "caliber": "861",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Classic cam-actuated Moonwatch caliber."
+  },
+
+  {
+    "id": "patek-324-s-c",
+    "canonical_name": "Patek Philippe 324 S C",
+    "manufacturer": "Patek Philippe",
+    "caliber": "324 S C",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Nautilus/Aquanaut self-winding with sweep seconds + date."
+  },
+  {
+    "id": "patek-240",
+    "canonical_name": "Patek Philippe 240",
+    "manufacturer": "Patek Philippe",
+    "caliber": "240",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Ultra-thin micro-rotor."
+  },
+  {
+    "id": "patek-26-330-s-c",
+    "canonical_name": "Patek Philippe 26-330 S C",
+    "manufacturer": "Patek Philippe",
+    "caliber": "26-330 S C",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Successor to the 324."
+  },
+  {
+    "id": "patek-ch-29-535-ps",
+    "canonical_name": "Patek Philippe CH 29-535 PS",
+    "manufacturer": "Patek Philippe",
+    "caliber": "CH 29-535 PS",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Hand-wound column-wheel chronograph."
+  },
+
+  {
+    "id": "jlc-899",
+    "canonical_name": "Jaeger-LeCoultre 899",
+    "manufacturer": "Jaeger-LeCoultre",
+    "caliber": "899",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Master Control-era three-hand automatic."
+  },
+  {
+    "id": "jlc-898",
+    "canonical_name": "Jaeger-LeCoultre 898",
+    "manufacturer": "Jaeger-LeCoultre",
+    "caliber": "898",
+    "type": "automatic",
+    "status": "approved"
+  },
+  {
+    "id": "jlc-925",
+    "canonical_name": "Jaeger-LeCoultre 925",
+    "manufacturer": "Jaeger-LeCoultre",
+    "caliber": "925",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "In-house Reverso-era automatic."
+  },
+  {
+    "id": "jlc-849",
+    "canonical_name": "Jaeger-LeCoultre 849",
+    "manufacturer": "Jaeger-LeCoultre",
+    "caliber": "849",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Ultra-thin manual-wind Reverso caliber."
+  },
+  {
+    "id": "jlc-751",
+    "canonical_name": "Jaeger-LeCoultre 751",
+    "manufacturer": "Jaeger-LeCoultre",
+    "caliber": "751",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Automatic chronograph."
+  },
+
+  {
+    "id": "vacheron-5100",
+    "canonical_name": "Vacheron Constantin 5100",
+    "manufacturer": "Vacheron Constantin",
+    "caliber": "5100",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Overseas workhorse; 60h reserve."
+  },
+  {
+    "id": "vacheron-1120",
+    "canonical_name": "Vacheron Constantin 1120",
+    "manufacturer": "Vacheron Constantin",
+    "caliber": "1120",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Ultra-thin JLC 920-based."
+  },
+  {
+    "id": "vacheron-2450",
+    "canonical_name": "Vacheron Constantin 2450",
+    "manufacturer": "Vacheron Constantin",
+    "caliber": "2450",
+    "type": "automatic",
+    "status": "approved"
+  },
+
+  {
+    "id": "ap-3120",
+    "canonical_name": "Audemars Piguet 3120",
+    "manufacturer": "Audemars Piguet",
+    "caliber": "3120",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Classic Royal Oak three-hand self-winding."
+  },
+  {
+    "id": "ap-4302",
+    "canonical_name": "Audemars Piguet 4302",
+    "manufacturer": "Audemars Piguet",
+    "caliber": "4302",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Modern Royal Oak three-hand; 70h reserve."
+  },
+
+  {
+    "id": "iwc-52000",
+    "canonical_name": "IWC 52000",
+    "manufacturer": "IWC",
+    "caliber": "52000",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "IWC's big in-house automatic; 7-day Pellaton."
+  },
+  {
+    "id": "iwc-32110",
+    "canonical_name": "IWC 32110",
+    "manufacturer": "IWC",
+    "caliber": "32110",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "In-house Pilot/Mark caliber; 72h reserve."
+  },
+  {
+    "id": "iwc-69380",
+    "canonical_name": "IWC 69380",
+    "manufacturer": "IWC",
+    "caliber": "69380",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "In-house column-wheel chronograph."
+  },
+  {
+    "id": "iwc-89361",
+    "canonical_name": "IWC 89361",
+    "manufacturer": "IWC",
+    "caliber": "89361",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Portugieser flyback chronograph."
+  },
+
+  {
+    "id": "longines-l888",
+    "canonical_name": "Longines L888",
+    "manufacturer": "Longines",
+    "caliber": "L888",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "ETA A31-based with silicon balance spring; 72h reserve."
+  },
+  {
+    "id": "longines-l592",
+    "canonical_name": "Longines L592",
+    "manufacturer": "Longines",
+    "caliber": "L592",
+    "type": "automatic",
+    "status": "approved"
+  },
+  {
+    "id": "longines-l688",
+    "canonical_name": "Longines L688",
+    "manufacturer": "Longines",
+    "caliber": "L688",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Column-wheel chronograph."
+  },
+
+  {
+    "id": "tissot-powermatic-80",
+    "canonical_name": "Tissot Powermatic 80",
+    "manufacturer": "Tissot",
+    "caliber": "Powermatic 80",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "ETA C07.111-based; 80h reserve."
+  },
+
+  {
+    "id": "hamilton-h10",
+    "canonical_name": "Hamilton H-10",
+    "manufacturer": "Hamilton",
+    "caliber": "H-10",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "ETA 2824-based with 80h reserve."
+  },
+  {
+    "id": "hamilton-h30",
+    "canonical_name": "Hamilton H-30",
+    "manufacturer": "Hamilton",
+    "caliber": "H-30",
+    "type": "automatic",
+    "status": "approved"
+  },
+  {
+    "id": "hamilton-h40",
+    "canonical_name": "Hamilton H-40",
+    "manufacturer": "Hamilton",
+    "caliber": "H-40",
+    "type": "manual",
+    "status": "approved",
+    "notes": "ETA 2801-based hand-wind with 80h reserve."
+  },
+
+  {
+    "id": "la-joux-perret-g100",
+    "canonical_name": "La Joux-Perret G100",
+    "manufacturer": "La Joux-Perret",
+    "caliber": "G100",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "68h reserve; positioned as a Sellita/ETA alternative."
+  },
+  {
+    "id": "la-joux-perret-g101",
+    "canonical_name": "La Joux-Perret G101",
+    "manufacturer": "La Joux-Perret",
+    "caliber": "G101",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Variant of the G100."
+  },
+
+  {
+    "id": "soprod-a10",
+    "canonical_name": "Soprod A10",
+    "manufacturer": "Soprod",
+    "caliber": "A10",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "ETA 2892-A2 alternative."
+  },
+  {
+    "id": "soprod-m100",
+    "canonical_name": "Soprod M100",
+    "manufacturer": "Soprod",
+    "caliber": "M100",
+    "type": "automatic",
+    "status": "approved"
+  },
+
+  {
+    "id": "ronda-715",
+    "canonical_name": "Ronda 715",
+    "manufacturer": "Ronda",
+    "caliber": "715",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Three-hand Swiss quartz."
+  },
+  {
+    "id": "ronda-763",
+    "canonical_name": "Ronda 763",
+    "manufacturer": "Ronda",
+    "caliber": "763",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Sweeping-seconds variant of the 715 series."
+  },
+  {
+    "id": "ronda-513",
+    "canonical_name": "Ronda 513",
+    "manufacturer": "Ronda",
+    "caliber": "513",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Compact ladies' Swiss quartz."
+  },
+  {
+    "id": "ronda-5030d",
+    "canonical_name": "Ronda 5030.D",
+    "manufacturer": "Ronda",
+    "caliber": "5030.D",
+    "type": "quartz",
+    "status": "approved",
+    "notes": "Swiss chronograph quartz."
+  },
+
+  {
+    "id": "zenith-el-primero",
+    "canonical_name": "Zenith El Primero",
+    "manufacturer": "Zenith",
+    "caliber": "El Primero",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Historic hi-beat chronograph; 36,000vph."
+  },
+  {
+    "id": "zenith-elite-670",
+    "canonical_name": "Zenith Elite 670",
+    "manufacturer": "Zenith",
+    "caliber": "Elite 670",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Thin in-house three-hander."
+  },
+
+  {
+    "id": "breitling-b01",
+    "canonical_name": "Breitling B01",
+    "manufacturer": "Breitling",
+    "caliber": "B01",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "In-house column-wheel chronograph."
+  },
+  {
+    "id": "breitling-b20",
+    "canonical_name": "Breitling B20",
+    "manufacturer": "Breitling",
+    "caliber": "B20",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Tudor MT5813 cousin."
+  },
+
+  {
+    "id": "panerai-p-9010",
+    "canonical_name": "Panerai P.9010",
+    "manufacturer": "Panerai",
+    "caliber": "P.9010",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "In-house 3-day automatic."
+  },
+  {
+    "id": "panerai-p-6000",
+    "canonical_name": "Panerai P.6000",
+    "manufacturer": "Panerai",
+    "caliber": "P.6000",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Hand-wind 3-day."
+  },
+
+  {
+    "id": "sinn-sz01",
+    "canonical_name": "Sinn SZ01",
+    "manufacturer": "Sinn",
+    "caliber": "SZ01",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Valjoux 7750 modified to bi-compax layout."
+  },
+
+  {
+    "id": "hmt-0231",
+    "canonical_name": "HMT 0231",
+    "manufacturer": "HMT",
+    "caliber": "0231",
+    "type": "manual",
+    "status": "approved",
+    "notes": "Indian Citizen-derived hand-wind."
+  },
+
+  {
+    "id": "eterna-3902a",
+    "canonical_name": "Eterna 3902A",
+    "manufacturer": "Eterna",
+    "caliber": "3902A",
+    "type": "automatic",
+    "status": "approved"
+  },
+  {
+    "id": "eterna-39",
+    "canonical_name": "Eterna Caliber 39",
+    "manufacturer": "Eterna",
+    "caliber": "Caliber 39",
+    "type": "automatic",
+    "status": "approved",
+    "notes": "Modular platform."
+  }
+]
