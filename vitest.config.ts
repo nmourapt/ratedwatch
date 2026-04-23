@@ -24,6 +24,18 @@ export default defineConfig(async (_env): Promise<ViteUserConfig> => {
             // the Worker expects; production secrets come from
             // `wrangler secret put BETTER_AUTH_SECRET`.
             BETTER_AUTH_SECRET: "test-better-auth-secret-please-change-in-prod-32chars",
+            // Google OAuth — real provisioning happens via
+            // `wrangler secret put` per wrangler.jsonc comments. These
+            // test values are deliberately fake but match the shape of
+            // real creds so Better Auth's Google provider wires up at
+            // all, which is what the OAuth integration tests need.
+            GOOGLE_CLIENT_ID: "test-google-client-id",
+            GOOGLE_CLIENT_SECRET: "test-google-client-secret",
+            // Miniflare-only. Skips the JWKS round-trip inside
+            // verifyIdToken so tests can use locally-minted unsigned
+            // JWTs. The Worker treats this as opt-in — see the env
+            // plumbing in src/server/auth.ts.
+            OAUTH_TEST_SKIP_VERIFY: "1",
             TEST_MIGRATIONS: migrations,
           },
         },
