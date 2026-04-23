@@ -8,6 +8,7 @@ import { LandingPage } from "@/public/landing";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
+import { readingsByIdRoute, readingsByWatchRoute } from "@/server/routes/readings";
 import { watchesRoute } from "@/server/routes/watches";
 
 // The Worker's full env extends the narrower AuthEnv used by getAuth.
@@ -37,6 +38,12 @@ app.all("/api/v1/auth/*", (c) => {
 // later slices add watches/readings here.
 app.route("/api/v1/me", meRoute);
 app.route("/api/v1/movements", movementsRoute);
+// Readings live under two paths: nested under a watch for
+// list/create, and flat at /api/v1/readings/:id for delete. Mount
+// the nested route BEFORE /api/v1/watches so its requireAuth
+// middleware doesn't catch anonymous GETs on public-watch readings.
+app.route("/api/v1/watches/:watchId/readings", readingsByWatchRoute);
+app.route("/api/v1/readings", readingsByIdRoute);
 app.route("/api/v1/watches", watchesRoute);
 
 export default app;
