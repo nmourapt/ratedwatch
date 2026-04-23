@@ -11,6 +11,7 @@
 // behaves correctly the pages follow.
 
 import { env } from "cloudflare:test";
+import { exports } from "cloudflare:workers";
 import { beforeAll, describe, it, expect } from "vitest";
 import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
@@ -382,6 +383,49 @@ describe("queryLeaderboard()", () => {
   });
 });
 
-// HTTP surface tests (GET /api/v1/leaderboard, /leaderboard HTML, home
-// hero top-5) land in follow-up commits of this slice, each paired
-// with the route that makes them pass.
+// ---- GET /api/v1/leaderboard JSON surface -------------------------
+
+describe("GET /api/v1/leaderboard", () => {
+  it("returns 200 JSON with watches[]", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/api/v1/leaderboard?limit=50"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { watches: Array<{ watch_id: string }> };
+    const ids = body.watches.map((w) => w.watch_id);
+    expect(ids).toContain(SEED.watches.gold.id);
+    expect(ids).toContain(SEED.watches.silver.id);
+    expect(ids).toContain(SEED.watches.bronze.id);
+  });
+
+  it("verified_only=1 filters at the API surface", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/api/v1/leaderboard?verified_only=1&limit=50"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { watches: Array<{ watch_id: string }> };
+    const ids = body.watches.map((w) => w.watch_id);
+    expect(ids).not.toContain(SEED.watches.silver.id);
+    expect(ids).toContain(SEED.watches.gold.id);
+  });
+
+  it("movement_id filter narrows at the API surface", async () => {
+    const res = await exports.default.fetch(
+      new Request(
+        `https://ratedwatch.test/api/v1/leaderboard?movement_id=${SEED.movements.caliberA.id}&limit=50`,
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { watches: Array<{ watch_id: string }> };
+    const ids = body.watches.map((w) => w.watch_id);
+    expect(ids).toContain(SEED.watches.gold.id);
+    expect(ids).not.toContain(SEED.watches.bronze.id);
+  });
+
+  it("rejects limit > 200 as a Zod validation error", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/api/v1/leaderboard?limit=9999"),
+    );
+    expect(res.status).toBe(400);
+  });
+});

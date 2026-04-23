@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import { LandingPage } from "@/public/landing";
 import { getAuth, type AuthEnv } from "@/server/auth";
+import { leaderboardRoute } from "@/server/routes/leaderboard";
 import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
 import { readingsByIdRoute, readingsByWatchRoute } from "@/server/routes/readings";
@@ -38,6 +39,9 @@ app.all("/api/v1/auth/*", (c) => {
 // later slices add watches/readings here.
 app.route("/api/v1/me", meRoute);
 app.route("/api/v1/movements", movementsRoute);
+// Global leaderboard + per-movement leaderboard (filter via query param).
+// Public — no auth middleware. See src/server/routes/leaderboard.ts.
+app.route("/api/v1/leaderboard", leaderboardRoute);
 // Readings live under two paths: nested under a watch for
 // list/create, and flat at /api/v1/readings/:id for delete. Mount
 // the nested route BEFORE /api/v1/watches so its requireAuth
