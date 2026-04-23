@@ -18,6 +18,12 @@ export default defineConfig(async (_env): Promise<ViteUserConfig> => {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
+        // `remoteBindings: false` stops the pool from starting a remote-proxy
+        // session for our AI binding (slice #16). AI bindings always resolve
+        // remotely in production, but in tests we drive the pipeline with a
+        // module-level fake (see src/domain/ai-dial-reader/runner.ts). Without
+        // this flag, vitest boot hangs on a Cloudflare account-id prompt.
+        remoteBindings: false,
         miniflare: {
           bindings: {
             // Secret used by Better Auth in tests. Matches the shape
