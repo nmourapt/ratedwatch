@@ -6,3 +6,4 @@ export {
   type PerIntervalDrift,
   type SessionStats,
 } from "./compute-session-stats";
+export { readingsToBadge, type ReadingsToBadgeResult } from "./readings-to-badge";
