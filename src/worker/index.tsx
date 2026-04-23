@@ -6,8 +6,10 @@
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
+import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
 import { LandingPage } from "@/public/landing";
 import { LeaderboardPage } from "@/public/leaderboard/page";
+import { MovementNotFoundPage, MovementPage } from "@/public/movement/page";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { watchImagePublicRoute, watchImageRoute } from "@/server/routes/images";
 import { leaderboardRoute } from "@/server/routes/leaderboard";
@@ -46,6 +48,22 @@ app.get("/leaderboard", async (c) => {
   const watches = await queryLeaderboard({ verified_only: verifiedOnly, limit: 50 }, db);
   c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
   return c.html(<LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} />);
+});
+
+// Public per-movement leaderboard (slice #14). 404 for unknown or
+// still-pending movements so the URL surface never leaks unapproved
+// submissions. Same cache header as the global page — reading
+// mutations explicitly purge both.
+app.get("/m/:movementId", async (c) => {
+  const db = createDb(c.env);
+  const taxonomy = createMovementTaxonomy(db);
+  const movement = await taxonomy.getBySlug(c.req.param("movementId"));
+  if (!movement || movement.status !== "approved") {
+    return c.html(<MovementNotFoundPage />, 404);
+  }
+  const watches = await queryLeaderboard({ movement_id: movement.id, limit: 50 }, db);
+  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  return c.html(<MovementPage movement={movement} watches={watches} />);
 });
 
 // Better Auth owns every method under /api/v1/auth/*. We pass the raw
