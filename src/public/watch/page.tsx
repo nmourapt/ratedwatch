@@ -34,11 +34,17 @@ export const WatchPage = ({ data }: WatchPageProps) => {
     brand: watch.brand,
     model: watch.model,
   });
-  const chrono24Href = buildChrono24UrlForWatch({
-    brand: watch.brand,
-    model: watch.model,
-    name: watch.name,
-  });
+  // Prefer the click-tracked movement redirect so we count clicks in
+  // Analytics Engine. Fall back to a direct Chrono24 search on
+  // brand+model when the watch has no approved movement attached —
+  // the tracked redirect needs a movement id.
+  const chrono24Href = watch.movement_id
+    ? `/out/chrono24/${watch.movement_id}`
+    : buildChrono24UrlForWatch({
+        brand: watch.brand,
+        model: watch.model,
+        name: watch.name,
+      });
   const title = `${label} — rated.watch`;
   const description = `${label} owned by @${watch.owner_username}. Deviation history + drift rate on rated.watch.`;
   return (

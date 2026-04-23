@@ -19,6 +19,7 @@ import { watchImagePublicRoute, watchImageRoute } from "@/server/routes/images";
 import { leaderboardRoute } from "@/server/routes/leaderboard";
 import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
+import { outRoute } from "@/server/routes/out";
 import { readingsByIdRoute, readingsByWatchRoute } from "@/server/routes/readings";
 import { watchesRoute } from "@/server/routes/watches";
 
@@ -134,5 +135,11 @@ app.route("/api/v1/watches", watchesRoute);
 // <img src> references it directly and a future CDN cache rule will
 // key off the stable /images/* prefix.
 app.route("/images/watches", watchImagePublicRoute);
+
+// Outbound click-tracking redirects — /out/chrono24/:movementId and
+// friends. See src/server/routes/out.ts. Owned by the Worker (see
+// `/out/*` in run_worker_first / wrangler.jsonc) so each click emits
+// an Analytics Engine event before the 302.
+app.route("/out", outRoute);
 
 export default app;
