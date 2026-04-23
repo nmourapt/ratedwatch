@@ -305,6 +305,43 @@ describe("GET /api/v1/watches", () => {
     const res = await listWatches();
     expect(res.status).toBe(401);
   });
+
+  // Slice 18: GET /watches embeds session_stats on each row so the
+  // dashboard can render the verified progress ring per-card without
+  // a second round-trip per watch.
+  it(
+    "embeds session_stats with reading_count + verified_ratio on each watch row",
+    async () => {
+      const user = await registerAndGetCookie();
+      const create = await createWatch(
+        { name: "Ring-owner", movement_id: approvedMovementId },
+        user.cookie,
+      );
+      expect(create.status).toBe(201);
+      const res = await listWatches(user.cookie);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        watches: Array<{
+          id: string;
+          session_stats: {
+            reading_count: number;
+            verified_ratio: number;
+            verified_badge: boolean;
+            eligible: boolean;
+          };
+        }>;
+      };
+      expect(body.watches.length).toBeGreaterThan(0);
+      for (const w of body.watches) {
+        expect(w.session_stats).toBeDefined();
+        expect(typeof w.session_stats.reading_count).toBe("number");
+        expect(typeof w.session_stats.verified_ratio).toBe("number");
+        expect(typeof w.session_stats.verified_badge).toBe("boolean");
+        expect(typeof w.session_stats.eligible).toBe("boolean");
+      }
+    },
+    TWO_USER_TIMEOUT,
+  );
 });
 
 // ---- GET /api/v1/watches/:id ---------------------------------------

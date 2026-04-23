@@ -25,6 +25,7 @@ import {
   updateWatchSchema,
   type WatchResponse,
 } from "@/schemas/watch";
+import { computeSessionStats, type Reading } from "@/domain/drift-calc";
 import { assertWatchOwnership, type Watch } from "@/domain/watches/ownership";
 import { logEvent } from "@/observability/events";
 import { getAuth, type AuthEnv } from "@/server/auth";
@@ -186,10 +187,44 @@ watchesRoute.get("/", async (c) => {
     .orderBy("watches.created_at", "desc")
     .execute();
 
+  // Pull every reading for the caller's watches in one pass, then
+  // fan them out to each watch's computeSessionStats. Scales linearly
+  // with total readings, which is bounded per-user (dashboard is a
+  // small N).
+  const watchIds = rows.map((r) => r.id);
+  const readingsByWatch = new Map<string, Reading[]>();
+  if (watchIds.length > 0) {
+    const readingRows = await db
+      .selectFrom("readings")
+      .select([
+        "id",
+        "watch_id",
+        "reference_timestamp",
+        "deviation_seconds",
+        "is_baseline",
+        "verified",
+      ])
+      .where("watch_id", "in", watchIds)
+      .execute();
+    for (const r of readingRows) {
+      const bucket = readingsByWatch.get(r.watch_id) ?? [];
+      bucket.push({
+        id: r.id,
+        reference_timestamp: r.reference_timestamp,
+        deviation_seconds: r.deviation_seconds,
+        is_baseline: r.is_baseline === 1,
+        verified: r.verified === 1,
+      });
+      readingsByWatch.set(r.watch_id, bucket);
+    }
+  }
+
   const watches = rows.map((row) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { movement_canonical_name, ...watch } = row;
-    return toResponse(watch as Watch, movement_canonical_name ?? null);
+    const base = toResponse(watch as Watch, movement_canonical_name ?? null);
+    const sessionStats = computeSessionStats(readingsByWatch.get(row.id) ?? []);
+    return { ...base, session_stats: sessionStats };
   });
 
   return c.json({ watches });
