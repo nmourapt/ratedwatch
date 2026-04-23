@@ -98,6 +98,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: verify
+    # `Post preview URL to PR` uses GITHUB_TOKEN to leave a sticky comment.
+    # Default token scope is read-only; grant PR-write here, contents-read
+    # for the checkout step.
+    permissions:
+      contents: read
+      pull-requests: write
     # Exposed so `e2e-smoke` can read the preview URL.
     outputs:
       preview-url: ${{ steps.expose-url.outputs.preview-url }}
