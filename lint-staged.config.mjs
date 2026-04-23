@@ -14,6 +14,7 @@ export default {
   "*.{ts,tsx}": [
     () => "tsc --noEmit",
     () => "tsc --noEmit -p tsconfig.app.json",
+    () => "tsc --noEmit -p tsconfig.e2e.json",
     (files) =>
       `bash -c 'CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest related --run ${files.join(" ")}'`,
   ],

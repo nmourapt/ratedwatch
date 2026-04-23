@@ -1,0 +1,28 @@
+{
+  // Playwright tests run in Node (the test runner), not workerd, so
+  // they need `@types/node` and the `@playwright/test` harness types
+  // — plus `DOM` for the browser-page helpers Playwright exposes.
+  // The Worker tsconfig deliberately omits those; keeping a separate
+  // file means the Worker type graph stays Workers-only.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node", "@playwright/test"]
+  },
+  "include": ["playwright.config.ts", "tests/e2e/**/*.ts"],
+  "exclude": ["node_modules", "dist", ".wrangler"]
+}
