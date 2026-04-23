@@ -20,7 +20,8 @@
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run --passWithNoTests",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest --passWithNoTests",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.14.9",
@@ -29,6 +30,8 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
     "prettier": "3.8.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
