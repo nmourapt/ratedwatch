@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { LandingPage } from "@/public/landing";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { meRoute } from "@/server/routes/me";
+import { movementsRoute } from "@/server/routes/movements";
 
 // The Worker's full env extends the narrower AuthEnv used by getAuth.
 type Bindings = AuthEnv & {
@@ -30,8 +31,10 @@ app.all("/api/v1/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
-// App API surface. Currently just the "who am I" probe used by the
-// SPA's auth gate; later slices add watches/readings/movements here.
+// App API surface. Currently the "who am I" probe used by the SPA's
+// auth gate and the public movements taxonomy search (slice 7);
+// later slices add watches/readings here.
 app.route("/api/v1/me", meRoute);
+app.route("/api/v1/movements", movementsRoute);
 
 export default app;
