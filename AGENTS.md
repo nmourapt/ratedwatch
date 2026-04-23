@@ -42,6 +42,7 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
 - **Secrets:** `wrangler secret put` for Worker-side secrets; `.dev.vars` for local dev (gitignored). Never hardcode. Required production secrets:
   - `BETTER_AUTH_SECRET` — 32+ char high-entropy value used by Better Auth for cookie signing. Set once per environment with `wrangler secret put BETTER_AUTH_SECRET` **before** any `wrangler deploy`. Generate with `openssl rand -base64 32`.
 - **Infra as code:** Terraform owns zone, route, D1, R2 bucket, access policies. Wrangler owns the Worker script. No overlap. State in the user's nmoura.cf R2 backend if possible.
+- **D1 migrations:** Live at `migrations/NNNN_*.sql`. Applied to the production D1 via `wrangler d1 migrations apply rated-watch-db --remote` **before** `wrangler deploy` whenever a PR introduces a new migration. Tests use miniflare which auto-applies migrations via `vitest.config.ts`; preview deploys use the real D1 and therefore require the migration to have run against production first. Any slice that adds a migration should call this out in its PR body so the operator runs it at merge time.
 
 ## Things NOT to do
 
