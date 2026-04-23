@@ -58,4 +58,19 @@
     "enabled": true,
     "head_sampling_rate": 1
   }
+
+  // ---------------------------------------------------------------
+  // Runtime secrets (NOT stored here — set via `wrangler secret put`)
+  // ---------------------------------------------------------------
+  //
+  //   BETTER_AUTH_SECRET    — cookie signing key. 32+ chars of entropy
+  //                            (openssl rand -base64 32).
+  //   GOOGLE_CLIENT_ID      — Google OAuth 2.0 client ID from the
+  //                            Google Cloud Console.
+  //   GOOGLE_CLIENT_SECRET  — matching OAuth client secret.
+  //
+  // When the Google pair is unset the Worker still boots and
+  // email+password flows work; only the Google social provider is
+  // skipped. See AGENTS.md ("Secrets") for the full operator handoff
+  // including required Authorized Redirect URIs.
 }
