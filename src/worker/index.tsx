@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import { LandingPage } from "@/public/landing";
 import { getAuth, type AuthEnv } from "@/server/auth";
+import { watchImagePublicRoute, watchImageRoute } from "@/server/routes/images";
 import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
 import { readingsByIdRoute, readingsByWatchRoute } from "@/server/routes/readings";
@@ -43,7 +44,16 @@ app.route("/api/v1/movements", movementsRoute);
 // the nested route BEFORE /api/v1/watches so its requireAuth
 // middleware doesn't catch anonymous GETs on public-watch readings.
 app.route("/api/v1/watches/:watchId/readings", readingsByWatchRoute);
+// Slice 10: PUT/DELETE image on a watch. Same mount-before-watches
+// rule so the nested :watchId param is bound before the blanket
+// /api/v1/watches routes claim /:id.
+app.route("/api/v1/watches/:watchId/image", watchImageRoute);
 app.route("/api/v1/readings", readingsByIdRoute);
 app.route("/api/v1/watches", watchesRoute);
+
+// Public image-serving path. Sits OUTSIDE /api/v1 because the SPA's
+// <img src> references it directly and a future CDN cache rule will
+// key off the stable /images/* prefix.
+app.route("/images/watches", watchImagePublicRoute);
 
 export default app;

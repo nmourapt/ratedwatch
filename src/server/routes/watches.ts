@@ -31,10 +31,11 @@ import { requireAuth, type RequireAuthVariables } from "@/server/middleware/requ
 
 type Bindings = AuthEnv & {
   DB: D1Database;
-  // R2 bucket used by the image-upload slice (#10). The delete handler
-  // below no-ops against it for now — the `image_r2_key` column doesn't
-  // exist yet, so we have nothing to address. Declared here so slice
-  // #10 can hook in without another round of type surgery.
+  // R2 bucket for watch photos (slice #10 / issue #11). The DELETE
+  // handler below removes a watch's photo from R2 before deleting the
+  // row so we don't leak orphans. Upload / serve live in
+  // src/server/routes/images.ts. Typed as optional so tests can stand
+  // up a Worker without an R2 binding if they ever need to.
   IMAGES?: R2Bucket;
   [key: string]: unknown;
 };
@@ -323,11 +324,10 @@ watchesRoute.patch("/:id", async (c) => {
 /**
  * DELETE /api/v1/watches/:id — destroy an owned watch.
  *
- * TODO(slice #10): the image-upload slice adds an `image_r2_key`
- * column. At that point we should also `await c.env.IMAGES?.delete(key)`
- * here before the DB delete so a deleted watch doesn't leave orphaned
- * R2 objects behind. The hook is left as a comment rather than a
- * no-op call so the follow-up is obvious at review time.
+ * Also removes the watch's photo from R2 (slice #10). The R2 delete
+ * is wrapped in try/catch so a transient R2 error doesn't block the
+ * DB delete — the orphaned object is worse UX than a stuck row, and
+ * an operator can sweep stragglers later if needed.
  */
 watchesRoute.delete("/:id", async (c) => {
   const user = c.get("user");
@@ -340,6 +340,21 @@ watchesRoute.delete("/:id", async (c) => {
   }
   if (ownership.status === "forbidden") {
     return c.json({ error: "forbidden" }, 403);
+  }
+
+  // Clean up R2 before the DB delete. If this errors, we still want
+  // the row gone — leaving an orphan object is a minor cost; leaving
+  // a phantom watch visible to the user is not.
+  const imageKey = ownership.watch.image_r2_key;
+  if (imageKey && c.env.IMAGES) {
+    try {
+      await c.env.IMAGES.delete(imageKey);
+    } catch (err) {
+      console.error("watches: R2 delete failed on watch delete", {
+        key: imageKey,
+        err,
+      });
+    }
   }
 
   await db.deleteFrom("watches").where("id", "=", id).execute();
