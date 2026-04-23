@@ -20,6 +20,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { createDb } from "@/db";
+import { queryLeaderboard } from "@/domain/leaderboard-query";
 import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
 import { submitMovement } from "@/domain/movements/submit";
 import { formatSubmitMovementErrors, submitMovementSchema } from "@/schemas/movement";
@@ -31,6 +32,19 @@ type Bindings = AuthEnv & { DB: D1Database; [key: string]: unknown };
 const movementsQuerySchema = z.object({
   q: z.string().trim().min(1).max(100).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+// Shared query schema for the per-movement leaderboard JSON endpoint.
+// Mirrors the shape of the global leaderboard query — same caps, same
+// boolean coercion rules — so the SPA can compose both endpoints with
+// identical client code.
+const perMovementLeaderboardQuerySchema = z.object({
+  verified_only: z
+    .union([z.literal("1"), z.literal("true"), z.literal("0"), z.literal("false")])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 export const movementsRoute = new Hono<{
@@ -74,6 +88,36 @@ movementsRoute.get("/", async (c) => {
     suggestionsForUserId: submittingUserId,
   });
   return c.json(result);
+});
+
+// GET /api/v1/movements/:id/leaderboard — public, unauthed. Delegates
+// to queryLeaderboard with a movement_id filter. Returns 404 when
+// the movement is unknown or still pending; the public URL surface
+// must not leak pending submissions.
+movementsRoute.get("/:id/leaderboard", async (c) => {
+  const movementId = c.req.param("id");
+  const parsed = perMovementLeaderboardQuerySchema.safeParse({
+    verified_only: c.req.query("verified_only"),
+    limit: c.req.query("limit"),
+    offset: c.req.query("offset"),
+  });
+  if (!parsed.success) {
+    return c.json({ error: "invalid_query", issues: parsed.error.issues }, 400);
+  }
+  const { verified_only, limit, offset } = parsed.data;
+
+  const db = createDb(c.env);
+  const taxonomy = createMovementTaxonomy(db);
+  const movement = await taxonomy.getBySlug(movementId);
+  if (!movement || movement.status !== "approved") {
+    return c.json({ error: "movement_not_found" }, 404);
+  }
+
+  const watches = await queryLeaderboard(
+    { movement_id: movement.id, verified_only, limit, offset },
+    db,
+  );
+  return c.json({ watches });
 });
 
 // POST is authed. Mounted after GET so the public search stays open.
