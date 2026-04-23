@@ -15,6 +15,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { searchMovements, type MovementOption } from "./api";
 import { useDebouncedValue } from "./useDebouncedValue";
+import {
+  SubmitMovementSubForm,
+  type SubmitMovementNotice,
+} from "./SubmitMovementSubForm";
 
 export interface MovementTypeaheadProps {
   /** Pre-selected movement, for edit flows. */
@@ -39,8 +43,13 @@ export function MovementTypeahead({
   const [selection, setSelection] = useState<MovementOption | null>(initialSelection);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<MovementOption[]>([]);
+  const [suggestions, setSuggestions] = useState<MovementOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  // Slice #10: inline sub-form to submit a new movement when the
+  // current query has no match and the user clicks "Can't find it?".
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [submitNotice, setSubmitNotice] = useState<SubmitMovementNotice>(null);
   const inputId = useMemo(() => `movement-${Math.random().toString(36).slice(2, 8)}`, []);
 
   // Sync when a parent passes a new initial selection (e.g. after the
@@ -58,6 +67,7 @@ export function MovementTypeahead({
     if (selection) return;
     if (debouncedQuery.trim().length < 1) {
       setOptions([]);
+      setSuggestions([]);
       setLoading(false);
       return;
     }
@@ -65,12 +75,15 @@ export function MovementTypeahead({
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true);
-    searchMovements(debouncedQuery.trim(), controller.signal).then(({ approved }) => {
-      if (controller.signal.aborted) return;
-      setOptions(approved);
-      setLoading(false);
-      setOpen(true);
-    });
+    searchMovements(debouncedQuery.trim(), controller.signal).then(
+      ({ approved, suggestions: suggested }) => {
+        if (controller.signal.aborted) return;
+        setOptions(approved);
+        setSuggestions(suggested);
+        setLoading(false);
+        setOpen(true);
+      },
+    );
     return () => controller.abort();
   }, [debouncedQuery, selection]);
 
@@ -78,6 +91,7 @@ export function MovementTypeahead({
     setSelection(option);
     setQuery("");
     setOptions([]);
+    setSuggestions([]);
     setOpen(false);
     onSelect(option);
   }
@@ -86,8 +100,19 @@ export function MovementTypeahead({
     setSelection(null);
     setQuery("");
     setOptions([]);
+    setSuggestions([]);
     setOpen(false);
+    setSubmitOpen(false);
+    setSubmitNotice(null);
     onClear();
+  }
+
+  function handleSubmitResolved(movement: MovementOption, notice: SubmitMovementNotice) {
+    setSubmitOpen(false);
+    setSubmitNotice(notice);
+    // Auto-select the new (or collided) movement so the outer form can
+    // submit the watch against it right away.
+    handleSelect(movement);
   }
 
   return (
@@ -96,7 +121,14 @@ export function MovementTypeahead({
 
       {selection ? (
         <div className="flex items-center gap-2 rounded-md border border-cf-border bg-cf-bg-200 px-3 py-2">
-          <span className="flex-1 text-cf-text">{selection.canonical_name}</span>
+          <span className="flex-1 text-cf-text">
+            {selection.canonical_name}
+            {selection.status === "pending" ? (
+              <span className="ml-2 rounded-full bg-cf-orange/20 px-2 py-0.5 text-xs text-cf-orange">
+                Pending approval
+              </span>
+            ) : null}
+          </span>
           <button
             type="button"
             onClick={handleClear}
@@ -124,7 +156,7 @@ export function MovementTypeahead({
               // closes the dropdown.
               setTimeout(() => setOpen(false), 150);
             }}
-            onFocus={() => setOpen(options.length > 0)}
+            onFocus={() => setOpen(options.length > 0 || suggestions.length > 0)}
             placeholder="Search calibers — e.g. ETA 2892-A2"
             aria-invalid={errorMessage ? true : undefined}
             aria-describedby={errorMessage ? `${inputId}-error` : undefined}
@@ -138,38 +170,118 @@ export function MovementTypeahead({
             >
               {loading ? (
                 <li className="px-3 py-2 text-sm text-cf-text-muted">Searching…</li>
-              ) : options.length === 0 ? (
+              ) : options.length === 0 && suggestions.length === 0 ? (
                 <li className="px-3 py-2 text-sm text-cf-text-muted">
-                  No calibers match “{query.trim()}”.
+                  No calibers match “{query.trim()}”.{" "}
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setSubmitOpen(true);
+                      setOpen(false);
+                    }}
+                    className="text-cf-orange hover:underline"
+                  >
+                    Can&rsquo;t find it? Submit new movement
+                  </button>
                 </li>
               ) : (
-                options.map((option) => (
-                  <li key={option.id}>
+                <>
+                  {options.map((option) => (
+                    <li key={option.id}>
+                      <button
+                        type="button"
+                        onMouseDown={(event) => {
+                          // preventDefault stops the blur that would
+                          // otherwise race the click and close the list
+                          // before onClick fires.
+                          event.preventDefault();
+                          handleSelect(option);
+                        }}
+                        className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-cf-bg-200"
+                      >
+                        <span className="font-sans text-base text-cf-text">
+                          {option.canonical_name}
+                        </span>
+                        <span className="text-xs text-cf-text-muted">
+                          {option.manufacturer} · {option.caliber} · {option.type}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {suggestions.length > 0 ? (
+                    <li className="border-t border-cf-border bg-cf-bg-200 px-3 py-1 text-xs font-medium uppercase tracking-wide text-cf-text-muted">
+                      Your pending submissions
+                    </li>
+                  ) : null}
+                  {suggestions.map((option) => (
+                    <li key={`suggestion-${option.id}`}>
+                      <button
+                        type="button"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          handleSelect(option);
+                        }}
+                        className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-cf-bg-200"
+                      >
+                        <span className="font-sans text-base text-cf-text">
+                          {option.canonical_name}
+                          <span className="ml-2 rounded-full bg-cf-orange/20 px-2 py-0.5 text-xs text-cf-orange">
+                            Pending
+                          </span>
+                        </span>
+                        <span className="text-xs text-cf-text-muted">
+                          {option.manufacturer} · {option.caliber} · {option.type}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  <li className="border-t border-cf-border px-3 py-2 text-sm">
                     <button
                       type="button"
                       onMouseDown={(event) => {
-                        // preventDefault stops the blur that would
-                        // otherwise race the click and close the list
-                        // before onClick fires.
                         event.preventDefault();
-                        handleSelect(option);
+                        setSubmitOpen(true);
+                        setOpen(false);
                       }}
-                      className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-cf-bg-200"
+                      className="text-cf-orange hover:underline"
                     >
-                      <span className="font-sans text-base text-cf-text">
-                        {option.canonical_name}
-                      </span>
-                      <span className="text-xs text-cf-text-muted">
-                        {option.manufacturer} · {option.caliber} · {option.type}
-                      </span>
+                      Can&rsquo;t find it? Submit new movement
                     </button>
                   </li>
-                ))
+                </>
               )}
             </ul>
           ) : null}
         </div>
       )}
+
+      {submitOpen ? (
+        <SubmitMovementSubForm
+          initialCaliber={query.trim()}
+          onCancel={() => setSubmitOpen(false)}
+          onResolved={handleSubmitResolved}
+        />
+      ) : null}
+
+      {submitNotice ? (
+        <p
+          role="status"
+          className="rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+        >
+          {submitNotice.kind === "created" ? (
+            <>
+              Submitted “{submitNotice.canonicalName}” for approval. Your watch can use it
+              right away; it&rsquo;ll appear on leaderboards once an admin reviews it.
+            </>
+          ) : (
+            <>
+              We already have “{submitNotice.canonicalName}” in the catalog — your watch
+              is now linked to the approved movement.
+            </>
+          )}
+        </p>
+      ) : null}
 
       {errorMessage ? (
         <span id={`${inputId}-error`} role="alert" className="text-sm text-cf-orange">

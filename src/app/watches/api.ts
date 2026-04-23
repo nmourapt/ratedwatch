@@ -150,7 +150,7 @@ export interface MovementOption {
 export async function searchMovements(
   query: string,
   signal?: AbortSignal,
-): Promise<{ approved: MovementOption[] }> {
+): Promise<{ approved: MovementOption[]; suggestions: MovementOption[] }> {
   const qs = new URLSearchParams({ q: query, limit: "10" });
   const response = await fetch(`/api/v1/movements?${qs.toString()}`, {
     credentials: "include",
@@ -159,11 +159,87 @@ export async function searchMovements(
   if (!response.ok) {
     // Swallow errors in the typeahead — an empty list is the right UI
     // for "something went sideways mid-keystroke".
-    return { approved: [] };
+    return { approved: [], suggestions: [] };
   }
   const body = (await response.json()) as {
     approved: MovementOption[];
     suggestions: MovementOption[];
   };
-  return { approved: body.approved ?? [] };
+  return {
+    approved: body.approved ?? [],
+    suggestions: body.suggestions ?? [],
+  };
+}
+
+// Slice #10: submit a user-proposed movement. Mirrors the route's
+// discriminated response:
+//
+//   * 201 → { status: "created", movement }
+//   * 200 → { status: "exists_pending_own", movement } (idempotent)
+//   * 409 → { status: "exists_approved" | "exists_pending_other", movement }
+//   * 400 → { status: "invalid_input", fieldErrors }
+//   * 401 → { status: "unauthorized" }
+//
+// Any other response collapses to { status: "unknown" } with a readable
+// message so the sub-form can render it without special-casing.
+export interface SubmitMovementBody {
+  canonical_name: string;
+  manufacturer: string;
+  caliber: string;
+  type: "automatic" | "manual" | "quartz" | "spring-drive" | "other";
+  notes?: string;
+}
+
+export type SubmitMovementResult =
+  | { status: "created"; movement: MovementOption }
+  | { status: "exists_pending_own"; movement: MovementOption }
+  | { status: "exists_approved"; movement: MovementOption }
+  | { status: "exists_pending_other"; movement: MovementOption }
+  | { status: "invalid_input"; fieldErrors: Record<string, string> }
+  | { status: "unauthorized" }
+  | { status: "unknown"; message: string };
+
+export async function submitMovement(
+  body: SubmitMovementBody,
+): Promise<SubmitMovementResult> {
+  const response = await fetch("/api/v1/movements", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  if (response.status === 201) {
+    const json = (await response.json()) as { movement: MovementOption };
+    return { status: "created", movement: json.movement };
+  }
+  if (response.status === 200) {
+    const json = (await response.json()) as { movement: MovementOption };
+    return { status: "exists_pending_own", movement: json.movement };
+  }
+  if (response.status === 409) {
+    const json = (await response.json()) as {
+      error: string;
+      movement: MovementOption;
+    };
+    const status =
+      json.error === "movement_exists_approved"
+        ? "exists_approved"
+        : "exists_pending_other";
+    return { status, movement: json.movement };
+  }
+  if (response.status === 400) {
+    const json = (await response.json()) as {
+      error?: string;
+      fieldErrors?: Record<string, string>;
+    };
+    return { status: "invalid_input", fieldErrors: json.fieldErrors ?? {} };
+  }
+  if (response.status === 401) {
+    return { status: "unauthorized" };
+  }
+  return {
+    status: "unknown",
+    message: `Request failed with status ${response.status}`,
+  };
 }
