@@ -4,7 +4,10 @@
 // Auth verbatim) and the `requireAuth`-gated /api/v1/me endpoint. The
 // landing page at `/` is unchanged from slice 3.
 import { Hono } from "hono";
+import { createDb } from "@/db";
+import { queryLeaderboard } from "@/domain/leaderboard-query";
 import { LandingPage } from "@/public/landing";
+import { LeaderboardPage } from "@/public/leaderboard/page";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { leaderboardRoute } from "@/server/routes/leaderboard";
 import { meRoute } from "@/server/routes/me";
@@ -24,6 +27,19 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.get("/", (c) => {
   return c.html(<LandingPage />);
+});
+
+// Public HTML leaderboard. Owned by the Worker (see run_worker_first in
+// wrangler.jsonc) rather than the SPA fallback, so crawlers + no-JS
+// clients see the rendered markup. The page is cacheable for 5 minutes
+// at the edge with a 24-hour SWR window — reading mutations purge it
+// explicitly so first-time viewers never see a stale ranking for long.
+app.get("/leaderboard", async (c) => {
+  const db = createDb(c.env);
+  const verifiedOnly = c.req.query("verified") === "1";
+  const watches = await queryLeaderboard({ verified_only: verifiedOnly, limit: 50 }, db);
+  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  return c.html(<LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} />);
 });
 
 // Better Auth owns every method under /api/v1/auth/*. We pass the raw

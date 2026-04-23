@@ -429,3 +429,69 @@ describe("GET /api/v1/leaderboard", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ---- Public HTML page ---------------------------------------------
+
+describe("GET /leaderboard — public HTML", () => {
+  it("returns 200 text/html and contains the first-place watch brand", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type") ?? "").toMatch(/text\/html/);
+    const body = await res.text();
+    // gold is Rolex 126610LN — must appear on the page.
+    expect(body).toContain("Rolex");
+    expect(body).toContain(SEED.watches.gold.brand);
+    expect(body).toContain(SEED.watches.gold.model);
+  });
+
+  it("emits the aggressive Cache-Control header", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    const cacheControl = res.headers.get("cache-control") ?? "";
+    expect(cacheControl).toMatch(/s-maxage=300/);
+    expect(cacheControl).toMatch(/stale-while-revalidate=86400/);
+  });
+
+  it("footer mentions the eligibility rule (7 days, 3 readings)", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    const body = await res.text();
+    expect(body).toMatch(/7 days/);
+    expect(body).toMatch(/3 readings/);
+  });
+
+  it("does NOT include private watches in the HTML", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    const body = await res.text();
+    // The private watch's distinctive brand + model must not appear.
+    expect(body).not.toContain(SEED.watches.privateW.brand);
+  });
+
+  it("verified=1 toggles the verified-only view", async () => {
+    const resAll = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    const resVerified = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard?verified=1"),
+    );
+    const allBody = await resAll.text();
+    const verifiedBody = await resVerified.text();
+    // silver is the unverified watch — present in /leaderboard, absent when verified=1.
+    expect(allBody).toContain(SEED.watches.silver.brand);
+    expect(verifiedBody).not.toContain(SEED.watches.silver.brand);
+  });
+
+  it("emits zero client-side JavaScript (no hydration on public pages)", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    const body = await res.text();
+    expect(body).not.toMatch(/<script\b/i);
+  });
+});
