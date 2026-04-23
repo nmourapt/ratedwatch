@@ -33,18 +33,21 @@ npm install
 
 ### Run targets
 
-| Command               | What it does                                                                  |
-| --------------------- | ----------------------------------------------------------------------------- |
-| `npm run dev`         | Starts `wrangler dev` (Worker) and `vite` (SPA) concurrently                  |
-| `npm run dev:worker`  | Worker only, on http://localhost:8787                                         |
-| `npm run dev:vite`    | Vite dev server only, for fast SPA iteration                                  |
-| `npm run build`       | `vite build` — produces `dist/` with the SPA bundle                           |
-| `npm run test`        | Runs Vitest with `@cloudflare/vitest-pool-workers` (integration tests)        |
-| `npm run test:watch`  | Vitest in watch mode                                                          |
-| `npm run typecheck`   | `tsc --noEmit` for both the Worker and the SPA configs                        |
-| `npm run types:gen`   | Regenerates `worker-configuration.d.ts` from `wrangler.jsonc`                 |
-| `npm run types:check` | Verifies the committed types are in sync with `wrangler.jsonc` (CI runs this) |
-| `npm run deploy`      | Builds the SPA, then `wrangler deploy`                                        |
+| Command                 | What it does                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `npm run dev`           | Starts `wrangler dev` (Worker) and `vite` (SPA) concurrently                  |
+| `npm run dev:worker`    | Worker only, on http://localhost:8787                                         |
+| `npm run dev:vite`      | Vite dev server only, for fast SPA iteration                                  |
+| `npm run build`         | `vite build` — produces `dist/` with the SPA bundle                           |
+| `npm run test`          | Runs Vitest with `@cloudflare/vitest-pool-workers` (integration tests)        |
+| `npm run test:watch`    | Vitest in watch mode                                                          |
+| `npm run test:coverage` | Vitest with Istanbul coverage — writes `coverage/` (text + HTML + JSON)       |
+| `npm run typecheck`     | `tsc --noEmit` for both the Worker and the SPA configs                        |
+| `npm run format`        | Prettier writes the whole tree                                                |
+| `npm run format:check`  | Prettier check mode — fails if anything is unformatted                        |
+| `npm run types:gen`     | Regenerates `worker-configuration.d.ts` from `wrangler.jsonc`                 |
+| `npm run types:check`   | Verifies the committed types are in sync with `wrangler.jsonc` (CI runs this) |
+| `npm run deploy`        | Builds the SPA, then `wrangler deploy`                                        |
 
 ### Secrets and environment variables
 
@@ -66,6 +69,20 @@ tests/
   integration/  Vitest + @cloudflare/vitest-pool-workers
   e2e/          Playwright (later slice)
 ```
+
+### Pre-commit hook
+
+`npm install` wires Husky and a `lint-staged` pre-commit hook. On every commit
+it runs, for staged files only:
+
+- `prettier --write` over JS/TS/TSX/JSON/JSONC/MD/YML/YAML
+- `tsc --noEmit` against both the Worker and the SPA tsconfigs (full-project;
+  the type graph can't be checked per-file)
+- `vitest related --run` against changed TS/TSX files
+
+If any of these fail, the commit is aborted and the original worktree state is
+restored. To bypass in an emergency, use `git commit --no-verify` — but CI runs
+the same gates and will block the PR.
 
 See [AGENTS.md](AGENTS.md) for the full stack rationale and conventions.
 
