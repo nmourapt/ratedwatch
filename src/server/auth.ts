@@ -15,7 +15,13 @@ import { betterAuth } from "better-auth";
 import { createDb } from "@/db";
 import { generateSlugUsername } from "@/domain/username";
 
-export type Auth = ReturnType<typeof betterAuth>;
+// We keep `Auth` a loose alias of betterAuth's return type. Using
+// `ReturnType<typeof betterAuth>` directly was flaky: tsc kept
+// widening the options generic so the cached value didn't assign back.
+// `any` on the generic arg lets consumers hold a reference without
+// fighting the generic.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Auth = ReturnType<typeof betterAuth<any>>;
 
 // Narrow env shape we need. Keeps the module unit-testable without
 // pulling in the entire generated Cloudflare Env.
@@ -30,7 +36,7 @@ export function getAuth(env: AuthEnv): Auth {
   const cached = cache.get(env);
   if (cached) return cached;
 
-  const auth = betterAuth({
+  const auth: Auth = betterAuth({
     // Secret used for cookie signing. Provided via Worker secret in
     // production; the test harness seeds a high-entropy value via
     // miniflare bindings (see vitest.config.ts).

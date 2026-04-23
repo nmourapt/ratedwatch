@@ -5,9 +5,12 @@
 // table, so re-running inside miniflare's per-test storage isolation
 // is safe.
 
-import { applyD1Migrations, env } from "cloudflare:test";
+import { applyD1Migrations, env, type D1Migration } from "cloudflare:test";
 
-const ambient = env as {
+// The wrangler-generated `Env` only covers real Worker bindings; our
+// TEST_MIGRATIONS binding is a miniflare-only extension declared in
+// vitest.config.ts, so narrow the env through unknown.
+const ambient = env as unknown as {
   DB: D1Database;
   TEST_MIGRATIONS: D1Migration[];
 };
