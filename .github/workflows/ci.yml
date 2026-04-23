@@ -72,3 +72,191 @@ jobs:
           path: coverage/
           if-no-files-found: warn
           retention-days: 14
+
+  # Upload a new Worker version on every PR and expose its preview URL
+  # to downstream jobs (e2e-smoke). Using `wrangler versions upload
+  # --preview-alias=pr-<N>` (wrangler 4.21+) keeps the preview cheap:
+  # one Worker script, many versions, stable URLs per PR that update
+  # on push. The alias is auto-retired when the 1000-alias cap rolls.
+  #
+  # Depends on `verify` so we don't burn CF API calls on builds that
+  # already failed typecheck/test.
+  #
+  # Requires repository secrets:
+  #   CLOUDFLARE_API_TOKEN — token with Workers Scripts:Edit
+  #   CLOUDFLARE_ACCOUNT_ID — the Babybites account (or whichever
+  #                          account the ratedwatch Worker lives in)
+  # and the Worker-side secret:
+  #   BETTER_AUTH_SECRET — already set once on the `ratedwatch` Worker
+  #                        via `wrangler secret put`. Versions inherit
+  #                        secrets from the Worker script, so no per-PR
+  #                        secret provisioning is needed.
+  preview:
+    name: Preview deploy
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: verify
+    # Exposed so `e2e-smoke` can read the preview URL.
+    outputs:
+      preview-url: ${{ steps.expose-url.outputs.preview-url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SPA
+        run: npm run build
+
+      # `wrangler versions upload` supports `--preview-alias=<name>`
+      # (wrangler >= 4.21.0) to return a stable per-PR URL of the form
+      # https://pr-<N>-<worker>.<subdomain>.workers.dev.
+      #
+      # `--tag` is free-form metadata that shows up in the Workers
+      # dashboard and helps operators correlate a version with a PR.
+      #
+      # We deliberately do NOT run `wrangler deploy` — that would
+      # promote the preview version to production traffic. Upload-only
+      # keeps main safe.
+      - name: Upload preview version
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: versions upload --preview-alias=pr-${{ github.event.number }} --tag=pr-${{ github.event.number }}-${{ github.sha }}
+        env:
+          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"
+
+      # wrangler-action exposes `deployment-url` as the version-specific
+      # preview URL returned by `wrangler versions upload` (i.e. the
+      # `preview_url` field in wrangler's output artifact —
+      # `<version-prefix>-ratedwatch.<subdomain>.workers.dev`). That
+      # URL serves the same content as the `--preview-alias=pr-N` alias,
+      # so it's fine to hand it to Playwright. The alias URL is still
+      # posted to the PR below for human use.
+      #
+      # We also grep stdout for "preview alias URL:" which wrangler
+      # prints alongside the versioned URL; when present it gets
+      # exposed as `preview-alias-url` for operator visibility.
+      - name: Expose preview URL
+        id: expose-url
+        run: |
+          set -euo pipefail
+          url="${{ steps.deploy.outputs.deployment-url }}"
+          if [ -z "$url" ]; then
+            echo "::error::wrangler-action did not emit a deployment-url. Check the Upload preview version step output." >&2
+            exit 1
+          fi
+          echo "Preview URL: $url"
+          echo "preview-url=$url" >> "$GITHUB_OUTPUT"
+
+          # Stdout-parse the alias URL if wrangler printed one. This is
+          # purely informational — we prefer it in the PR comment because
+          # it's stable across pushes to the same PR.
+          stdout=$(cat <<'EOF'
+          ${{ steps.deploy.outputs.command-output }}
+          EOF
+          )
+          alias_url=$(printf '%s' "$stdout" | grep -Eo 'https?://pr-${{ github.event.number }}-[A-Za-z0-9.-]+\.workers\.dev' | head -n1 || true)
+          if [ -n "$alias_url" ]; then
+            echo "Alias URL: $alias_url"
+            echo "alias-url=$alias_url" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post preview URL to PR
+        if: always() && steps.expose-url.outputs.preview-url != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const versionedUrl = "${{ steps.expose-url.outputs.preview-url }}";
+            const aliasUrl = "${{ steps.expose-url.outputs.alias-url }}";
+            const marker = "<!-- rated-watch-preview-url -->";
+            const lines = [marker, "🚀 **Preview deploy**"];
+            if (aliasUrl) lines.push(`- Stable alias: ${aliasUrl}`);
+            lines.push(`- This commit: ${versionedUrl}`);
+            lines.push(`\nDeployed from \`${context.sha.slice(0, 7)}\`. The alias refreshes on every push.`);
+            const body = lines.join("\n");
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                comment_id: existing.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }
+
+  # Run the Playwright smoke test against the preview deploy. Kept
+  # separate from `verify` so a broken preview doesn't block coverage
+  # reports, and because Playwright browser downloads make this job
+  # ~2 min slower than the rest.
+  e2e-smoke:
+    name: E2E smoke
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: preview
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Playwright browsers are not bundled with the npm package; they
+      # get pulled lazily. `--with-deps` installs the system libs
+      # Chromium needs on the ubuntu-latest image.
+      - name: Install Chromium (Playwright)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npx playwright test
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ needs.preview.outputs.preview-url }}
+          CI: "true"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Playwright test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 14
