@@ -41,5 +41,14 @@ jobs:
       # assets.directory = ./dist/, and vitest-pool-workers loads that
       # config when spinning up the test Worker. An absent dist/ would
       # make the pool refuse to start.
-      - name: Test
-        run: npm run test
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 14

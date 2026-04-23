@@ -16,5 +16,23 @@ export default defineConfig({
   test: {
     include: ["tests/integration/**/*.test.ts", "src/**/*.test.ts"],
     exclude: ["tests/e2e/**", "node_modules/**", "dist/**", ".wrangler/**"],
+    coverage: {
+      // Istanbul (source instrumentation) works with workerd; v8 requires
+      // a Node inspector Session that the Workers pool does not expose.
+      provider: "istanbul",
+      reporter: ["text", "html", "json-summary"],
+      reportsDirectory: "./coverage",
+      exclude: [
+        "node_modules/**",
+        "dist/**",
+        ".wrangler/**",
+        "coverage/**",
+        "tests/e2e/**",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.config.{ts,mjs,js}",
+        "worker-configuration.d.ts",
+      ],
+    },
   },
 });
