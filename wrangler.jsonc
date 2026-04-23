@@ -4,6 +4,24 @@
   "main": "./src/worker/index.tsx",
   "compatibility_date": "2026-04-17",
   "compatibility_flags": ["nodejs_compat"],
+
+  // Workers Assets serves the Vite build output.
+  //
+  //  - The Worker owns `/` (SSR landing page) and `/api/*` (future API) via
+  //    run_worker_first. Future public HTML routes (/leaderboard, /m/:id,
+  //    /u/:name, /w/:id) will be added here as they land.
+  //  - Everything else falls through to assets. not_found_handling =
+  //    single-page-application rewrites unknown paths to /index.html so
+  //    the SPA's client-side router (react-router) can take over.
+  //  - ASSETS binding lets the Worker programmatically fetch assets if it
+  //    ever needs to compose them (e.g. injecting SPA bootstrap data).
+  "assets": {
+    "directory": "./dist/",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/", "/api/*"]
+  },
+
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
