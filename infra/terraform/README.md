@@ -7,12 +7,12 @@ are exposed as outputs.
 
 ## Resources
 
-| Resource | Terraform address | Name | Notes |
-|---|---|---|---|
-| D1 | `cloudflare_d1_database.app` | `rated-watch-db` | Primary app database. WEUR. |
-| R2 | `cloudflare_r2_bucket.images` | `rated-watch-images` | Watch photos. WEUR. |
-| R2 | `cloudflare_r2_bucket.logs` | `rated-watch-logs` | Logpush destination (slice #19). WEUR. |
-| KV | `cloudflare_workers_kv_namespace.flags` | `rated-watch-flags` | Feature flags (slice #20). |
+| Resource | Terraform address                       | Name                 | Notes                                  |
+| -------- | --------------------------------------- | -------------------- | -------------------------------------- |
+| D1       | `cloudflare_d1_database.app`            | `rated-watch-db`     | Primary app database. WEUR.            |
+| R2       | `cloudflare_r2_bucket.images`           | `rated-watch-images` | Watch photos. WEUR.                    |
+| R2       | `cloudflare_r2_bucket.logs`             | `rated-watch-logs`   | Logpush destination (slice #19). WEUR. |
+| KV       | `cloudflare_workers_kv_namespace.flags` | `rated-watch-flags`  | Feature flags (slice #20).             |
 
 `ratedwatch-tfstate` is the R2 bucket that stores the Terraform state itself.
 It is **not** declared here — see [Bootstrap](#bootstrap) for why.
@@ -42,6 +42,7 @@ One-time, to get from zero to a working `terraform apply`:
    set -a && source .env && set +a
    ./infra/terraform/scripts/bootstrap.sh >> .env
    ```
+
 5. **Initialise Terraform.** Loads the `.env` into the shell and pulls the
    backend + provider:
 
@@ -49,12 +50,14 @@ One-time, to get from zero to a working `terraform apply`:
    set -a && source .env && set +a
    terraform -chdir=infra/terraform init
    ```
+
 6. **Plan and apply.** Free-tier resources only.
 
    ```bash
    terraform -chdir=infra/terraform plan -out=tfplan
    terraform -chdir=infra/terraform apply tfplan
    ```
+
 7. **Rotate the bootstrap token.** Once the scoped token is in place, revoke
    the bootstrap token in the dashboard. You can keep its metadata in `.env`
    with an empty value if you want to document the provenance chain.
@@ -89,11 +92,11 @@ npm run test
 
 ## Rotating tokens
 
-| Token | How to rotate |
-|---|---|
-| `CLOUDFLARE_BOOTSTRAP_TOKEN` | Revoke in dashboard, mint a new one with the same scope, update `.env`. No impact on running services. |
+| Token                                         | How to rotate                                                                                                                                                                                                                                |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_BOOTSTRAP_TOKEN`                  | Revoke in dashboard, mint a new one with the same scope, update `.env`. No impact on running services.                                                                                                                                       |
 | `CLOUDFLARE_API_TOKEN` (ratedwatch-terraform) | Re-run `bootstrap.sh` with a current bootstrap token; append the new lines to `.env` (overwrites `CLOUDFLARE_API_TOKEN` and the derived `AWS_*`). Then revoke the previous ratedwatch-terraform token via `DELETE /accounts/:id/tokens/:id`. |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | These are derived from `CLOUDFLARE_API_TOKEN` — rotating the token rotates these automatically. |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | These are derived from `CLOUDFLARE_API_TOKEN` — rotating the token rotates these automatically.                                                                                                                                              |
 
 ## Followups (tracked elsewhere)
 

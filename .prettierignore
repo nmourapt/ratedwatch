@@ -1,0 +1,25 @@
+# Build output
+dist/
+build/
+.output/
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Generated types
+worker-configuration.d.ts
+
+# Owned by slice 2 (terraform-driven) — don't reformat bindings
+wrangler.jsonc
+
+# Cloudflare / Wrangler working dir
+.wrangler/
+
+# Terraform state + plugin cache
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Coverage
+coverage/
