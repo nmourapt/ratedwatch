@@ -12,6 +12,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { LogReadingForm } from "../watches/LogReadingForm";
 import { ReadingList } from "../watches/ReadingList";
 import { SessionStatsPanel } from "../watches/SessionStatsPanel";
+import { VerifiedProgressRing } from "../watches/VerifiedProgressRing";
 import { VerifiedReadingCapture } from "../watches/VerifiedReadingCapture";
 import { WatchPhotoPanel } from "../watches/WatchPhotoPanel";
 import { deleteWatch, getWatch, updateWatch, type Watch } from "../watches/api";
@@ -244,6 +245,18 @@ export function WatchDetailPage() {
       />
 
       <SessionStatsPanel stats={readings.session_stats} />
+      {readings.session_stats && readings.session_stats.reading_count > 0 ? (
+        <div className="mb-6 rounded-lg border border-cf-border bg-cf-bg-200 p-5">
+          <VerifiedProgressRing
+            verifiedCount={Math.round(
+              readings.session_stats.reading_count *
+                readings.session_stats.verified_ratio,
+            )}
+            totalCount={readings.session_stats.reading_count}
+            size={72}
+          />
+        </div>
+      ) : null}
       <VerifiedReadingCapture watchId={watch.id} onSubmitted={reloadReadings} />
       <LogReadingForm watchId={watch.id} onLogged={reloadReadings} />
       <ReadingList

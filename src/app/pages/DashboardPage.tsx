@@ -11,11 +11,12 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { logout } from "../auth/api";
 import { useSession } from "../auth/useSession";
-import { listWatches, type Watch } from "../watches/api";
+import { listWatches, type WatchWithSession } from "../watches/api";
+import { VerifiedProgressRing } from "../watches/VerifiedProgressRing";
 
 type WatchesState =
   | { kind: "loading" }
-  | { kind: "loaded"; watches: Watch[] }
+  | { kind: "loaded"; watches: WatchWithSession[] }
   | { kind: "error"; message: string };
 
 export function DashboardPage() {
@@ -93,35 +94,47 @@ export function DashboardPage() {
           </div>
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {state.watches.map((watch) => (
-              <li key={watch.id}>
-                <Link
-                  to={`/app/watches/${watch.id}`}
-                  className="flex h-full flex-col gap-2 rounded-lg border border-cf-border bg-cf-bg-100 p-4 transition-colors hover:border-cf-orange"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <h2 className="text-lg font-medium text-cf-text">{watch.name}</h2>
-                    {watch.is_public ? null : (
-                      <span className="rounded-full border border-cf-orange/40 bg-cf-orange/10 px-2 py-0.5 text-xs font-medium text-cf-orange">
-                        Private
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-cf-text-muted">
-                    {watch.brand || watch.model
-                      ? [watch.brand, watch.model].filter(Boolean).join(" ")
-                      : "No brand/model"}
-                  </p>
-                  <p className="text-xs text-cf-text-muted">
-                    {watch.movement_canonical_name ??
-                      (watch.custom_movement_name
-                        ? `Custom: ${watch.custom_movement_name}`
-                        : "No movement")}
-                  </p>
-                  <p className="mt-auto text-xs text-cf-text-subtle">No readings yet</p>
-                </Link>
-              </li>
-            ))}
+            {state.watches.map((watch) => {
+              const stats = watch.session_stats;
+              const verifiedCount = Math.round(
+                stats.reading_count * stats.verified_ratio,
+              );
+              return (
+                <li key={watch.id}>
+                  <Link
+                    to={`/app/watches/${watch.id}`}
+                    className="flex h-full flex-col gap-2 rounded-lg border border-cf-border bg-cf-bg-100 p-4 transition-colors hover:border-cf-orange"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h2 className="text-lg font-medium text-cf-text">{watch.name}</h2>
+                      {watch.is_public ? null : (
+                        <span className="rounded-full border border-cf-orange/40 bg-cf-orange/10 px-2 py-0.5 text-xs font-medium text-cf-orange">
+                          Private
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-cf-text-muted">
+                      {watch.brand || watch.model
+                        ? [watch.brand, watch.model].filter(Boolean).join(" ")
+                        : "No brand/model"}
+                    </p>
+                    <p className="text-xs text-cf-text-muted">
+                      {watch.movement_canonical_name ??
+                        (watch.custom_movement_name
+                          ? `Custom: ${watch.custom_movement_name}`
+                          : "No movement")}
+                    </p>
+                    <div className="mt-auto pt-2">
+                      <VerifiedProgressRing
+                        verifiedCount={verifiedCount}
+                        totalCount={stats.reading_count}
+                        size={48}
+                      />
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

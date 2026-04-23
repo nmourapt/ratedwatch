@@ -24,6 +24,27 @@ export interface Watch {
   image_r2_key: string | null;
 }
 
+/**
+ * Slice #18: session summary embedded in watch list responses so the
+ * dashboard can render the verified progress ring per-card without a
+ * second round-trip. Only returned from the list endpoint; individual
+ * GET /watches/:id still returns the bare Watch shape.
+ */
+export interface WatchSessionSummary {
+  session_days: number;
+  reading_count: number;
+  verified_ratio: number;
+  avg_drift_rate_spd: number | null;
+  eligible: boolean;
+  verified_badge: boolean;
+  latest_deviation_seconds: number;
+  baseline_reference_timestamp: number;
+}
+
+export interface WatchWithSession extends Watch {
+  session_stats: WatchSessionSummary;
+}
+
 export interface WatchError {
   code:
     | "invalid_input"
@@ -68,11 +89,11 @@ async function readWatchError(response: Response): Promise<WatchError> {
 }
 
 export async function listWatches(): Promise<
-  { ok: true; watches: Watch[] } | { ok: false; error: WatchError }
+  { ok: true; watches: WatchWithSession[] } | { ok: false; error: WatchError }
 > {
   const response = await fetch("/api/v1/watches", { credentials: "include" });
   if (!response.ok) return { ok: false, error: await readWatchError(response) };
-  const body = (await response.json()) as { watches: Watch[] };
+  const body = (await response.json()) as { watches: WatchWithSession[] };
   return { ok: true, watches: body.watches };
 }
 
