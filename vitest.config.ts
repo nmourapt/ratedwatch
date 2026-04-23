@@ -1,5 +1,5 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
-import { defineConfig } from "vitest/config";
+import { defineConfig, type ViteUserConfig } from "vitest/config";
 import path from "node:path";
 
 const srcDir = path.resolve(process.cwd(), "./src");
@@ -11,10 +11,10 @@ const migrationsDir = path.resolve(process.cwd(), "./migrations");
 // so every test file sees a schema-initialised D1 database. The test
 // pool provides per-test-file storage isolation so no explicit reset
 // is needed between files.
-export default defineConfig(async () => {
+export default defineConfig(async (_env): Promise<ViteUserConfig> => {
   const migrations = await readD1Migrations(migrationsDir);
 
-  return {
+  const config: ViteUserConfig = {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
@@ -57,4 +57,5 @@ export default defineConfig(async () => {
       },
     },
   };
+  return config;
 });
