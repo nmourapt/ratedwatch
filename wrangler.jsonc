@@ -54,6 +54,15 @@
     }
   ],
 
+  // Workers AI binding — consumed by the verified-reading pipeline
+  // (slice #16) to run an OCR-style dial read against an in-app photo.
+  // The binding type comes from the generated worker-configuration.d.ts
+  // and needs no bucket-id style wiring; Workers AI dispatches models
+  // by name at call time.
+  "ai": {
+    "binding": "AI"
+  },
+
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
