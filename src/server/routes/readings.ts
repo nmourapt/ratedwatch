@@ -36,6 +36,7 @@ import {
   type ReadingResponse,
 } from "@/schemas/reading";
 import { getAuth, type AuthEnv } from "@/server/auth";
+import { purgeLeaderboardUrls } from "@/server/lib/purge-cache";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
 
 type Bindings = AuthEnv & {
@@ -89,6 +90,20 @@ async function listReadingsForWatch(db: DB, watchId: string): Promise<DbReadingR
     .orderBy("reference_timestamp", "asc")
     .execute();
   return rows as DbReadingRow[];
+}
+
+/**
+ * Fetch the owner's username for a user_id. Best-effort — returns null
+ * if the user was deleted mid-request (shouldn't happen, but we guard
+ * so the cache purge never throws). Only used by the purge helper.
+ */
+async function lookupUsername(db: DB, userId: string): Promise<string | null> {
+  const row = await db
+    .selectFrom("user")
+    .select(["username"])
+    .where("id", "=", userId)
+    .executeTakeFirst();
+  return row?.username ?? null;
 }
 
 // ---- /api/v1/watches/:watchId/readings ----------------------------
@@ -215,6 +230,18 @@ readingsByWatchRoute.post("/", async (c) => {
     .selectAll()
     .where("id", "=", id)
     .executeTakeFirstOrThrow();
+
+  // Cache purge: public leaderboard + home hero + per-movement / per-user /
+  // per-watch pages all depend on reading state. Best-effort — if the
+  // purge fails the s-maxage=300 TTL is the fallback.
+  const username = await lookupUsername(db, user.id);
+  await purgeLeaderboardUrls({
+    requestUrl: new URL(c.req.url),
+    movementId: ownership.watch.movement_id,
+    username,
+    watchId,
+  });
+
   return c.json(toResponse(created as DbReadingRow), 201);
 });
 
@@ -262,5 +289,16 @@ readingsByIdRoute.delete("/:id", async (c) => {
   }
 
   await db.deleteFrom("readings").where("id", "=", id).execute();
+
+  // Mirror the POST purge — any mutation to the watch's readings
+  // invalidates the same cached URL set.
+  const username = await lookupUsername(db, user.id);
+  await purgeLeaderboardUrls({
+    requestUrl: new URL(c.req.url),
+    movementId: ownership.watch.movement_id,
+    username,
+    watchId: row.watch_id,
+  });
+
   return c.body(null, 204);
 });
