@@ -8,6 +8,7 @@ import { LandingPage } from "@/public/landing";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
+import { watchesRoute } from "@/server/routes/watches";
 
 // The Worker's full env extends the narrower AuthEnv used by getAuth.
 type Bindings = AuthEnv & {
@@ -36,5 +37,6 @@ app.all("/api/v1/auth/*", (c) => {
 // later slices add watches/readings here.
 app.route("/api/v1/me", meRoute);
 app.route("/api/v1/movements", movementsRoute);
+app.route("/api/v1/watches", watchesRoute);
 
 export default app;
