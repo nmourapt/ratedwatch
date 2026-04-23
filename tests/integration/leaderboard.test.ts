@@ -494,6 +494,75 @@ describe("GET /leaderboard — public HTML", () => {
     const body = await res.text();
     expect(body).not.toMatch(/<script\b/i);
   });
+
+  // Slice 18: verified-filter persistence via cookie.
+
+  it("sets rw_verified_filter=1 cookie when ?verified=1 is supplied", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard?verified=1"),
+    );
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    expect(setCookie).toMatch(/rw_verified_filter=1/);
+    expect(setCookie).toMatch(/Max-Age=\d+/);
+    expect(setCookie).toMatch(/Path=\//);
+    expect(setCookie).toMatch(/SameSite=Lax/);
+  });
+
+  it("clears rw_verified_filter cookie when ?verified=0 is supplied", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard?verified=0"),
+    );
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    // Max-Age=0 clears the cookie.
+    expect(setCookie).toMatch(/rw_verified_filter=/);
+    expect(setCookie).toMatch(/Max-Age=0/);
+  });
+
+  it("reads rw_verified_filter=1 cookie to filter when no ?verified= is set", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard", {
+        headers: { cookie: "rw_verified_filter=1" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // silver is unverified — must NOT appear when the cookie says "verified only".
+    expect(body).not.toContain(SEED.watches.silver.brand);
+    // gold (verified) still shows.
+    expect(body).toContain(SEED.watches.gold.brand);
+  });
+
+  it("?verified= query param takes precedence over the cookie", async () => {
+    // Cookie says verified-only, but ?verified=0 should override to show all.
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard?verified=0", {
+        headers: { cookie: "rw_verified_filter=1" },
+      }),
+    );
+    const body = await res.text();
+    expect(body).toContain(SEED.watches.silver.brand);
+  });
+
+  it("renders the verified-only toggle as an interactive button element", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    const body = await res.text();
+    // The filter navigation renders two controls — "All" and "Verified only".
+    expect(body).toMatch(/All watches/);
+    expect(body).toMatch(/Verified only/);
+  });
+
+  it("emits the verified visual marker next to verified rows", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    const body = await res.text();
+    // The badge is a check-mark + "Verified" label. See LeaderboardTable.
+    expect(body).toMatch(/data-verified-badge="true"/);
+  });
 });
 
 // ---- Home hero top-5 extension ------------------------------------

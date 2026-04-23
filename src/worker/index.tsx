@@ -10,6 +10,7 @@ import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
 import { logEvent } from "@/observability/events";
 import { LandingPage } from "@/public/landing";
 import { LeaderboardPage } from "@/public/leaderboard/page";
+import { buildSetCookie, parseCookie } from "@/public/lib/cookie";
 import { MovementNotFoundPage, MovementPage } from "@/public/movement/page";
 import { loadPublicProfile } from "@/public/user/load";
 import { UserNotFoundPage, UserPage } from "@/public/user/page";
@@ -34,6 +35,67 @@ type Bindings = AuthEnv & {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+// ---- Verified-filter cookie helpers -------------------------------
+//
+// Public leaderboard pages remember the visitor's "Verified only"
+// preference via a first-party cookie (`rw_verified_filter`). The
+// resolution rules are:
+//
+//   1. If `?verified=1` or `?verified=0` is present → use it, and
+//      set/clear the cookie so a follow-up plain visit remembers it.
+//   2. Otherwise → fall back to the cookie value. Absent/anything
+//      else → show all watches.
+//
+// Kept here rather than in a middleware because only two routes need
+// it and factoring it out would make the Worker graph feel heavier
+// than the value it provides.
+const VERIFIED_COOKIE = "rw_verified_filter";
+// 365 days — the "remember my preference" lifespan. Long enough to
+// survive casual browsing resets; short enough to age out inactive
+// profiles. Marketed copy below the toggle makes it clear.
+const VERIFIED_COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
+
+/**
+ * Resolve the effective verified-only filter for a request. Returns
+ * the boolean filter state plus, when a query param asked us to
+ * change it, a Set-Cookie header string to stamp the preference.
+ */
+function resolveVerifiedFilter(req: Request): {
+  verifiedOnly: boolean;
+  setCookie: string | null;
+} {
+  const url = new URL(req.url);
+  const rawQuery = url.searchParams.get("verified");
+  const cookies = parseCookie(req.headers.get("cookie"));
+  const cookieValue = cookies[VERIFIED_COOKIE];
+
+  // Query param is explicit intent — trust it and update the cookie.
+  if (rawQuery === "1") {
+    return {
+      verifiedOnly: true,
+      setCookie: buildSetCookie({
+        name: VERIFIED_COOKIE,
+        value: "1",
+        maxAge: VERIFIED_COOKIE_MAX_AGE,
+      }),
+    };
+  }
+  if (rawQuery === "0") {
+    return {
+      verifiedOnly: false,
+      setCookie: buildSetCookie({
+        name: VERIFIED_COOKIE,
+        value: "",
+        maxAge: 0,
+      }),
+    };
+  }
+
+  // No query param — read the cookie only. Never write in this path
+  // so crawlers hitting bare URLs don't get set-cookie noise.
+  return { verifiedOnly: cookieValue === "1", setCookie: null };
+}
+
 app.get("/", async (c) => {
   // Hero extension (slice #13): surface the top-5 verified watches so
   // first-time visitors see the social proof immediately. Falls back
@@ -51,10 +113,18 @@ app.get("/", async (c) => {
 // explicitly so first-time viewers never see a stale ranking for long.
 app.get("/leaderboard", async (c) => {
   const db = createDb(c.env);
-  const verifiedOnly = c.req.query("verified") === "1";
+  const { verifiedOnly, setCookie } = resolveVerifiedFilter(c.req.raw);
   const watches = await queryLeaderboard({ verified_only: verifiedOnly, limit: 50 }, db);
   await logEvent("page_view_leaderboard", { verifiedOnly }, c.env);
-  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  // Cookie-toggled responses are unique per preference, so drop the
+  // shared-cache directive when we're setting/clearing the cookie.
+  if (setCookie) {
+    c.header("Set-Cookie", setCookie);
+    c.header("Cache-Control", "private, no-store");
+    await logEvent("leaderboard_filter_changed", { verifiedOnly }, c.env);
+  } else {
+    c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  }
   return c.html(<LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} />);
 });
 
@@ -69,9 +139,21 @@ app.get("/m/:movementId", async (c) => {
   if (!movement || movement.status !== "approved") {
     return c.html(<MovementNotFoundPage />, 404);
   }
-  const watches = await queryLeaderboard({ movement_id: movement.id, limit: 50 }, db);
-  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
-  return c.html(<MovementPage movement={movement} watches={watches} />);
+  const { verifiedOnly, setCookie } = resolveVerifiedFilter(c.req.raw);
+  const watches = await queryLeaderboard(
+    { movement_id: movement.id, verified_only: verifiedOnly, limit: 50 },
+    db,
+  );
+  if (setCookie) {
+    c.header("Set-Cookie", setCookie);
+    c.header("Cache-Control", "private, no-store");
+    await logEvent("leaderboard_filter_changed", { verifiedOnly }, c.env);
+  } else {
+    c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  }
+  return c.html(
+    <MovementPage movement={movement} watches={watches} verifiedOnly={verifiedOnly} />,
+  );
 });
 
 // Public user profile (slice #15). Case-insensitive lookup: a

@@ -346,4 +346,39 @@ describe("GET /m/:movementId — public HTML", () => {
     const body = await res.text();
     expect(body).toMatch(/href="\/leaderboard"/);
   });
+
+  // Slice 18: the verified-only filter + cookie persistence reaches
+  // the per-movement page too, with the same copy as /leaderboard.
+
+  it("exposes an 'All / Verified only' filter on the movement page", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/m/${SEED.movements.alpha.id}`),
+    );
+    const body = await res.text();
+    expect(body).toMatch(/All watches/);
+    expect(body).toMatch(/Verified only/);
+  });
+
+  it("sets rw_verified_filter cookie when ?verified=1 is supplied to /m/:id", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/m/${SEED.movements.alpha.id}?verified=1`),
+    );
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    expect(setCookie).toMatch(/rw_verified_filter=1/);
+    expect(setCookie).toMatch(/Path=\//);
+  });
+
+  it("honours rw_verified_filter=1 cookie on /m/:id when no query param is set", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/m/${SEED.movements.alpha.id}`, {
+        headers: { cookie: "rw_verified_filter=1" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    // All alpha watches are unverified in this seed (no verified
+    // readings), so with the filter on the page must not show them.
+    const body = await res.text();
+    expect(body).not.toContain(SEED.watches.alphaFast.model);
+    expect(body).not.toContain(SEED.watches.alphaSlow.model);
+  });
 });
