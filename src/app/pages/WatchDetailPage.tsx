@@ -13,7 +13,7 @@ import { LogReadingForm } from "../watches/LogReadingForm";
 import { ReadingList } from "../watches/ReadingList";
 import { SessionStatsPanel } from "../watches/SessionStatsPanel";
 import { WatchPhotoPanel } from "../watches/WatchPhotoPanel";
-import { deleteWatch, getWatch, type Watch } from "../watches/api";
+import { deleteWatch, getWatch, updateWatch, type Watch } from "../watches/api";
 import { listReadings, type Reading, type SessionStats } from "../watches/readings";
 
 type LoadState =
@@ -41,6 +41,10 @@ export function WatchDetailPage() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [readings, setReadings] = useState<ReadingsState>(EMPTY_READINGS_STATE);
   const [deleting, setDeleting] = useState(false);
+  // Visibility toggle (slice #11). Kept local so we can show an inline
+  // saving/error state without re-fetching the whole watch record.
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
+  const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
   const reloadReadings = useCallback(async () => {
     if (!id) return;
@@ -110,6 +114,20 @@ export function WatchDetailPage() {
     navigate("/app/dashboard", { replace: true });
   }
 
+  async function handleToggleVisibility() {
+    if (!id || state.kind !== "loaded") return;
+    const next = !state.watch.is_public;
+    setTogglingVisibility(true);
+    setVisibilityError(null);
+    const result = await updateWatch(id, { is_public: next });
+    setTogglingVisibility(false);
+    if (!result.ok) {
+      setVisibilityError(result.error.message);
+      return;
+    }
+    setState({ kind: "loaded", watch: result.watch });
+  }
+
   if (state.kind === "loading") {
     return (
       <section className="mx-auto max-w-2xl">
@@ -156,15 +174,40 @@ export function WatchDetailPage() {
               : "No brand/model set"}
           </p>
         </div>
-        <span
-          className={
-            watch.is_public
-              ? "rounded-full border border-cf-border bg-cf-bg-200 px-3 py-1 text-xs font-medium text-cf-text-muted"
-              : "rounded-full border border-cf-orange/40 bg-cf-orange/10 px-3 py-1 text-xs font-medium text-cf-orange"
-          }
-        >
-          {watch.is_public ? "Public" : "Private"}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={watch.is_public}
+            aria-label="Public on leaderboards"
+            onClick={handleToggleVisibility}
+            disabled={togglingVisibility}
+            className={
+              watch.is_public
+                ? "inline-flex items-center gap-2 rounded-full border border-cf-border bg-cf-bg-200 px-3 py-1 text-xs font-medium text-cf-text-muted transition-colors hover:border-cf-orange hover:text-cf-orange disabled:opacity-60"
+                : "inline-flex items-center gap-2 rounded-full border border-cf-orange/40 bg-cf-orange/10 px-3 py-1 text-xs font-medium text-cf-orange transition-colors hover:bg-cf-orange/20 disabled:opacity-60"
+            }
+          >
+            <span
+              aria-hidden="true"
+              className={
+                watch.is_public
+                  ? "inline-block h-2 w-2 rounded-full bg-cf-text-muted"
+                  : "inline-block h-2 w-2 rounded-full bg-cf-orange"
+              }
+            />
+            {togglingVisibility
+              ? "Saving…"
+              : watch.is_public
+                ? "Public on leaderboards"
+                : "Private"}
+          </button>
+          {visibilityError ? (
+            <p role="alert" className="text-xs text-cf-orange">
+              {visibilityError}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <dl className="mb-8 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[140px_1fr]">

@@ -7,35 +7,35 @@
 // can compose it without spinning up a Worker.
 
 import { describe, expect, it } from "vitest";
-import { buildChrono24Url } from "./build-url";
+import { buildChrono24UrlForWatch } from "./watch";
 
-describe("buildChrono24Url()", () => {
+describe("buildChrono24UrlForWatch()", () => {
   it("returns the storefront URL when no search terms are provided", () => {
-    expect(buildChrono24Url({})).toBe("https://www.chrono24.com/");
-    expect(buildChrono24Url({ brand: null, model: null })).toBe(
+    expect(buildChrono24UrlForWatch({})).toBe("https://www.chrono24.com/");
+    expect(buildChrono24UrlForWatch({ brand: null, model: null })).toBe(
       "https://www.chrono24.com/",
     );
   });
 
   it("builds a search URL from brand + model", () => {
-    const url = buildChrono24Url({ brand: "Rolex", model: "Submariner" });
+    const url = buildChrono24UrlForWatch({ brand: "Rolex", model: "Submariner" });
     expect(url).toMatch(/^https:\/\/www\.chrono24\.com\/search\/index\.htm\?/);
     expect(url).toContain("query=Rolex+Submariner");
   });
 
   it("falls back to the watch name when brand + model are missing", () => {
-    const url = buildChrono24Url({ name: "Gold Submariner" });
+    const url = buildChrono24UrlForWatch({ name: "Gold Submariner" });
     expect(url).toContain("query=Gold+Submariner");
   });
 
   it("URL-encodes special characters in the query", () => {
-    const url = buildChrono24Url({ brand: "A. Lange & Söhne", model: "Zeitwerk" });
+    const url = buildChrono24UrlForWatch({ brand: "A. Lange & Söhne", model: "Zeitwerk" });
     // The "&" must be encoded so it doesn't break the querystring.
     expect(url).toContain("query=A.+Lange+%26+S%C3%B6hne+Zeitwerk");
   });
 
   it("trims and collapses internal whitespace", () => {
-    const url = buildChrono24Url({ brand: "  Seiko  ", model: "  SRP777 " });
+    const url = buildChrono24UrlForWatch({ brand: "  Seiko  ", model: "  SRP777 " });
     expect(url).toContain("query=Seiko+SRP777");
   });
 });

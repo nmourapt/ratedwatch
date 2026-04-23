@@ -27,6 +27,7 @@ import {
 } from "@/schemas/watch";
 import { assertWatchOwnership, type Watch } from "@/domain/watches/ownership";
 import { getAuth, type AuthEnv } from "@/server/auth";
+import { purgeLeaderboardUrls } from "@/server/lib/purge-cache";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
 
 type Bindings = AuthEnv & {
@@ -320,6 +321,30 @@ watchesRoute.patch("/:id", async (c) => {
     .where("id", "=", id)
     .executeTakeFirstOrThrow();
   const movementName = await resolveMovementName(db, updated.movement_id);
+
+  // Cache purge: when is_public flips, the public HTML pages
+  // (/leaderboard, /m/:id, /u/:username, home hero) may now show —
+  // or must stop showing — this watch. Same best-effort pattern as
+  // the readings route (see src/server/routes/readings.ts). Purge only
+  // when the value actually changed; a no-op PATCH shouldn't thrash
+  // the CDN cache.
+  if (
+    input.is_public !== undefined &&
+    (input.is_public ? 1 : 0) !== ownership.watch.is_public
+  ) {
+    const ownerRow = await db
+      .selectFrom("user")
+      .select(["username"])
+      .where("id", "=", user.id)
+      .executeTakeFirst();
+    await purgeLeaderboardUrls({
+      requestUrl: new URL(c.req.url),
+      movementId: updated.movement_id,
+      username: ownerRow?.username ?? null,
+      watchId: id,
+    });
+  }
+
   return c.json(toResponse(updated, movementName));
 });
 

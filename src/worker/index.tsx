@@ -6,8 +6,10 @@
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
+import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
 import { LandingPage } from "@/public/landing";
 import { LeaderboardPage } from "@/public/leaderboard/page";
+import { MovementNotFoundPage, MovementPage } from "@/public/movement/page";
 import { loadPublicProfile } from "@/public/user/load";
 import { UserNotFoundPage, UserPage } from "@/public/user/page";
 import { loadPublicWatch } from "@/public/watch/load";
@@ -52,11 +54,26 @@ app.get("/leaderboard", async (c) => {
   return c.html(<LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} />);
 });
 
-// Public user profile. Case-insensitive lookup: a non-canonical URL
-// (e.g. /u/Alice when the canonical form is /u/alice) 301-redirects
-// to the lowercased form so shares + crawlers converge on one URL.
-// Unknown usernames render a 404 page so the site chrome stays
-// consistent for mistyped share links.
+// Public per-movement leaderboard (slice #14). 404 for unknown or
+// still-pending movements so the URL surface never leaks unapproved
+// submissions. Same cache header as the global page — reading
+// mutations explicitly purge both.
+app.get("/m/:movementId", async (c) => {
+  const db = createDb(c.env);
+  const taxonomy = createMovementTaxonomy(db);
+  const movement = await taxonomy.getBySlug(c.req.param("movementId"));
+  if (!movement || movement.status !== "approved") {
+    return c.html(<MovementNotFoundPage />, 404);
+  }
+  const watches = await queryLeaderboard({ movement_id: movement.id, limit: 50 }, db);
+  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  return c.html(<MovementPage movement={movement} watches={watches} />);
+});
+
+// Public user profile (slice #15). Case-insensitive lookup: a
+// non-canonical URL (e.g. /u/Alice when the canonical form is
+// /u/alice) 301-redirects to the lowercased form so shares + crawlers
+// converge on one URL. Unknown usernames render a 404 page.
 app.get("/u/:username", async (c) => {
   const db = createDb(c.env);
   const raw = c.req.param("username");
@@ -71,10 +88,9 @@ app.get("/u/:username", async (c) => {
   return c.html(<UserPage profile={result.profile} />);
 });
 
-// Public per-watch page. 404s for unknown AND private watches — see
-// loadPublicWatch, which deliberately collapses both states to one
-// response so the existence of private rows isn't leaked via the
-// public surface.
+// Public per-watch page (slice #15). 404s for unknown AND private
+// watches — loadPublicWatch deliberately collapses both states to one
+// response so the existence of private rows isn't leaked.
 app.get("/w/:watchId", async (c) => {
   const db = createDb(c.env);
   const watchId = c.req.param("watchId");

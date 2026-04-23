@@ -14,7 +14,7 @@
 //   5. Reading history table (most-recent first).
 //   6. Chrono24 CTA.
 
-import { buildChrono24Url } from "@/domain/chrono24-link";
+import { buildChrono24UrlForWatch } from "@/domain/chrono24-link";
 import type { Reading, SessionStats } from "@/domain/drift-calc";
 import { Footer } from "../components/footer";
 import { Header } from "../components/header";
@@ -34,7 +34,7 @@ export const WatchPage = ({ data }: WatchPageProps) => {
     brand: watch.brand,
     model: watch.model,
   });
-  const chrono24Href = buildChrono24Url({
+  const chrono24Href = buildChrono24UrlForWatch({
     brand: watch.brand,
     model: watch.model,
     name: watch.name,

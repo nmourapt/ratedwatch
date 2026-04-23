@@ -1,15 +1,10 @@
-// Chrono24 search URL builder.
-//
-// Phase 1 thesis (see PRD issue #1): revenue from Chrono24 affiliate
-// links on movement + watch pages. The affiliate programme isn't wired
-// up yet — this module emits a plain public search URL that the CTA
-// button on /m/:id (slice 14) and /w/:id (slice 15) both link to. When
-// the affiliate tag lands, swap the query string here and every caller
-// picks it up for free.
+// Watch-focused Chrono24 URL builder — used by /w/:id to link out
+// to Chrono24's listing for similar watches based on the owner's
+// brand + model (falling back to the watch name).
 //
 // Pure function. No IO, no Workers bindings. Unit-tested.
 
-export interface Chrono24Query {
+export interface WatchLinkInput {
   /** Watch brand, e.g. "Rolex". */
   brand?: string | null;
   /** Watch model, e.g. "Submariner". */
@@ -22,14 +17,14 @@ const STOREFRONT = "https://www.chrono24.com/";
 const SEARCH_BASE = "https://www.chrono24.com/search/index.htm";
 
 /**
- * Build a Chrono24 URL for a "buy one like this" CTA.
+ * Build a Chrono24 URL for a "buy one like this" CTA on a watch page.
  *
  * Precedence for the search term:
  *   1. `brand model` when at least one of them is non-empty.
  *   2. `name` as a last resort.
  *   3. No search term → storefront URL (no `?query=…`).
  */
-export function buildChrono24Url(q: Chrono24Query): string {
+export function buildChrono24UrlForWatch(q: WatchLinkInput): string {
   const parts: string[] = [];
   const brand = (q.brand ?? "").trim();
   const model = (q.model ?? "").trim();
