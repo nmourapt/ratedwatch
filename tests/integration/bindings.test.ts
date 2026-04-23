@@ -34,6 +34,23 @@ describe("data layer bindings", () => {
     await env.LOGS.delete(key);
   });
 
+  it("ANALYTICS.writeDataPoint is callable and non-throwing", () => {
+    // Analytics Engine writes are fire-and-forget — the binding is
+    // present, `writeDataPoint` is a function, and calling it doesn't
+    // throw. Verifying the dataset actually received a row is out of
+    // scope for miniflare (AE data is only queryable post-deploy).
+    const analytics = (env as unknown as { ANALYTICS?: AnalyticsEngineDataset })
+      .ANALYTICS;
+    expect(analytics).toBeDefined();
+    expect(typeof analytics!.writeDataPoint).toBe("function");
+    expect(() =>
+      analytics!.writeDataPoint({
+        blobs: ["smoke", "{}"],
+        indexes: ["smoke"],
+      }),
+    ).not.toThrow();
+  });
+
   it("KV.FLAGS round-trips a key/value pair", async () => {
     const key = `test:${crypto.randomUUID()}`;
     await env.FLAGS.put(key, "on");
