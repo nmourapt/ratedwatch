@@ -93,6 +93,7 @@ jobs:
   #                        secret provisioning is needed.
   preview:
     name: Preview deploy
+    environment: preview
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
