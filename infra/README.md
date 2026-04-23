@@ -75,3 +75,65 @@ Note the `id` is the generated slug (`<manufacturer>-<caliber>` kebab)
 and changing `manufacturer`/`caliber` does **not** re-generate it — the
 slug is locked in at submit time. If the slug itself is wrong, delete
 the row and ask the submitter to re-submit with the corrected fields.
+
+## Verified readings (slice #16)
+
+Verified readings are AI-read watch-dial captures. The pipeline
+(`src/domain/reading-verifier/verifier.ts`) stores the photo in R2 at
+`readings/{readingId}/photo.jpg`. The DB row is canonical — it
+records the signed deviation, reference timestamp, and `verified=1`
+flag. The photo is kept for provenance only: if a leaderboard entry
+is disputed, an operator can pull the photo and manually check the
+AI read. Nothing in the runtime reads the photo back.
+
+### Feature flag
+
+The `POST /api/v1/watches/:id/readings/verified` endpoint is gated
+behind the `ai_reading_v2` feature flag. It defaults to off
+everywhere. To enable it for yourself (the operator) after a fresh
+deploy:
+
+```bash
+npm run flags:set -- ai_reading_v2 '{"mode":"users","users":["<your-user-id>"]}'
+```
+
+To roll out gradually to a percentage of users:
+
+```bash
+npm run flags:set -- ai_reading_v2 '{"mode":"rollout","rolloutPct":10}'
+```
+
+### R2 retention — 90-day policy
+
+Photos at `readings/{readingId}/photo.jpg` should age out after
+**90 days**. Rationale: the photo is forensic provenance for the
+deviation reading, not long-term archive; the reading itself is the
+canonical record. 90 days gives moderators a generous window to
+review disputed entries without the bucket growing unboundedly.
+
+The policy is expressed as a Cloudflare Terraform
+`cloudflare_r2_bucket_lifecycle_configuration` resource — see
+`infra/terraform/r2.tf`. After `terraform apply`, verify with:
+
+```bash
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx wrangler r2 bucket lifecycle list rated-watch-images
+```
+
+If the rule is missing (e.g. the IaC didn't apply), fall back to the
+manual CLI:
+
+```bash
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx wrangler r2 bucket lifecycle add rated-watch-images \
+  --id expire-reading-photos \
+  --prefix readings/ \
+  --expire-days 90
+```
+
+### Checking a photo for a disputed reading
+
+```bash
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx wrangler r2 object get \
+  rated-watch-images/readings/<reading-id>/photo.jpg \
+  --file /tmp/reading.jpg
+open /tmp/reading.jpg
+```

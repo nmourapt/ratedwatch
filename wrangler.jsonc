@@ -7,9 +7,10 @@
 
   // Workers Assets serves the Vite build output.
   //
-  //  - The Worker owns `/` (SSR landing page) and `/api/*` (future API) via
-  //    run_worker_first. Future public HTML routes (/leaderboard, /m/:id,
-  //    /u/:name, /w/:id) will be added here as they land.
+  //  - The Worker owns `/` (SSR landing page), `/leaderboard` (SSR public
+  //    leaderboard, slice #13), and `/api/*` via run_worker_first.
+  //    Future public HTML routes (/m/:id, /u/:name, /w/:id) will be added
+  //    here as they land.
   //  - Everything else falls through to assets. not_found_handling =
   //    single-page-application rewrites unknown paths to /index.html so
   //    the SPA's client-side router (react-router) can take over.
@@ -19,7 +20,7 @@
     "directory": "./dist/",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/", "/api/*"]
+    "run_worker_first": ["/", "/leaderboard", "/api/*"]
   },
 
   // Data layer bindings. IDs come from `terraform output` in
@@ -53,6 +54,15 @@
       "id": "b4298bd1887d4dae8d1c113ec99cea56"
     }
   ],
+
+  // Workers AI binding — consumed by the verified-reading pipeline
+  // (slice #16) to run an OCR-style dial read against an in-app photo.
+  // The binding type comes from the generated worker-configuration.d.ts
+  // and needs no bucket-id style wiring; Workers AI dispatches models
+  // by name at call time.
+  "ai": {
+    "binding": "AI"
+  },
 
   "observability": {
     "enabled": true,
