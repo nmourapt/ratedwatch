@@ -56,9 +56,29 @@ export interface VerificationTable {
   updatedAt: string;
 }
 
+// Slice 7 (issue #8): movements taxonomy. Columns mirror
+// migrations/0002_movements.sql. `type` and `status` are string enums
+// at the SQL layer (CHECK constraints); we surface them as literal
+// unions so Kysely queries get compile-time narrowing.
+export type MovementType = "automatic" | "manual" | "quartz" | "spring-drive" | "other";
+export type MovementStatus = "approved" | "pending";
+
+export interface MovementsTable {
+  id: string;
+  canonical_name: string;
+  manufacturer: string;
+  caliber: string;
+  type: MovementType;
+  status: MovementStatus;
+  submitted_by_user_id: string | null;
+  notes: string | null;
+  created_at: string; // ISO 8601, populated by DEFAULT
+}
+
 export interface Database {
   user: UserTable;
   session: SessionTable;
   account: AccountTable;
   verification: VerificationTable;
+  movements: MovementsTable;
 }
