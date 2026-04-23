@@ -8,6 +8,10 @@ import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
 import { LandingPage } from "@/public/landing";
 import { LeaderboardPage } from "@/public/leaderboard/page";
+import { loadPublicProfile } from "@/public/user/load";
+import { UserNotFoundPage, UserPage } from "@/public/user/page";
+import { loadPublicWatch } from "@/public/watch/load";
+import { WatchNotFoundPage, WatchPage } from "@/public/watch/page";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { watchImagePublicRoute, watchImageRoute } from "@/server/routes/images";
 import { leaderboardRoute } from "@/server/routes/leaderboard";
@@ -46,6 +50,40 @@ app.get("/leaderboard", async (c) => {
   const watches = await queryLeaderboard({ verified_only: verifiedOnly, limit: 50 }, db);
   c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
   return c.html(<LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} />);
+});
+
+// Public user profile. Case-insensitive lookup: a non-canonical URL
+// (e.g. /u/Alice when the canonical form is /u/alice) 301-redirects
+// to the lowercased form so shares + crawlers converge on one URL.
+// Unknown usernames render a 404 page so the site chrome stays
+// consistent for mistyped share links.
+app.get("/u/:username", async (c) => {
+  const db = createDb(c.env);
+  const raw = c.req.param("username");
+  const result = await loadPublicProfile(db, raw);
+  if (result.status === "redirect") {
+    return c.redirect(`/u/${result.canonical_username}`, 301);
+  }
+  if (result.status === "not_found") {
+    return c.html(<UserNotFoundPage username={raw} />, 404);
+  }
+  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  return c.html(<UserPage profile={result.profile} />);
+});
+
+// Public per-watch page. 404s for unknown AND private watches — see
+// loadPublicWatch, which deliberately collapses both states to one
+// response so the existence of private rows isn't leaked via the
+// public surface.
+app.get("/w/:watchId", async (c) => {
+  const db = createDb(c.env);
+  const watchId = c.req.param("watchId");
+  const result = await loadPublicWatch(db, watchId);
+  if (result.status === "not_found") {
+    return c.html(<WatchNotFoundPage watchId={watchId} />, 404);
+  }
+  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+  return c.html(<WatchPage data={result.data} />);
 });
 
 // Better Auth owns every method under /api/v1/auth/*. We pass the raw
