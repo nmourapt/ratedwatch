@@ -183,6 +183,15 @@ describe("GET /u/:username — public user profile", () => {
     const body = await res.text();
     expect(body).toContain(`/w/${SEED.publicWatch.id}`);
   });
+
+  it("renders the verified badge with data-verified-badge on verified watches", async () => {
+    // publicWatch has 2/3 verified readings (seed) so verified_badge = true.
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/u/${SEED.user.username}`),
+    );
+    const body = await res.text();
+    expect(body).toMatch(/data-verified-badge="true"/);
+  });
 });
 
 // ---- GET /w/:watchId ----------------------------------------------
@@ -250,5 +259,13 @@ describe("GET /w/:watchId — public watch page", () => {
     );
     const body = await res.text();
     expect(body).not.toMatch(/<script\b/i);
+  });
+
+  it("renders the verified badge with data-verified-badge when the watch qualifies", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/w/${SEED.publicWatch.id}`),
+    );
+    const body = await res.text();
+    expect(body).toMatch(/data-verified-badge="true"/);
   });
 });
