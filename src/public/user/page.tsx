@@ -146,7 +146,14 @@ function WatchCard({ watch }: { watch: import("./load").ProfileWatchCard }) {
           <dt>Badge</dt>
           <dd>
             {stats.verified_badge ? (
-              <span class="cf-lb-badge" title="25 %+ verified readings this session">
+              <span
+                class="cf-lb-badge"
+                title="25 %+ verified readings this session"
+                data-verified-badge="true"
+              >
+                <span class="cf-lb-badge__check" aria-hidden="true">
+                  ✓
+                </span>{" "}
                 Verified
               </span>
             ) : (
@@ -239,6 +246,8 @@ function UserPageStyles() {
 
 .cf-lb-badge {
   display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
   background: var(--cf-orange);
@@ -250,6 +259,10 @@ function UserPageStyles() {
 .cf-lb-badge--muted {
   background: transparent;
   color: var(--cf-text-subtle);
+}
+.cf-lb-badge__check {
+  font-weight: 700;
+  line-height: 1;
 }
 `;
   return <style>{css}</style>;
