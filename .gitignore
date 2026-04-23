@@ -35,3 +35,12 @@ npm-debug.log*
 # Agent / local working files
 .claude/
 .opencode/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/tfplan
+infra/terraform/*.tfplan
+# Keep .terraform.lock.hcl under version control.
+
