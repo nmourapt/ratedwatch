@@ -7,6 +7,11 @@
 // the shared Zod schemas on the server side are the contract source
 // of truth, these interfaces mirror them.
 
+import {
+  mapVerifiedReadingError,
+  type VerifiedReadingErrorMessage,
+} from "./verifiedReadingErrors";
+
 export interface Reading {
   id: string;
   watch_id: string;
@@ -125,4 +130,55 @@ export async function deleteReading(
   });
   if (!response.ok) return { ok: false, error: await readError(response) };
   return { ok: true };
+}
+
+// -------------------------------------------------------------------
+// Slice #17 (issue #18): verified readings — camera-captured + AI-read.
+// -------------------------------------------------------------------
+//
+// The backend (slice #16) accepts a multipart body with an `image`
+// file and an optional `is_baseline` toggle. It returns 201 with the
+// full reading row on success, 422 on AI refusal / implausible / un-
+// parseable output, 503 when the `ai_reading_v2` feature flag is off
+// for the caller, and the usual 4xx auth/ownership codes.
+//
+// We don't surface the verifier's raw_response to the SPA — the
+// mapped message in verifiedReadingErrors.ts is enough. If we ever
+// want debug info in the UI, we'll plumb it through separately.
+
+export interface VerifiedReadingSubmission {
+  image: File;
+  isBaseline: boolean;
+}
+
+export async function createVerifiedReading(
+  watchId: string,
+  submission: VerifiedReadingSubmission,
+): Promise<
+  { ok: true; reading: Reading } | { ok: false; error: VerifiedReadingErrorMessage }
+> {
+  const form = new FormData();
+  form.append("image", submission.image);
+  form.append("is_baseline", submission.isBaseline ? "true" : "false");
+
+  const response = await fetch(
+    `/api/v1/watches/${encodeURIComponent(watchId)}/readings/verified`,
+    {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    let serverCode: string | undefined;
+    try {
+      const parsed = (await response.json()) as { error?: string };
+      serverCode = parsed.error;
+    } catch {
+      /* non-JSON body */
+    }
+    return { ok: false, error: mapVerifiedReadingError(response.status, serverCode) };
+  }
+  const reading = (await response.json()) as Reading;
+  return { ok: true, reading };
 }

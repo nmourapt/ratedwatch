@@ -12,6 +12,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { LogReadingForm } from "../watches/LogReadingForm";
 import { ReadingList } from "../watches/ReadingList";
 import { SessionStatsPanel } from "../watches/SessionStatsPanel";
+import { VerifiedReadingCapture } from "../watches/VerifiedReadingCapture";
 import { WatchPhotoPanel } from "../watches/WatchPhotoPanel";
 import { deleteWatch, getWatch, updateWatch, type Watch } from "../watches/api";
 import { listReadings, type Reading, type SessionStats } from "../watches/readings";
@@ -243,6 +244,7 @@ export function WatchDetailPage() {
       />
 
       <SessionStatsPanel stats={readings.session_stats} />
+      <VerifiedReadingCapture watchId={watch.id} onSubmitted={reloadReadings} />
       <LogReadingForm watchId={watch.id} onLogged={reloadReadings} />
       <ReadingList
         readings={readings.readings}
