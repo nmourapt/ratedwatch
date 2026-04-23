@@ -1,0 +1,39 @@
+{
+  "name": "ratedwatch",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Competitive accuracy-tracking platform for watch enthusiasts.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n worker,vite -c blue,magenta \"npm:dev:worker\" \"npm:dev:vite\"",
+    "dev:worker": "wrangler dev",
+    "dev:vite": "vite",
+    "build": "vite build",
+    "deploy": "npm run build && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.14.9",
+    "@cloudflare/workers-types": "^4.20260423.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5",
+    "wrangler": "^4.84.1"
+  },
+  "dependencies": {
+    "hono": "^4.12.14",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router": "^7.14.2"
+  }
+}
