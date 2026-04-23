@@ -7,12 +7,13 @@ are exposed as outputs.
 
 ## Resources
 
-| Resource | Terraform address                       | Name                 | Notes                                  |
-| -------- | --------------------------------------- | -------------------- | -------------------------------------- |
-| D1       | `cloudflare_d1_database.app`            | `rated-watch-db`     | Primary app database. WEUR.            |
-| R2       | `cloudflare_r2_bucket.images`           | `rated-watch-images` | Watch photos. WEUR.                    |
-| R2       | `cloudflare_r2_bucket.logs`             | `rated-watch-logs`   | Logpush destination (slice #19). WEUR. |
-| KV       | `cloudflare_workers_kv_namespace.flags` | `rated-watch-flags`  | Feature flags (slice #20).             |
+| Resource | Terraform address                             | Name                          | Notes                                                                      |
+| -------- | --------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------- |
+| D1       | `cloudflare_d1_database.app`                  | `rated-watch-db`              | Primary app database. WEUR.                                                |
+| R2       | `cloudflare_r2_bucket.images`                 | `rated-watch-images`          | Watch photos. WEUR.                                                        |
+| R2       | `cloudflare_r2_bucket.logs`                   | `rated-watch-logs`            | Logpush destination (slice #19). WEUR.                                     |
+| KV       | `cloudflare_workers_kv_namespace.flags`       | `rated-watch-flags`           | Feature flags (slice #20).                                                 |
+| Logpush  | `cloudflare_logpush_job.workers_trace_events` | `ratedwatch-workers-trace-r2` | Workers Logs → R2, day-partitioned. Slice #19. Needs R2 token (see below). |
 
 `ratedwatch-tfstate` is the R2 bucket that stores the Terraform state itself.
 It is **not** declared here — see [Bootstrap](#bootstrap) for why.
@@ -97,6 +98,59 @@ npm run test
 | `CLOUDFLARE_BOOTSTRAP_TOKEN`                  | Revoke in dashboard, mint a new one with the same scope, update `.env`. No impact on running services.                                                                                                                                       |
 | `CLOUDFLARE_API_TOKEN` (ratedwatch-terraform) | Re-run `bootstrap.sh` with a current bootstrap token; append the new lines to `.env` (overwrites `CLOUDFLARE_API_TOKEN` and the derived `AWS_*`). Then revoke the previous ratedwatch-terraform token via `DELETE /accounts/:id/tokens/:id`. |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | These are derived from `CLOUDFLARE_API_TOKEN` — rotating the token rotates these automatically.                                                                                                                                              |
+
+## Observability (slice #19)
+
+The Worker emits product events to Analytics Engine (`rw_events`
+dataset, bound as `ANALYTICS` in `wrangler.jsonc`) and Workers Logs
+(`observability.enabled = true`). Workers Logs is additionally pushed
+into R2 via `cloudflare_logpush_job.workers_trace_events`.
+
+### Provisioning the Logpush job
+
+The job depends on an R2 API token. Cloudflare's Terraform provider
+can create R2 buckets but **not** R2 tokens (those are minted via the
+dashboard or a separate API call); we therefore treat the token as an
+out-of-band operator secret.
+
+1. Cloudflare dashboard → **R2** → **Manage R2 API Tokens** →
+   **Create API token**.
+2. Scope: **Object Read & Write**, limited to the `rated-watch-logs`
+   bucket. All other permissions off.
+3. Copy the **Access Key ID** and **Secret Access Key**.
+4. Append to `.env` (gitignored):
+
+   ```bash
+   export TF_VAR_logpush_r2_access_key_id="…"
+   export TF_VAR_logpush_r2_secret_access_key="…"
+   ```
+
+5. Run the normal plan/apply:
+
+   ```bash
+   set -a && source .env && set +a
+   terraform -chdir=infra/terraform plan -out=tfplan
+   terraform -chdir=infra/terraform apply tfplan
+   ```
+
+Post-apply, verify by triggering any request against the Worker and
+waiting ~30 seconds; a `logs/YYYY-MM-DD/…ndjson.gz` object should
+appear in the `rated-watch-logs` R2 bucket.
+
+### Sentry (deferred)
+
+Slice #19 ships a **stub** `captureException` in
+`src/observability/sentry-stub.ts` that console-logs with a
+`sentry-stub:` prefix. The real `@sentry/cloudflare` integration is
+blocked on the operator provisioning the `SENTRY_DSN` Worker secret:
+
+```bash
+wrangler secret put SENTRY_DSN
+```
+
+Once that secret is in place, a follow-up slice will swap the stub
+for the real SDK — the `captureException(err, ctx)` interface stays
+identical, so no callsite changes are needed.
 
 ## Followups (tracked elsewhere)
 
