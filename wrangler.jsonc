@@ -5,6 +5,19 @@
   "compatibility_date": "2026-04-17",
   "compatibility_flags": ["nodejs_compat"],
 
+  // workers_dev is DELIBERATELY left at its default (true). An
+  // earlier attempt to flip it to false ([REVERTED commit in this
+  // same PR branch]) took down every pr-<N>-ratedwatch.*.workers.dev
+  // preview alias too — the flag is script-scoped, not
+  // version-scoped, so disabling the default hostname also kills
+  // the --preview-alias hostnames that CI relies on for E2E tests.
+  //
+  // Canonical URL is still rated.watch (via cloudflare_workers_
+  // custom_domain.apex + workers_route.wildcard_subdomain in
+  // infra/terraform/). Treat ratedwatch.nmoura.workers.dev as a
+  // fallback / admin-only hostname. If noindex matters later, add
+  // an X-Robots-Tag: noindex header on non-rated.watch hosts.
+
   // Workers Assets serves the Vite build output.
   //
   //  - The Worker owns `/` (SSR landing page), `/leaderboard` (SSR public
