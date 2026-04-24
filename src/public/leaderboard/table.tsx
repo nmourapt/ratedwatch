@@ -178,19 +178,19 @@ export function LeaderboardStyles() {
   font-size: 0.875rem;
 }
 .cf-lb-filters a {
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--cf-radius-full);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-pill);
 }
-.cf-lb-filters a:hover { color: var(--ink); background: var(--surface-inset); }
+.cf-lb-filters a:hover { color: var(--color-ink); background: var(--color-surface-inset); }
 .cf-lb-filter--active {
-  color: var(--ink) !important;
-  border-color: var(--accent) !important;
-  background: var(--surface);
+  color: var(--color-ink) !important;
+  border-color: var(--color-accent) !important;
+  background: var(--color-surface);
 }
 .cf-lb-filter__check {
-  color: var(--accent);
+  color: var(--color-accent);
   font-weight: 700;
 }
 
@@ -202,25 +202,25 @@ export function LeaderboardStyles() {
 .cf-lb-table thead th {
   text-align: left;
   padding: 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--color-line);
   font-weight: 500;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font-size: 0.85rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .cf-lb-table tbody td {
   padding: 12px;
-  border-bottom: 1px solid var(--line-light);
+  border-bottom: 1px solid var(--color-line-subtle);
   vertical-align: middle;
 }
 .cf-lb-col-rank {
   width: 3rem;
-  font-family: var(--cf-font-mono);
-  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  color: var(--color-ink-muted);
 }
 .cf-lb-col-num {
-  font-family: var(--cf-font-mono);
+  font-family: var(--font-mono);
   text-align: right;
   white-space: nowrap;
 }
@@ -230,8 +230,8 @@ export function LeaderboardStyles() {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border-radius: var(--cf-radius-full);
-  background: var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;
@@ -239,7 +239,7 @@ export function LeaderboardStyles() {
 }
 .cf-lb-badge--muted {
   background: transparent;
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
 }
 .cf-lb-badge__check {
   font-weight: 700;
@@ -251,14 +251,14 @@ export function LeaderboardStyles() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--color-accent);
   vertical-align: middle;
   margin: 0 4px;
 }
 
 .cf-lb-footnote {
   padding: 24px 24px 48px;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font-size: 0.9rem;
 }
 .cf-lb-footnote p { max-width: 70ch; margin: 0; }

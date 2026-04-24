@@ -106,12 +106,12 @@ function MovementPageStyles() {
   margin: 0 0 12px;
   font-size: 0.875rem;
 }
-.cf-mv-crumbs a { color: var(--ink-muted); }
-.cf-mv-crumbs a:hover { color: var(--ink); }
+.cf-mv-crumbs a { color: var(--color-ink-muted); }
+.cf-mv-crumbs a:hover { color: var(--color-ink); }
 
 .cf-mv-meta {
-  color: var(--ink-muted);
-  font-family: var(--cf-font-mono);
+  color: var(--color-ink-muted);
+  font-family: var(--font-mono);
   font-size: 0.95rem;
   margin: 0 0 24px;
   letter-spacing: -0.01em;
