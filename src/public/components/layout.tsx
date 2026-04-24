@@ -3,12 +3,15 @@
 // their design-system tokens. Public pages emit ZERO client JS — see the
 // "no <script> tag" contract in tests/integration/home.test.ts.
 //
-// Fonts: we prefer the licensed CF Workers faces (FT Kunst Grotesk, Apercu
-// Mono Pro) when they're available via self-hosted @font-face rules, but
-// fall back to open alternatives (Geist Sans, JetBrains Mono) and finally
-// to system sans/mono when no webfont is present. Slice 3 leaves the
-// @font-face rules as TODOs — fonts land in a later slice once the licence
-// + R2 bucket are ready. See ~/design/CF-WORKERS-DESIGN.md §3.
+// Fonts: Inter (weights 300/400/500/600) substitutes for the commercial
+// Waldenburg family called for in DESIGN.md. Loaded from Google Fonts
+// via <link> tags so both SSR pages and the SPA share the same source.
+// Geist Mono covers the mono slot. The licence-safe substitution is
+// documented in DESIGN.md in the repo root.
+//
+// CSS variables use semantic names (`--color-canvas`, `--color-ink`,
+// `--color-line`, `--color-accent`, …) — no `cf-*` prefix. Values match
+// `@theme` in src/app/styles.css and the `tokens` object in tokens.ts.
 import type { Child } from "hono/jsx";
 import { tokens } from "./tokens";
 
@@ -21,55 +24,76 @@ export type LayoutProps = {
 };
 
 /**
- * Emits the CF Workers design tokens as CSS custom properties, swapping
- * values at the `prefers-color-scheme: dark` breakpoint. Rendered once per
- * page in the <head>. Kept in this file because it's tightly coupled to
- * the <Layout> contract (tests assert the tokens appear in the response).
+ * Emits the design tokens as CSS custom properties, swapping values at
+ * the `prefers-color-scheme: dark` breakpoint. Rendered once per page
+ * in the <head>. Kept in this file because it's tightly coupled to the
+ * <Layout> contract (tests assert tokens appear in the response).
  */
 function DesignTokensStyle() {
   const l = tokens.light;
   const d = tokens.dark;
-  // Deliberately hand-rolled CSS string (not JSX) — hono/jsx escapes `<style>`
-  // children otherwise. Dangerously-set-innerHTML is unavailable in hono/jsx;
-  // the idiomatic approach is to pass the raw string as a child and rely on
-  // hono/jsx's raw HTML insertion via the `html` helper, but a plain <style>
-  // tag with static CSS text is fine since no user data flows in here.
+  // Hand-rolled CSS string — hono/jsx escapes <style> children
+  // otherwise. Static text only; no user data flows in.
   const css = `
 :root {
-  --cf-accent: ${l.accent};
-  --cf-accent-hover: ${l.accentHover};
-  --cf-text: ${l.text};
-  --cf-text-muted: ${l.textMuted};
-  --cf-text-subtle: ${l.textSubtle};
-  --cf-shell: ${l.shell};
-  --cf-bg: ${l.bg};
-  --cf-surface: ${l.surface};
-  --cf-surface-inset: ${l.surfaceInset};
-  --cf-border: ${l.border};
-  --cf-border-light: ${l.borderLight};
-  --cf-font-sans: ${tokens.font.sans};
-  --cf-font-mono: ${tokens.font.mono};
-  --cf-radius-sm: ${tokens.radius.sm};
-  --cf-radius-md: ${tokens.radius.md};
-  --cf-radius-lg: ${tokens.radius.lg};
-  --cf-radius-xl: ${tokens.radius.xl};
-  --cf-radius-full: ${tokens.radius.full};
+  --color-canvas: ${l.canvas};
+  --color-surface: ${l.surface};
+  --color-surface-inset: ${l.surfaceInset};
+  --color-surface-warm: ${l.surfaceWarm};
+  --color-shell: ${l.shell};
+  --color-ink: ${l.ink};
+  --color-ink-muted: ${l.inkMuted};
+  --color-ink-subtle: ${l.inkSubtle};
+  --color-line: ${l.line};
+  --color-line-subtle: ${l.lineSubtle};
+  --color-accent: ${l.accent};
+  --color-accent-fg: ${l.accentFg};
+
+  --shadow-inset-edge: rgba(0, 0, 0, 0.075) 0 0 0 0.5px inset;
+  --shadow-outline: rgba(0, 0, 0, 0.06) 0 0 0 1px;
+  --shadow-soft: rgba(0, 0, 0, 0.04) 0 4px 4px;
+  --shadow-card: rgba(0, 0, 0, 0.06) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 1px 2px, rgba(0, 0, 0, 0.04) 0 2px 4px;
+  --shadow-lift: rgba(0, 0, 0, 0.4) 0 0 1px, rgba(0, 0, 0, 0.04) 0 4px 4px;
+  --shadow-warm: rgba(78, 50, 23, 0.04) 0 6px 16px;
+
+  --font-display: ${tokens.font.display};
+  --font-body: ${tokens.font.body};
+  --font-mono: ${tokens.font.mono};
+
+  --radius-tight: ${tokens.radius.tight};
+  --radius-md: ${tokens.radius.md};
+  --radius-lg: ${tokens.radius.lg};
+  --radius-card: ${tokens.radius.card};
+  --radius-panel: ${tokens.radius.panel};
+  --radius-warm-btn: ${tokens.radius.warmBtn};
+  --radius-pill: ${tokens.radius.pill};
+
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --cf-accent: ${d.accent};
-    --cf-accent-hover: ${d.accentHover};
-    --cf-text: ${d.text};
-    --cf-text-muted: ${d.textMuted};
-    --cf-text-subtle: ${d.textSubtle};
-    --cf-shell: ${d.shell};
-    --cf-bg: ${d.bg};
-    --cf-surface: ${d.surface};
-    --cf-surface-inset: ${d.surfaceInset};
-    --cf-border: ${d.border};
-    --cf-border-light: ${d.borderLight};
+    --color-canvas: ${d.canvas};
+    --color-surface: ${d.surface};
+    --color-surface-inset: ${d.surfaceInset};
+    --color-surface-warm: ${d.surfaceWarm};
+    --color-shell: ${d.shell};
+    --color-ink: ${d.ink};
+    --color-ink-muted: ${d.inkMuted};
+    --color-ink-subtle: ${d.inkSubtle};
+    --color-line: ${d.line};
+    --color-line-subtle: ${d.lineSubtle};
+    --color-accent: ${d.accent};
+    --color-accent-fg: ${d.accentFg};
+
+    /* Dark-mode shadows: swap black for thin warm-white rings —
+     * black shadows vanish on near-black surfaces. */
+    --shadow-inset-edge: rgba(255, 255, 255, 0.04) 0 0 0 0.5px inset;
+    --shadow-outline: rgba(255, 255, 255, 0.05) 0 0 0 1px;
+    --shadow-card: rgba(255, 255, 255, 0.05) 0 0 0 1px, rgba(0, 0, 0, 0.3) 0 1px 2px, rgba(0, 0, 0, 0.3) 0 2px 4px;
+    --shadow-lift: rgba(255, 255, 255, 0.08) 0 0 1px, rgba(0, 0, 0, 0.5) 0 4px 4px;
+    --shadow-warm: rgba(78, 50, 23, 0.2) 0 6px 16px;
+
     color-scheme: dark;
   }
 }
@@ -81,11 +105,12 @@ function DesignTokensStyle() {
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--cf-bg);
-  color: var(--cf-text);
-  font-family: var(--cf-font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-body);
   font-size: 16px;
   line-height: 1.5;
+  letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -93,16 +118,16 @@ html, body {
 }
 
 a {
-  color: var(--cf-accent);
+  color: var(--color-ink);
   text-decoration: none;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, opacity 0.15s ease;
 }
-a:hover { color: var(--cf-accent-hover); }
+a:hover { color: var(--color-ink-muted); }
 
 :focus-visible {
-  outline: 2px solid var(--cf-accent);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
-  border-radius: var(--cf-radius-sm);
+  border-radius: var(--radius-tight);
 }
 
 .cf-container {
@@ -115,43 +140,50 @@ a:hover { color: var(--cf-accent-hover); }
   padding: 96px 0 64px;
 }
 .cf-hero h1 {
+  font-family: var(--font-display);
   font-size: clamp(2.25rem, 4vw + 1rem, 3rem);
-  line-height: 1.05;
+  line-height: 1.08;
   letter-spacing: -0.02em;
   margin: 0 0 16px;
-  font-weight: 500;
+  font-weight: 300;
 }
 .cf-hero p {
   max-width: 56ch;
   margin: 0 0 32px;
-  color: var(--cf-text-muted);
+  color: var(--color-ink-muted);
   font-size: 1.125rem;
-  line-height: 1.56;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
 }
 
 .cf-section {
   padding: 48px 0;
-  border-top: 1px dashed var(--cf-border);
+  border-top: 1px solid var(--color-line-subtle);
 }
 
 .cf-card {
   position: relative;
-  background: var(--cf-surface);
-  border: 1px solid var(--cf-border);
-  border-radius: var(--cf-radius-lg);
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
   padding: 24px;
+  box-shadow: var(--shadow-card);
 }
 .cf-card__title {
   margin: 0 0 8px;
+  font-family: var(--font-display);
   font-size: 1.5rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-weight: 300;
+  letter-spacing: -0.01em;
 }
 .cf-card__body {
   margin: 0;
-  color: var(--cf-text-muted);
+  color: var(--color-ink-muted);
 }
 
+/* Corner brackets — decorative marker kept from the previous design
+ * because the home + user pages use it. The ElevenLabs language is
+ * restraint-first, so the brackets default to the subtle line colour. */
 .cf-brackets {
   position: absolute;
   inset: 0;
@@ -165,8 +197,8 @@ a:hover { color: var(--cf-accent-hover); }
   position: absolute;
   width: 8px;
   height: 8px;
-  background: var(--cf-bg);
-  border: 1px solid var(--cf-border);
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
   border-radius: 1.5px;
 }
 .cf-brackets::before { top: -4px; left: -4px; }
@@ -174,42 +206,64 @@ a:hover { color: var(--cf-accent-hover); }
 .cf-brackets > span::before { bottom: -4px; left: -4px; }
 .cf-brackets > span::after { bottom: -4px; right: -4px; }
 
+/* Buttons: pill-shaped. Three variants —
+ *   .cf-btn--primary : black pill (light) / warm-white pill (dark)
+ *   .cf-btn--ghost   : white pill with shadow-lift border
+ *   .cf-btn--warm    : warm stone CTA — DESIGN.md signature */
 .cf-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 24px;
-  border-radius: var(--cf-radius-full);
-  font-family: var(--cf-font-sans);
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
   font-weight: 500;
-  font-size: 1rem;
+  font-size: 0.9375rem; /* 15px */
   line-height: 1;
   border: 1px solid transparent;
   cursor: pointer;
   transition: background-color 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94),
               color 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              box-shadow 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94),
               border-color 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 .cf-btn--primary {
-  background: var(--cf-accent);
-  color: #FFFBF5;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
 }
-.cf-btn--primary:hover { background: var(--cf-accent-hover); color: #FFFBF5; }
+.cf-btn--primary:hover {
+  opacity: 0.88;
+  color: var(--color-accent-fg);
+}
 .cf-btn--ghost {
-  background: transparent;
-  color: var(--cf-text);
-  border-color: var(--cf-border);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-card);
 }
 .cf-btn--ghost:hover {
-  background: var(--cf-surface-inset);
-  color: var(--cf-text);
+  box-shadow: var(--shadow-lift);
+  color: var(--color-ink);
+}
+.cf-btn--warm {
+  background: var(--color-surface-warm);
+  color: var(--color-ink);
+  border-radius: var(--radius-warm-btn);
+  padding: 12px 20px 12px 14px;
+  box-shadow: var(--shadow-warm);
+}
+.cf-btn--warm:hover {
+  color: var(--color-ink);
+  box-shadow: var(--shadow-warm), var(--shadow-card);
 }
 
 .cf-header {
-  border-bottom: 1px solid var(--cf-border);
+  border-bottom: 1px solid var(--color-line-subtle);
   padding: 16px 0;
-  background: var(--cf-bg);
+  background: var(--color-canvas);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 .cf-header__inner {
   display: flex;
@@ -218,26 +272,27 @@ a:hover { color: var(--cf-accent-hover); }
   gap: 16px;
 }
 .cf-logo {
-  font-family: var(--cf-font-mono);
+  font-family: var(--font-mono);
   font-size: 1rem;
   letter-spacing: -0.02em;
-  color: var(--cf-text);
+  color: var(--color-ink);
   font-weight: 500;
 }
-.cf-logo__accent { color: var(--cf-accent); }
+.cf-logo__accent { color: var(--color-ink-subtle); }
 
 .cf-nav {
   display: flex;
   gap: 24px;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
 }
-.cf-nav a { color: var(--cf-text-muted); }
-.cf-nav a:hover { color: var(--cf-text); }
+.cf-nav a { color: var(--color-ink-muted); }
+.cf-nav a:hover { color: var(--color-ink); }
 
 .cf-footer {
-  border-top: 1px solid var(--cf-border);
+  border-top: 1px solid var(--color-line-subtle);
   padding: 32px 0;
-  color: var(--cf-text-subtle);
+  color: var(--color-ink-subtle);
   font-size: 0.875rem;
 }
 .cf-footer__inner {
@@ -274,12 +329,12 @@ export const Layout = ({ title, description, pathname, children }: LayoutProps) 
             schemes. Tests assert both tags are present. */}
         <meta
           name="theme-color"
-          content={tokens.light.bg}
+          content={tokens.light.canvas}
           media="(prefers-color-scheme: light)"
         />
         <meta
           name="theme-color"
-          content={tokens.dark.bg}
+          content={tokens.dark.canvas}
           media="(prefers-color-scheme: dark)"
         />
 
@@ -293,6 +348,15 @@ export const Layout = ({ title, description, pathname, children }: LayoutProps) 
         <meta name="twitter:description" content={description} />
 
         <link rel="canonical" href={url} />
+
+        {/* Font loading — Inter for display+body, Geist Mono for code.
+            Preconnect to both Google Fonts domains to trim latency. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+        />
 
         <DesignTokensStyle />
       </head>

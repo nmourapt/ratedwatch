@@ -1,75 +1,117 @@
 /*
- * rated.watch SPA styles — palette v3 (cool-neutral zinc).
+ * rated.watch SPA styles — palette v4 (ElevenLabs-inspired warm-white
+ * + stone). Token names are semantic (no `cf-*` prefix). Authoritative
+ * source for values is DESIGN.md in the repo root.
  *
  * Tailwind v4 is included via @tailwindcss/vite. The @theme block
- * registers the palette tokens so `bg-cf-bg`, `text-cf-text`,
- * `text-cf-accent`, etc. become first-class utilities. Public SSR
- * pages declare the same variables inline in src/public/components/
- * layout.tsx (via tokens.ts) — keep the two in sync when tokens
- * change.
+ * below registers the tokens so `bg-canvas`, `text-ink`, `border-line`,
+ * `shadow-card`, `rounded-pill`, etc. become first-class utilities.
+ * Public SSR pages declare the same variables inline in src/public/
+ * components/layout.tsx (via tokens.ts) — keep the three in sync when
+ * tokens change.
+ *
+ * Fonts: Inter (weights 300/400/500/600) substitutes for Waldenburg
+ * (commercial). Display headings should use font-weight:300 with
+ * tracking-tight to match the "whisper-thin" display feel. Geist Mono
+ * is pulled from Google Fonts too; falls back to system mono if the
+ * fetch fails. The uppercase-bold WaldenburgFH variant from DESIGN.md
+ * is substituted with Inter 600 + uppercase + 0.7px letter-spacing
+ * (search for ".btn--uppercase" in component code).
  *
  * Dark-mode strategy: `prefers-color-scheme` media query at :root
  * (same as public pages), not a `.dark` class. When a theme toggle
  * ships, flip to a class-based strategy.
- *
- * Naming: tokens are semantic. `cf-accent` = primary CTA,
- * `cf-bg`/`cf-surface`/`cf-surface-inset` form a three-step
- * background stack (page → card → inset), `cf-shell` is the
- * rarely-used outer-shell background behind main. The actual hex
- * values are zinc-family — no warm accent anywhere.
  */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap");
 
 @import "tailwindcss";
 
 @theme {
-  /* Accent — the primary CTA color.
-   * Light: zinc-700. Dark: zinc-200 (inverted).
-   * Mid-charcoal against near-white bg; inverse on dark bg.
-   * No saturated brand color; the product relies on typographic
-   * hierarchy + contrast, not hue, for emphasis. */
-  --color-cf-accent: #3f3f46;
-  --color-cf-accent-hover: #27272a;
+  /* Primary surfaces */
+  --color-canvas: #ffffff; /* Pure white page bg */
+  --color-surface: #f5f5f5; /* Card / section-break */
+  --color-surface-inset: #f6f6f6; /* Inset areas */
+  --color-surface-warm: rgba(245, 242, 239, 0.8); /* Warm stone CTA */
+  --color-shell: #f5f5f5; /* Outer shell (rarely used) */
 
-  /* Text — zinc-900 light, zinc-50 dark. */
-  --color-cf-text: #18181b;
-  --color-cf-text-muted: #71717a; /* zinc-500 */
-  --color-cf-text-subtle: #a1a1aa; /* zinc-400 */
+  /* Typography */
+  --color-ink: #000000; /* Primary text */
+  --color-ink-muted: #4e4e4e; /* Secondary text */
+  --color-ink-subtle: #777169; /* Warm-muted tertiary */
 
-  /* Background stack. `shell` is the outer shell (rarely used),
-   * `bg` is the main content area, `surface` is the lifted card,
-   * `surface-inset` is the inset (e.g. the stats panel on the
-   * watch detail page). */
-  --color-cf-shell: #f4f4f5; /* zinc-100 — outer */
-  --color-cf-bg: #fafafa; /* zinc-50  — page bg */
-  --color-cf-surface: #ffffff; /* pure white — cards */
-  --color-cf-surface-inset: #f4f4f5; /* zinc-100 — inset */
+  /* Lines + borders */
+  --color-line: #e5e5e5;
+  --color-line-subtle: rgba(0, 0, 0, 0.05);
 
-  --color-cf-border: #e4e4e7; /* zinc-200 */
+  /* Accent (primary CTA) */
+  --color-accent: #000000;
+  --color-accent-fg: #ffffff;
 
+  /* Shadows — multi-layer stacks at sub-0.1 opacity. Tailwind v4
+   * picks up `--shadow-<name>` in @theme as `shadow-<name>` utilities. */
+  --shadow-inset-edge: rgba(0, 0, 0, 0.075) 0 0 0 0.5px inset;
+  --shadow-outline: rgba(0, 0, 0, 0.06) 0 0 0 1px;
+  --shadow-soft: rgba(0, 0, 0, 0.04) 0 4px 4px;
+  --shadow-card:
+    rgba(0, 0, 0, 0.06) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 1px 2px,
+    rgba(0, 0, 0, 0.04) 0 2px 4px;
+  --shadow-lift: rgba(0, 0, 0, 0.4) 0 0 1px, rgba(0, 0, 0, 0.04) 0 4px 4px;
+  --shadow-warm: rgba(78, 50, 23, 0.04) 0 6px 16px;
+
+  /* Fonts */
+  --font-display:
+    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  --font-body:
+    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
   --font-sans:
-    "FT Kunst Grotesk", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
+    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
   --font-mono:
-    "Apercu Mono Pro", "JetBrains Mono", "SF Mono", "Fira Code", Consolas, monospace;
+    "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --radius-cf-full: 9999px;
+  /* Radii */
+  --radius-tight: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-card: 16px;
+  --radius-panel: 24px;
+  --radius-warm-btn: 30px;
+  --radius-pill: 9999px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-cf-accent: #e4e4e7; /* zinc-200 — CTA inverted */
-    --color-cf-accent-hover: #fafafa; /* zinc-50 on hover */
+    /* Warm-dark derivation — see DESIGN.md preface in the repo root. */
+    --color-canvas: #0a0a0a;
+    --color-surface: #141414;
+    --color-surface-inset: #1c1c1c;
+    --color-surface-warm: #1f1b16;
+    --color-shell: #000000;
 
-    --color-cf-text: #fafafa; /* zinc-50 */
-    --color-cf-text-muted: #a1a1aa; /* zinc-400 */
-    --color-cf-text-subtle: #71717a; /* zinc-500 */
+    --color-ink: #ffffff;
+    --color-ink-muted: #a8a29a;
+    --color-ink-subtle: #6b6561;
 
-    --color-cf-shell: #000000; /* full black outer shell */
-    --color-cf-bg: #09090b; /* zinc-950 — page */
-    --color-cf-surface: #18181b; /* zinc-900 — cards */
-    --color-cf-surface-inset: #27272a; /* zinc-800 — inset */
+    --color-line: #2a2724;
+    --color-line-subtle: rgba(255, 255, 255, 0.05);
 
-    --color-cf-border: #27272a; /* zinc-800 */
+    --color-accent: #f5f5f5;
+    --color-accent-fg: #0a0a0a;
+
+    /* Dark-mode shadow overrides: black shadows disappear on near-black
+     * bg, so we swap to thin warm-white rings instead. Soft elevation
+     * shadows are kept (just tinted) — they're felt more than seen. */
+    --shadow-inset-edge: rgba(255, 255, 255, 0.04) 0 0 0 0.5px inset;
+    --shadow-outline: rgba(255, 255, 255, 0.05) 0 0 0 1px;
+    --shadow-soft: rgba(0, 0, 0, 0.5) 0 4px 4px;
+    --shadow-card:
+      rgba(255, 255, 255, 0.05) 0 0 0 1px, rgba(0, 0, 0, 0.3) 0 1px 2px,
+      rgba(0, 0, 0, 0.3) 0 2px 4px;
+    --shadow-lift: rgba(255, 255, 255, 0.08) 0 0 1px, rgba(0, 0, 0, 0.5) 0 4px 4px;
+    --shadow-warm: rgba(78, 50, 23, 0.2) 0 6px 16px;
 
     color-scheme: dark;
   }
@@ -81,14 +123,29 @@
 
 html,
 body {
-  background: var(--color-cf-bg);
-  color: var(--color-cf-text);
-  font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  letter-spacing: 0.01em; /* Inter-body airy tracking */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1;
 }
 
 body {
   margin: 0;
+}
+
+/* Display headings default to light weight — DESIGN.md treats
+ * Waldenburg 300 as the brand voice; Inter 300 carries the same
+ * ethereal feel. Call sites can override with Tailwind classes. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 300;
+  letter-spacing: -0.02em;
 }
