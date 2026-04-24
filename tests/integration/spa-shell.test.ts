@@ -62,11 +62,11 @@ describe("SPA shell — /app/*", () => {
     // Canonical palette hex values — asserted via the @theme tokens
     // registered in src/app/styles.css. If someone regresses the theme
     // block or drops the import, this fires.
-    // Palette v3 (cool-neutral zinc). Token names are semantic
-    // (`cf-accent`, `cf-bg`, …); hex values are zinc-family.
-    expect(css).toContain("#3f3f46"); // CTA accent (zinc-700, light)
-    expect(css).toContain("#fafafa"); // page bg (zinc-50, light)
-    expect(css).toContain("#09090b"); // page bg (zinc-950, dark)
+    // Palette v4 (ElevenLabs-inspired warm-white + stone). Tailwind
+    // emits lower-case hexes in the built CSS.
+    expect(css).toContain("#fff"); // canvas light (pure white)
+    expect(css).toContain("#f5f5f5"); // surface light
+    expect(css).toContain("#0a0a0a"); // canvas dark (warm near-black)
     // Dark-mode media query must be present — slice 3 ships no theme
     // toggle, so OS preference is the only signal.
     expect(css).toMatch(/prefers-color-scheme\s*:\s*dark/i);

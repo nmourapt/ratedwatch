@@ -38,7 +38,7 @@ test("register → redirects to dashboard → shows slug username", async ({ pag
   // Expect the post-register redirect. `waitForURL` is a hard assertion.
   await page.waitForURL("**/app/dashboard", { timeout: 15_000 });
 
-  // Dashboard shows `Logged in as @<slug>`. `.text-cf-accent` is the
+  // Dashboard shows `Logged in as @<slug>`. `.text-accent` is the
   // span wrapping the slug; grab it by the on-screen copy so we're not
   // coupled to CSS.
   const loggedInLine = page.getByText(/^Logged in as @/);

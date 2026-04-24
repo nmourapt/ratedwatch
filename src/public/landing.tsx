@@ -37,7 +37,10 @@ export const LandingPage = ({ topVerified = [] }: LandingPageProps) => (
           grouped by movement caliber. Spoof-resistant, public, and mechanical-first.
         </p>
         <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <Button as="a" href="/leaderboard" variant="primary">
+          {/* Warm-stone is the DESIGN.md signature CTA — use it only on
+              the most prominent action per page. Landing hero is the
+              canonical spot. Secondary / tertiary CTAs stay ghost+primary. */}
+          <Button as="a" href="/leaderboard" variant="warm">
             Browse leaderboards →
           </Button>
           <Button as="a" href="/app/register" variant="ghost">
