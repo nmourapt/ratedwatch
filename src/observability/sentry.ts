@@ -47,7 +47,10 @@ const sentryGlobals = globalThis as typeof globalThis & SentryGlobals;
  *
  * Never throws. Safe to call unconditionally.
  */
-export function captureException(err: unknown, ctx?: CaptureContext): void {
+export function captureException(
+  err: unknown,
+  ctx?: CaptureContext,
+): Promise<void> | null {
   try {
     if (sentryGlobals.__ratedwatchSentryActive) {
       Sentry.captureException(err, (scope) => {
@@ -59,7 +62,17 @@ export function captureException(err: unknown, ctx?: CaptureContext): void {
         }
         return scope;
       });
-      return;
+      // Return the flush promise so callers with access to
+      // ctx.executionCtx can await it via waitUntil — ensures the
+      // outbound POST to Sentry ingest completes before the Worker
+      // isolate is recycled. Without this the SDK queues the event
+      // internally but the Worker terminates before the HTTP request
+      // to Sentry ingest completes, silently dropping the event
+      // (verified in prod: eventId was returned by the SDK but the
+      // event never landed in the dashboard until flush was awaited
+      // via waitUntil). Timeout is generous (2s) because we never
+      // block the response on flush — waitUntil runs post-response.
+      return Sentry.flush(2000).then(() => undefined);
     }
     // Stub mode — matches the previous sentry-stub.ts behaviour so
     // tests that only check console output still pass.
@@ -67,8 +80,10 @@ export function captureException(err: unknown, ctx?: CaptureContext): void {
       err,
       ctx: ctx ?? null,
     });
+    return null;
   } catch {
     // Error-reporting code must never become the error source.
+    return null;
   }
 }
 
