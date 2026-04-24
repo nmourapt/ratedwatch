@@ -9,8 +9,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { LogReadingForm } from "../watches/LogReadingForm";
 import { ReadingList } from "../watches/ReadingList";
+import { TapReadingForm } from "../watches/TapReadingForm";
 import { SessionStatsPanel } from "../watches/SessionStatsPanel";
 import { VerifiedProgressRing } from "../watches/VerifiedProgressRing";
 import { VerifiedReadingCapture } from "../watches/VerifiedReadingCapture";
@@ -258,7 +258,7 @@ export function WatchDetailPage() {
         </div>
       ) : null}
       <VerifiedReadingCapture watchId={watch.id} onSubmitted={reloadReadings} />
-      <LogReadingForm watchId={watch.id} onLogged={reloadReadings} />
+      <TapReadingForm watchId={watch.id} onLogged={reloadReadings} />
       <ReadingList
         readings={readings.readings}
         perInterval={readings.session_stats?.per_interval ?? []}

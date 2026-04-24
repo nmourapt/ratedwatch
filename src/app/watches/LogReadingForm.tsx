@@ -1,3 +1,10 @@
+// @deprecated — typed-deviation form. Superseded by TapReadingForm
+// (tap-the-dial UX) in the watch detail page; kept in the tree for
+// one release cycle so we can revert quickly if the tap UX falls
+// over in the wild. Safe to delete once the tap flow has had real-
+// world use. The backing POST /readings endpoint is still live and
+// the new tap UX runs on POST /readings/tap.
+//
 // "Log a manual reading" form. Lives below the session stats panel
 // on the watch detail page. Submits to POST /api/v1/watches/:id/readings
 // via the readings API client.

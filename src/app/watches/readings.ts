@@ -121,6 +121,35 @@ export async function createReading(
   return { ok: true, reading };
 }
 
+/**
+ * Wire body for the tap-reading flow. Reference time is server-side,
+ * so there's no `reference_timestamp` here — the server uses its own
+ * `Date.now()` at request receipt and computes the deviation.
+ */
+export interface CreateTapReadingBody {
+  dial_position: 0 | 15 | 30 | 45;
+  is_baseline?: boolean;
+  notes?: string;
+}
+
+export async function createTapReading(
+  watchId: string,
+  body: CreateTapReadingBody,
+): Promise<{ ok: true; reading: Reading } | { ok: false; error: ReadingsError }> {
+  const response = await fetch(
+    `/api/v1/watches/${encodeURIComponent(watchId)}/readings/tap`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) return { ok: false, error: await readError(response) };
+  const reading = (await response.json()) as Reading;
+  return { ok: true, reading };
+}
+
 export async function deleteReading(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: ReadingsError }> {
