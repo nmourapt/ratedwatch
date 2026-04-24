@@ -35,6 +35,7 @@ import { assertWatchOwnership } from "@/domain/watches/ownership";
 import { logEvent } from "@/observability/events";
 import {
   createReadingSchema,
+  createTapReadingSchema,
   formatReadingErrors,
   type ReadingResponse,
 } from "@/schemas/reading";
@@ -260,6 +261,106 @@ readingsByWatchRoute.post("/", async (c) => {
   });
 
   // Product telemetry (slice #19). Fire-and-forget.
+  await logEvent(
+    "reading_submitted",
+    { userId: user.id, watchId, is_baseline: input.is_baseline === true },
+    c.env,
+  );
+
+  return c.json(toResponse(created as DbReadingRow), 201);
+});
+
+/**
+ * POST /tap — log a manual reading via the "tap the dial position" UX.
+ *
+ * The client sends only `dial_position` ∈ {0, 15, 30, 45} + an
+ * optional `is_baseline` + optional `notes`. The server uses its own
+ * `Date.now()` as the reference, which makes the flow spoof-resistant
+ * (the client clock is not part of the contract).
+ *
+ * Deviation math:
+ *   refSeconds = floor(now / 1000) % 60
+ *   rawDelta   = dial_position - refSeconds        // in [-45, +45]
+ *   deviation  = ((rawDelta + 30 + 60) % 60) - 30  // wrap into [-30, +30]
+ *
+ * Wrapping to [-30, +30] is the natural domain for "which direction
+ * is this watch off by" with 15 s granularity. A drift > ±30 s from
+ * the nearest minute boundary is ambiguous without the minute hand
+ * and is conventionally treated as wrap-around — e.g. tap-0 when the
+ * server is at second 45 means the user saw "0" arrive 15 s BEFORE
+ * the real minute mark, i.e. the watch is +15 s ahead.
+ *
+ * `verified` stays 0 — tap readings are still manual, just with the
+ * server's clock as the reference rather than the user's typed
+ * deviation. Only the in-app camera capture flow yields verified=1.
+ */
+readingsByWatchRoute.post("/tap", async (c) => {
+  const user = c.get("user");
+  const watchId = getWatchIdParam(c);
+  if (!watchId) return c.json({ error: "not_found" }, 404);
+  const db = createDb(c.env);
+
+  let json: unknown;
+  try {
+    json = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const parsed = createTapReadingSchema.safeParse(json);
+  if (!parsed.success) {
+    return c.json(
+      { error: "invalid_input", fieldErrors: formatReadingErrors(parsed.error) },
+      400,
+    );
+  }
+  const input = parsed.data;
+
+  const ownership = await assertWatchOwnership(db, watchId, user.id);
+  if (ownership.status === "not_found") {
+    return c.json({ error: "not_found" }, 404);
+  }
+  if (ownership.status === "forbidden") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  // Reference time is server-authoritative. `Date.now()` under
+  // miniflare/workerd honours vi.setSystemTime() in tests.
+  const referenceTimestamp = Date.now();
+  const refSeconds = Math.floor(referenceTimestamp / 1000) % 60;
+  const rawDelta = input.dial_position - refSeconds;
+  // ((x % 60) + 60) % 60 gives a non-negative remainder; shifting by
+  // +30 before the mod and subtracting after lands us in [-30, +30].
+  const wrapped = ((((rawDelta + 30) % 60) + 60) % 60) - 30;
+  const deviation = input.is_baseline ? 0 : wrapped;
+
+  const id = crypto.randomUUID();
+  await db
+    .insertInto("readings")
+    .values({
+      id,
+      watch_id: watchId,
+      user_id: user.id,
+      reference_timestamp: referenceTimestamp,
+      deviation_seconds: deviation,
+      is_baseline: input.is_baseline ? 1 : 0,
+      notes: input.notes ?? null,
+    })
+    .execute();
+
+  const created = await db
+    .selectFrom("readings")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirstOrThrow();
+
+  const username = await lookupUsername(db, user.id);
+  await purgeLeaderboardUrls({
+    requestUrl: new URL(c.req.url),
+    movementId: ownership.watch.movement_id,
+    username,
+    watchId,
+  });
+
   await logEvent(
     "reading_submitted",
     { userId: user.id, watchId, is_baseline: input.is_baseline === true },
