@@ -146,7 +146,7 @@ export function EditWatchPage() {
 
   return (
     <section className="mx-auto max-w-2xl">
-      <h1 className="mb-2 text-4xl font-medium tracking-tight text-ink">
+      <h1 className="mb-2 font-display text-4xl font-light tracking-tight text-ink">
         Edit watch
       </h1>
       <p className="mb-6 text-ink-muted">

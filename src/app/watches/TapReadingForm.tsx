@@ -181,7 +181,9 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
   return (
     <section className="mb-6 rounded-lg border border-line bg-surface p-5">
       <div className="mb-3 flex items-baseline justify-between gap-4">
-        <h2 className="text-sm font-medium text-ink">Tap to log a reading</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+          Tap to log a reading
+        </h2>
         <time
           className="font-mono text-sm tabular-nums text-ink"
           aria-label={`Current reference time ${clockLabel}`}

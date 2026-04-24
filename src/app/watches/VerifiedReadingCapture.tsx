@@ -186,7 +186,9 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
       aria-label="Verified reading"
       className="mb-6 rounded-lg border border-line bg-surface p-5"
     >
-      <h2 className="mb-1 text-sm font-medium text-ink">Log a verified reading</h2>
+      <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
+        Log a verified reading
+      </h2>
       <p className="mb-4 text-xs text-ink-muted">
         Take a photo of the dial and we&apos;ll read it against the server clock at the
         moment we receive your upload. No timestamp from your device is trusted — the

@@ -49,7 +49,9 @@ export function DashboardPage() {
     <section>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="mb-2 text-4xl font-medium tracking-tight text-ink">Dashboard</h1>
+          <h1 className="mb-2 font-display text-4xl font-light tracking-tight text-ink">
+            Dashboard
+          </h1>
           {user ? (
             <p className="text-ink">
               Logged in as <span className="font-mono text-accent">@{user.username}</span>
