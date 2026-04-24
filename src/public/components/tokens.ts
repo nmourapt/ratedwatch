@@ -1,39 +1,42 @@
-// CF Workers design tokens — single source of truth for palette, radii,
+// Design tokens — single source of truth for palette, radii,
 // typography, and motion used by both the public SSR pages and the SPA.
 //
-// We expose the raw hex/token values here (not a CSS string) so components
-// that render inline colour (e.g. the <meta name="theme-color">) don't have
-// to grep out of a stylesheet. The matching CSS custom properties are
-// emitted by `<DesignTokensStyle />` in `layout.tsx`.
+// Palette v3: cool-neutral zinc family, no warm accent. Token names
+// still reference "orange" for minimum repo churn — actual hex values
+// are zinc-family (mid-charcoal CTA light / near-white CTA dark).
+// Semantic rename (orange → accent) is a followup.
 //
-// See ~/design/CF-WORKERS-DESIGN.md §2 and §3 for the full reference.
+// The matching CSS custom properties are emitted by
+// <DesignTokensStyle /> in `layout.tsx` (public SSR) and by the
+// `@theme` block in `src/app/styles.css` (SPA). Keep all three in
+// sync.
 
 export const tokens = {
   light: {
-    orange: "#FF4801",
-    orangeHover: "#FF7038",
-    text: "#521000",
-    textMuted: "rgba(82, 16, 0, 0.6)",
-    textSubtle: "rgba(82, 16, 0, 0.38)",
-    bgPage: "#F5F1EB",
-    bg100: "#FFFBF5",
-    bg200: "#FFFDFB",
-    bg300: "#FEF7ED",
-    border: "#EBD5C1",
-    borderLight: "rgba(235, 213, 193, 0.5)",
+    orange: "#3F3F46", // zinc-700, primary CTA
+    orangeHover: "#27272A", // zinc-800
+    text: "#18181B", // zinc-900
+    textMuted: "#71717A", // zinc-500
+    textSubtle: "#A1A1AA", // zinc-400
+    bgPage: "#F4F4F5", // zinc-100, outer shell
+    bg100: "#FAFAFA", // zinc-50, main content
+    bg200: "#FFFFFF", // pure white, cards
+    bg300: "#F4F4F5", // zinc-100, inset
+    border: "#E4E4E7", // zinc-200
+    borderLight: "rgba(228, 228, 231, 0.5)",
   },
   dark: {
-    orange: "#F14602",
-    orangeHover: "#FF6D33",
-    text: "#F0E3DE",
-    textMuted: "rgba(255, 253, 251, 0.56)",
-    textSubtle: "rgba(255, 253, 251, 0.38)",
-    bgPage: "#0D0D0D",
-    bg100: "#121212",
-    bg200: "#191817",
-    bg300: "#2A2927",
-    border: "rgba(240, 227, 222, 0.13)",
-    borderLight: "rgba(240, 227, 222, 0.08)",
+    orange: "#E4E4E7", // zinc-200, CTA inverted
+    orangeHover: "#FAFAFA", // zinc-50
+    text: "#FAFAFA", // zinc-50
+    textMuted: "#A1A1AA", // zinc-400
+    textSubtle: "#71717A", // zinc-500
+    bgPage: "#000000", // full black outer shell
+    bg100: "#09090B", // zinc-950, page
+    bg200: "#18181B", // zinc-900, cards
+    bg300: "#27272A", // zinc-800, inset
+    border: "#27272A", // zinc-800
+    borderLight: "rgba(39, 39, 42, 0.5)",
   },
   font: {
     sans: '"FT Kunst Grotesk", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
