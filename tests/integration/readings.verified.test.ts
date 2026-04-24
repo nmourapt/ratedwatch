@@ -166,7 +166,7 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
     expect(body.error).toBe("verified_readings_disabled");
   });
 
-  it("computes deviation from AI dial seconds vs server reference clock", async () => {
+  it("computes deviation from AI dial MM:SS vs server reference clock", async () => {
     const user = await registerAndGetCookie();
     await setVerifiedFlagForUser(user.userId);
     const { id: watchId } = await createWatch(
@@ -175,11 +175,12 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
     );
 
     // Freeze Date.now() at 14:32:05 UTC so the reference clock is
-    // deterministic. Fake AI returns "7" (seconds) → +2s drift.
+    // deterministic. Fake AI returns "32:07" (MM:SS) → +2s drift
+    // (same minute as reference, 2s ahead).
     const refTime = Date.UTC(2024, 0, 15, 14, 32, 5);
     vi.useFakeTimers();
     vi.setSystemTime(refTime);
-    installFakeAi("7");
+    installFakeAi("32:07");
 
     const res = await postVerifiedReading(watchId, user.cookie);
     expect(res.status).toBe(201);
@@ -194,6 +195,28 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
     expect(body.is_baseline).toBe(false);
     expect(body.deviation_seconds).toBeCloseTo(2, 5);
     expect(body.reference_timestamp).toBe(refTime);
+  });
+
+  it("captures drift larger than a minute (dial 33:10 vs ref 32:05 → +65s)", async () => {
+    const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
+    const { id: watchId } = await createWatch(
+      { name: "V2b", movement_id: movementId },
+      user.cookie,
+    );
+
+    // This is the case the seconds-only contract lost: +65s drift
+    // would have wrapped to -5s under the old math. MM:SS reads it
+    // correctly.
+    const refTime = Date.UTC(2024, 0, 15, 14, 32, 5);
+    vi.useFakeTimers();
+    vi.setSystemTime(refTime);
+    installFakeAi("33:10");
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { deviation_seconds: number };
+    expect(body.deviation_seconds).toBe(65);
   });
 
   it("422s on AI refusal (NO_DIAL)", async () => {
@@ -238,10 +261,10 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
 
     vi.useFakeTimers();
     vi.setSystemTime(Date.UTC(2024, 0, 15, 10, 0, 0));
-    // AI "sees" the second hand at 25 (25 s off the reference's 00);
-    // baseline should still pin deviation to 0 because the user is
-    // declaring "the watch is set to the exact time now".
-    installFakeAi("25");
+    // AI "sees" 0:25 (25 s off the reference's 0:00); baseline
+    // should still pin deviation to 0 because the user is declaring
+    // "the watch is set to the exact time now".
+    installFakeAi("0:25");
 
     const res = await postVerifiedReading(watchId, user.cookie, {
       isBaseline: true,
@@ -265,7 +288,7 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
         { name: "Theirs", movement_id: movementId },
         owner.cookie,
       );
-      installFakeAi("0");
+      installFakeAi("0:0");
 
       const res = await postVerifiedReading(watchId, other.cookie);
       expect(res.status).toBe(403);
@@ -280,7 +303,7 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
       { name: "V6", movement_id: movementId },
       user.cookie,
     );
-    installFakeAi("30");
+    installFakeAi("0:30");
     const probeBytes = new Uint8Array([0xff, 0xd8, 0xab, 0xcd, 0xff, 0xd9]);
 
     const res = await postVerifiedReading(watchId, user.cookie, {
