@@ -166,7 +166,7 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
     expect(body.error).toBe("verified_readings_disabled");
   });
 
-  it("computes deviation from AI dial time vs server reference clock", async () => {
+  it("computes deviation from AI dial seconds vs server reference clock", async () => {
     const user = await registerAndGetCookie();
     await setVerifiedFlagForUser(user.userId);
     const { id: watchId } = await createWatch(
@@ -175,11 +175,11 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
     );
 
     // Freeze Date.now() at 14:32:05 UTC so the reference clock is
-    // deterministic. Fake AI returns 14:32:07 → +2s drift.
+    // deterministic. Fake AI returns "7" (seconds) → +2s drift.
     const refTime = Date.UTC(2024, 0, 15, 14, 32, 5);
     vi.useFakeTimers();
     vi.setSystemTime(refTime);
-    installFakeAi("14:32:07");
+    installFakeAi("7");
 
     const res = await postVerifiedReading(watchId, user.cookie);
     expect(res.status).toBe(201);
@@ -238,10 +238,10 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
 
     vi.useFakeTimers();
     vi.setSystemTime(Date.UTC(2024, 0, 15, 10, 0, 0));
-    // AI "sees" a 5-minute-off dial; baseline should still pin
-    // deviation to 0 because the user is declaring "the watch is
-    // set to the exact time now".
-    installFakeAi("10:05:00");
+    // AI "sees" the second hand at 25 (25 s off the reference's 00);
+    // baseline should still pin deviation to 0 because the user is
+    // declaring "the watch is set to the exact time now".
+    installFakeAi("25");
 
     const res = await postVerifiedReading(watchId, user.cookie, {
       isBaseline: true,
@@ -265,7 +265,7 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
         { name: "Theirs", movement_id: movementId },
         owner.cookie,
       );
-      installFakeAi("12:00:00");
+      installFakeAi("0");
 
       const res = await postVerifiedReading(watchId, other.cookie);
       expect(res.status).toBe(403);
@@ -280,7 +280,7 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
       { name: "V6", movement_id: movementId },
       user.cookie,
     );
-    installFakeAi("08:15:30");
+    installFakeAi("30");
     const probeBytes = new Uint8Array([0xff, 0xd8, 0xab, 0xcd, 0xff, 0xd9]);
 
     const res = await postVerifiedReading(watchId, user.cookie, {

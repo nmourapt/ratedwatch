@@ -1,6 +1,6 @@
 // AI dial reader. Takes a JPEG of a watch face and asks a vision
-// model what time is displayed. Returns a structured `DialReading`
-// (HH:MM:SS) or a structured error.
+// model for the position of the second hand. Returns a structured
+// `DialReading` (seconds only) or a structured error.
 //
 // This module is deliberately small and side-effect-free apart from
 // the single AI call: the verified-reading pipeline (reading-verifier)
@@ -9,22 +9,27 @@
 // the verifier doesn't change.
 //
 // Trust contract (AGENTS.md): we never, ever tell the model "just
-// return the hint time". The archived watchdrift prototype did that
-// and produced a cheating system. The hint is only used as an AM/PM
-// disambiguator — the model's own visual read is what lands in the
-// reading.
+// return the reference time". The archived watchdrift prototype did
+// that and produced a cheating system. The reference clock is used
+// as the HH:MM anchor — the hours + minutes of a verified reading
+// come from the server clock, not from the model — but the *seconds*
+// come from the model's own visual read of the dial. That split is
+// both the honest thing to do and cheaper in tokens: the model's
+// output surface is a single integer 0-59.
 
 import { resolveAiRunner, type AiRunnerEnv, type AiRunResponse } from "./runner";
 
 /**
- * A successful dial read. Seconds may legitimately be 0 when the
- * watch doesn't have a second hand — the caller shouldn't treat a
- * zero-second read as a failure.
+ * A successful dial read. Only the second-hand position — hours and
+ * minutes come from the reference clock in the verifier. A watch
+ * without a visible second hand cannot produce a verified reading;
+ * the model must return UNREADABLE in that case.
  */
 export interface DialReading {
-  hours: number; // 0-23
-  minutes: number; // 0-59
-  seconds: number; // 0-59
+  // Second hand position (0-59). Hours + minutes come from the
+  // reference clock, not the model — the model is only asked for
+  // this one number.
+  seconds: number;
   raw_response: string;
 }
 
@@ -37,32 +42,48 @@ export interface DialReaderError {
 
 export interface DialReaderEnv extends AiRunnerEnv {}
 
-// Strict parse: exactly HH:MM:SS, zero-padded, nothing else. Anchored
-// so we don't accept "14:32:07 is the time".
-const HHMMSS = /^([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$/;
+// Strict parse: exactly 1-2 digits, no leading +/-, no decimals.
+// Anchored so we don't accept "42 seconds" or "about 42".
+const SECONDS_ONLY = /^\d{1,2}$/;
 
-const PROMPT_BASE =
-  "Look at the watch dial in this image and report the time shown as exactly HH:MM:SS in 24-hour format. " +
-  "If the image does not show a clock face, reply with exactly: NO_DIAL. " +
-  "If you cannot read the time clearly, reply with exactly: UNREADABLE. " +
-  "Do not add any other text.";
+const PROMPT_BASE = `You are reading a mechanical watch dial shown in a photo.
+
+The reference clock reads HH_ANCHOR right now. The watch is approximately
+synchronised with this reference. Your task is only to read the WATCH's
+second hand — the thinnest, usually centrally-mounted hand that sweeps
+once per minute.
+
+Report only the position of the second hand as a single integer 0-59.
+
+Do not explain. Do not guess if you cannot see the second hand clearly.
+
+If you cannot read the second hand clearly, reply with exactly:
+UNREADABLE
+
+If the image is not a watch, reply with exactly:
+NO_DIAL
+
+Examples of valid replies: "0", "15", "42", "UNREADABLE", "NO_DIAL"`;
 
 /**
- * Build the prompt. Embeds a reference-time hint when provided, but
- * phrased as a disambiguation aid — the model is told to *use* the
- * hint to pick AM vs PM if it's unsure, NOT to copy the hint into
- * the response. See the AGENTS.md warning about the archived
- * prototype doing exactly that.
+ * Build the prompt. Embeds a reference timestamp as an HH:MM:SS
+ * anchor, so the model knows "the reference clock reads X right now"
+ * and can focus its entire output on the seconds.
+ *
+ * When no hint is provided (shouldn't happen from the verifier, but
+ * keeps this helper honest), the anchor is a generic placeholder
+ * that doesn't steer the model toward any particular value.
  */
 export function buildPrompt(hintTime?: Date): string {
-  if (!hintTime) return PROMPT_BASE;
-  const hh = String(hintTime.getUTCHours()).padStart(2, "0");
-  const mm = String(hintTime.getUTCMinutes()).padStart(2, "0");
-  return (
-    `The approximate time is ${hh}:${mm}; use this only to disambiguate AM/PM if the hour hand is ambiguous. ` +
-    `Do not copy this value — report what the watch dial actually shows. ` +
-    PROMPT_BASE
-  );
+  const anchor = hintTime ? formatHmsUtc(hintTime) : "an unknown time";
+  return PROMPT_BASE.replace("HH_ANCHOR", anchor);
+}
+
+function formatHmsUtc(d: Date): string {
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  const ss = String(d.getUTCSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
 }
 
 /**
@@ -80,7 +101,7 @@ export async function readDialTime(
   let result: AiRunResponse;
   try {
     result = await runner({
-      image: Array.from(image),
+      image,
       prompt: buildPrompt(hintTime),
     });
   } catch (err) {
@@ -101,32 +122,15 @@ export async function readDialTime(
     return { error: "refused", raw_response: raw };
   }
 
-  const m = HHMMSS.exec(raw);
-  if (!m) {
+  if (!SECONDS_ONLY.test(raw)) {
     return { error: "unparseable", raw_response: raw };
   }
 
-  // The regex already restricts each field to its valid range, so a
-  // successful match implies hours ∈ [0,23], minutes/seconds ∈ [0,59].
-  // We still run the explicit plausibility check for defence in
-  // depth in case the regex ever loosens.
-  const hours = Number(m[1]);
-  const minutes = Number(m[2]);
-  const seconds = Number(m[3]);
-
-  if (
-    !Number.isFinite(hours) ||
-    !Number.isFinite(minutes) ||
-    !Number.isFinite(seconds) ||
-    hours < 0 ||
-    hours > 23 ||
-    minutes < 0 ||
-    minutes > 59 ||
-    seconds < 0 ||
-    seconds > 59
-  ) {
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 59) {
+    // e.g. "99" — two digits, passes the regex, but out of range.
     return { error: "implausible", raw_response: raw };
   }
 
-  return { hours, minutes, seconds, raw_response: raw };
+  return { seconds, raw_response: raw };
 }

@@ -5,6 +5,12 @@ import { __setTestAiRunner, type AiRunner, type AiRunnerEnv } from "./runner";
 // These tests drive the reader through a fake AiRunner. No real AI
 // binding is ever invoked — the module-level `testRunner` override
 // (see runner.ts) redirects every call to the fake we install here.
+//
+// NOTE on the contract: the runner exposes `{ response: string }`
+// as its output, extracted from the underlying chat-completion.
+// These tests install fakes that return that flat shape directly,
+// so they exercise the reader's *parsing* logic independent of
+// whichever model the production runner is wired to.
 
 afterEach(() => {
   __setTestAiRunner(null);
@@ -26,26 +32,28 @@ function installFake(
 }
 
 describe("readDialTime", () => {
-  it("parses HH:MM:SS into {hours, minutes, seconds}", async () => {
-    installFake("14:32:07");
+  it("parses a single-digit seconds response", async () => {
+    installFake("7");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({
-      hours: 14,
-      minutes: 32,
-      seconds: 7,
-      raw_response: "14:32:07",
-    });
+    expect(result).toEqual({ seconds: 7, raw_response: "7" });
+  });
+
+  it("parses a two-digit seconds response", async () => {
+    installFake("42");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect(result).toEqual({ seconds: 42, raw_response: "42" });
+  });
+
+  it("parses zero", async () => {
+    installFake("0");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect(result).toEqual({ seconds: 0, raw_response: "0" });
   });
 
   it("trims surrounding whitespace before parsing", async () => {
-    installFake("   09:05:00  \n");
+    installFake("   15  \n");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({
-      hours: 9,
-      minutes: 5,
-      seconds: 0,
-      raw_response: "09:05:00",
-    });
+    expect(result).toEqual({ seconds: 15, raw_response: "15" });
   });
 
   it("returns refused for NO_DIAL", async () => {
@@ -61,12 +69,49 @@ describe("readDialTime", () => {
   });
 
   it("returns unparseable for prose responses", async () => {
-    installFake("The time appears to be 2:32 PM");
+    installFake("The second hand is at about 42");
     const result = await readDialTime(fakeImage, fakeEnv);
     expect("error" in result ? result.error : null).toBe("unparseable");
     if ("error" in result) {
-      expect(result.raw_response).toBe("The time appears to be 2:32 PM");
+      expect(result.raw_response).toBe("The second hand is at about 42");
     }
+  });
+
+  it("returns unparseable for non-numeric tokens", async () => {
+    installFake("banana");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect("error" in result ? result.error : null).toBe("unparseable");
+    if ("error" in result) {
+      expect(result.raw_response).toBe("banana");
+    }
+  });
+
+  it("returns implausible for an out-of-range integer (60)", async () => {
+    installFake("60");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect(result).toEqual({ error: "implausible", raw_response: "60" });
+  });
+
+  it("returns implausible for an out-of-range integer (99)", async () => {
+    installFake("99");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect(result).toEqual({ error: "implausible", raw_response: "99" });
+  });
+
+  it("returns unparseable for HH:MM:SS (legacy model output)", async () => {
+    // Regression guard: the previous model was prompted for
+    // HH:MM:SS; if a model ever returns that again, we want the
+    // reader to reject it cleanly rather than trying to salvage a
+    // number from it.
+    installFake("14:32:07");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect("error" in result ? result.error : null).toBe("unparseable");
+  });
+
+  it("returns unparseable for a signed number", async () => {
+    installFake("-5");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect("error" in result ? result.error : null).toBe("unparseable");
   });
 
   it("returns unparseable for an empty response", async () => {
@@ -83,63 +128,61 @@ describe("readDialTime", () => {
     expect(result).toEqual({ error: "unparseable" });
   });
 
-  it("rejects 25:00:00 as unparseable (out-of-range hour)", async () => {
-    installFake("25:00:00");
-    const result = await readDialTime(fakeImage, fakeEnv);
-    // The strict regex makes this an unparseable rather than implausible;
-    // defence-in-depth's range check only kicks in if the regex ever
-    // loosens. Either classification is acceptable from an API-surface
-    // perspective (both are non-success errors), so assert on the
-    // broader "this is an error" contract.
-    expect("error" in result).toBe(true);
-  });
-
-  it("passes the image array and prompt to the AI runner", async () => {
-    let captured: { image: number[]; prompt: string } | null = null;
+  it("passes the image bytes and prompt to the AI runner", async () => {
+    let captured: { image: Uint8Array; prompt: string } | null = null;
     __setTestAiRunner(async (inputs) => {
       captured = { image: inputs.image, prompt: inputs.prompt };
-      return { response: "10:00:00" };
+      return { response: "10" };
     });
     await readDialTime(fakeImage, fakeEnv);
     expect(captured).not.toBeNull();
-    expect(captured!.image).toEqual([0xff, 0xd8, 0xff, 0xd9]);
-    expect(captured!.prompt).toContain("HH:MM:SS");
+    expect(Array.from(captured!.image)).toEqual([0xff, 0xd8, 0xff, 0xd9]);
+    // The new prompt asks for a single integer 0-59 only.
+    expect(captured!.prompt).toContain("second hand");
+    expect(captured!.prompt).toContain("0-59");
     expect(captured!.prompt).toContain("NO_DIAL");
+    expect(captured!.prompt).toContain("UNREADABLE");
+    // And it no longer asks for HH:MM:SS.
+    expect(captured!.prompt).not.toContain("HH:MM:SS");
   });
 
-  it("hint time flows into the prompt as a disambiguation aid (not as the answer)", async () => {
+  it("hint time flows into the prompt as the reference-clock anchor", async () => {
     let captured: string | null = null;
     __setTestAiRunner(async (inputs) => {
       captured = inputs.prompt;
-      return { response: "15:00:00" };
+      return { response: "15" };
     });
-    const hint = new Date(Date.UTC(2024, 0, 1, 14, 32, 0));
+    const hint = new Date(Date.UTC(2024, 0, 1, 14, 32, 5));
     await readDialTime(fakeImage, fakeEnv, hint);
-    expect(captured).toContain("14:32");
-    // Explicit defence against the archived-prototype sin.
-    expect(captured).toContain("Do not copy this value");
-    expect(captured).toContain("disambiguate AM/PM");
+    expect(captured).toContain("14:32:05");
+    expect(captured).toContain("reference clock");
   });
 });
 
 describe("buildPrompt", () => {
-  it("does not leak a hint when none is given", () => {
+  it("produces a prompt that asks for only the second hand (0-59)", () => {
     const prompt = buildPrompt();
-    expect(prompt).not.toContain("The approximate time is");
-    expect(prompt).toContain("HH:MM:SS");
+    expect(prompt).toContain("second hand");
+    expect(prompt).toContain("0-59");
+    expect(prompt).toContain("NO_DIAL");
+    expect(prompt).toContain("UNREADABLE");
+    expect(prompt).not.toContain("HH:MM:SS");
   });
 
-  it("embeds the hint zero-padded to HH:MM", () => {
-    const prompt = buildPrompt(new Date(Date.UTC(2024, 0, 1, 3, 5, 0)));
-    expect(prompt).toContain("03:05");
+  it("embeds the reference timestamp as HH:MM:SS (UTC)", () => {
+    const prompt = buildPrompt(new Date(Date.UTC(2024, 0, 1, 3, 5, 9)));
+    expect(prompt).toContain("03:05:09");
   });
 
-  it("never instructs the model to return the hint directly", () => {
-    const prompt = buildPrompt(new Date(Date.UTC(2024, 0, 1, 9, 15, 0)));
+  it("never instructs the model to copy the reference time", () => {
+    const prompt = buildPrompt(new Date(Date.UTC(2024, 0, 1, 9, 15, 30)));
     // Regression guard: the archived watchdrift prompt literally said
     // "return this time". We must never do that.
     expect(prompt).not.toMatch(/return this time/i);
     expect(prompt).not.toMatch(/reply with this time/i);
-    expect(prompt).toContain("Do not copy this value");
+    // The prompt names the reference anchor, but the output surface
+    // is only the second hand — the model cannot honestly "copy" the
+    // reference without reading the dial.
+    expect(prompt).toContain("reference clock");
   });
 });
