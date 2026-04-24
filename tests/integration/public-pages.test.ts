@@ -205,6 +205,24 @@ describe("GET /u/:username — public user profile", () => {
     expect(res.status).toBe(404);
   });
 
+  // Followup (cache-vary-cookie): Vary: Cookie on both the 200
+  // and 404 anon branches. Browser caches need it so signed-out
+  // users don't serve the personalised authed variant back.
+  it("emits Vary: Cookie on the 200 anon profile path", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/u/${SEED.user.username}`),
+    );
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
+  });
+
+  it("emits Vary: Cookie on the 404 anon profile path", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/u/nobody-exists-here"),
+    );
+    expect(res.status).toBe(404);
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
+  });
+
   it("emits zero client-side JavaScript", async () => {
     const res = await exports.default.fetch(
       new Request(`https://ratedwatch.test/u/${SEED.user.username}`),
@@ -288,6 +306,23 @@ describe("GET /w/:watchId — public watch page", () => {
       new Request("https://ratedwatch.test/w/does-not-exist-anywhere"),
     );
     expect(res.status).toBe(404);
+  });
+
+  // Followup (cache-vary-cookie): Vary: Cookie on both the 200
+  // and 404 anon branches.
+  it("emits Vary: Cookie on the 200 anon watch path", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/w/${SEED.publicWatch.id}`),
+    );
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
+  });
+
+  it("emits Vary: Cookie on the 404 anon watch path", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/w/does-not-exist-anywhere"),
+    );
+    expect(res.status).toBe(404);
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
   });
 
   it("emits zero client-side JavaScript", async () => {
