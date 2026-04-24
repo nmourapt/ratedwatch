@@ -5,14 +5,16 @@
 //   1. Capture server-side reference timestamp (`Date.now()`). This
 //      is the canonical source of truth — client / EXIF timestamps
 //      are NEVER trusted for competitive scoring.
-//   2. Run the image through the AI dial reader. The dial reader now
-//      returns *only* the second-hand position (0-59) — hours and
-//      minutes come from the reference clock, not the model.
+//   2. Run the image through the AI dial reader. The reader returns
+//      the minute + second hand positions (0-59 each) — only the
+//      hour is inferred from the reference clock.
 //   3. On AI error → bubble up as a structured failure.
 //   4. On AI success, compute the signed drift in seconds between
-//      the model's observed second-hand position and the reference
-//      clock's own seconds-of-minute, wrapped into [-30, +30] so a
-//      minute-boundary capture doesn't show as a ~30 second drift.
+//      the dial's observed MM:SS (minute + second positions) and
+//      the reference clock's minute + second, wrapped into
+//      [-1800, +1800] so mid-minute captures don't show as
+//      ~1-minute offsets and drifts up to ±30 minutes resolve
+//      cleanly.
 //   5. If `is_baseline`, force deviation to 0 — by definition the
 //      user has just set the watch to the true time.
 //   6. Insert a readings row with verified=1.
@@ -20,16 +22,14 @@
 //      A failure here is logged but doesn't roll back the reading —
 //      the reading is canonical, the photo is for provenance only.
 //
-// Design constraint introduced by the seconds-only model contract:
+// Design constraint introduced by the MM:SS-only model contract:
 //
-//   The model no longer reports hours or minutes, only the second
-//   hand's position (0-59). That means this verifier can only
-//   resolve drifts in the range [-30, +30] seconds — any larger
-//   drift is ambiguous without the minute hand. For phase 1 that's
-//   acceptable: a user logging a verified reading is expected to
-//   roughly sync their watch; anything that's drifted more than
-//   30 seconds in a session will wrap and under-report. That
-//   constraint is documented below next to the wrap math.
+//   We do NOT ask the model for the hour, because a 12-hour dial
+//   wrap means any hour output is ambiguous. The HOUR comes from
+//   the reference clock. That caps the verifier's detectable drift
+//   at ±30 minutes — anything beyond that would wrap. That's more
+//   than adequate for any realistic mechanical watch drift; a watch
+//   that's an hour or more off has stopped, not drifted.
 
 import { createDb } from "@/db";
 import { readDialTime, type DialReaderError } from "@/domain/ai-dial-reader/reader";
@@ -76,48 +76,57 @@ export interface VerifiedReadingRow {
   created_at: string;
 }
 
-// With a seconds-only read, the dial's second hand and the reference
-// clock's seconds-of-minute are both in [0, 59], so their signed
-// difference is in [-59, +59]. Wrap into [-30, +30] so a capture
-// straddling the minute boundary (dial=58, ref=02) is reported as
-// -4 rather than +56.
+// Dial MM:SS and reference MM:SS both live in an hour-of-day frame
+// (0..3599 seconds). Their signed difference is in [-3599, +3599].
+// Wrap into [-1800, +1800] so a capture straddling the hour boundary
+// (dial=59:58, ref=00:02) is reported as -4 s rather than +3596 s.
 //
-// Constraint: any true drift > 30 s in absolute value will wrap and
-// under-report. See the module-level comment.
-const HALF_MINUTE_SECONDS = 30;
+// Constraint: any true drift > 30 minutes will wrap and under-report.
+// See the module-level comment. For realistic mechanical drift this
+// never triggers.
+const SECONDS_PER_HOUR = 3600;
+const HALF_HOUR_SECONDS = 1800;
 
 /**
- * Exported for tests. Computes the seconds-only drift between the
- * dial's observed second-hand position and the reference clock's
- * seconds-of-minute, wrapped into [-30, +30] (lower bound inclusive,
- * upper bound inclusive where 30 and -30 collide at the ±1800° mark).
+ * Exported for tests. Computes the signed drift in seconds between
+ * the dial's observed MM:SS and the reference clock's MM:SS, wrapped
+ * into [-1800, +1800] (the ±30 minute window).
  *
  * Invariants:
- *   * dialReading.seconds must be an integer in [0, 59]. Callers
- *     (readDialTime) enforce that — this helper still tolerates
- *     out-of-range by `%%`-normalising first.
+ *   * dialReading.minutes and .seconds are integers in [0, 59].
+ *     Callers (readDialTime) enforce that — this helper still
+ *     tolerates out-of-range by `%%`-normalising first.
  *   * referenceTimestampMs is a millisecond unix timestamp.
+ *
+ * Positive deviation = watch is ahead of reference. Negative = behind.
  */
 export function computeVerifiedDeviation(
   dialReading: {
+    minutes: number;
     seconds: number;
   },
   referenceTimestampMs: number,
 ): number {
-  const dialSec = dialReading.seconds;
-  // Reference seconds-of-minute. `Math.floor` on the ms / 1000 then
-  // %% 60 gives the current seconds-of-minute in [0, 59].
-  const refSec = Math.floor(referenceTimestampMs / 1000) % 60;
+  // Dial time in seconds-of-hour.
+  const dialTotalSec = dialReading.minutes * 60 + dialReading.seconds;
 
-  // Raw signed delta in [-59, +59]. Positive = watch ahead of
-  // reference; negative = watch behind.
-  let diff = dialSec - refSec;
+  // Reference time in seconds-of-hour. Derive from the wall-clock
+  // minute + second, ignoring the hour (matches what the model sees
+  // on the dial — it doesn't know the hour either).
+  const refDate = new Date(referenceTimestampMs);
+  const refTotalSec = refDate.getUTCMinutes() * 60 + refDate.getUTCSeconds();
 
-  // Wrap into [-30, +30]:
-  //   add 30, take mod 60, subtract 30.
+  // Raw signed delta in [-3599, +3599].
+  let diff = dialTotalSec - refTotalSec;
+
+  // Wrap into [-1800, +1800]:
+  //   add 1800, take mod 3600, subtract 1800.
   // Use a %%-style normalisation because JS `%` keeps the sign of
   // the lhs, which would give wrong answers for large negatives.
-  diff = ((((diff + HALF_MINUTE_SECONDS) % 60) + 60) % 60) - HALF_MINUTE_SECONDS;
+  diff =
+    ((((diff + HALF_HOUR_SECONDS) % SECONDS_PER_HOUR) + SECONDS_PER_HOUR) %
+      SECONDS_PER_HOUR) -
+    HALF_HOUR_SECONDS;
   return diff;
 }
 
@@ -148,9 +157,9 @@ export async function verifyReading(
     return toVerifierError(readerResult);
   }
 
-  // 4. Compute deviation from dial seconds vs reference seconds.
+  // 4. Compute deviation from dial MM:SS vs reference MM:SS.
   let deviation = computeVerifiedDeviation(
-    { seconds: readerResult.seconds },
+    { minutes: readerResult.minutes, seconds: readerResult.seconds },
     referenceTimestamp,
   );
 

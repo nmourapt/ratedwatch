@@ -1,6 +1,7 @@
 // AI dial reader. Takes a JPEG of a watch face and asks a vision
-// model for the position of the second hand. Returns a structured
-// `DialReading` (seconds only) or a structured error.
+// model for the minute + second positions the watch is displaying.
+// Returns a structured `DialReading` (minutes + seconds) or a
+// structured error.
 //
 // This module is deliberately small and side-effect-free apart from
 // the single AI call: the verified-reading pipeline (reading-verifier)
@@ -11,24 +12,29 @@
 // Trust contract (AGENTS.md): we never, ever tell the model "just
 // return the reference time". The archived watchdrift prototype did
 // that and produced a cheating system. The reference clock is used
-// as the HH:MM anchor — the hours + minutes of a verified reading
-// come from the server clock, not from the model — but the *seconds*
-// come from the model's own visual read of the dial. That split is
-// both the honest thing to do and cheaper in tokens: the model's
-// output surface is a single integer 0-59.
+// as the HOUR anchor only — the hour of a verified reading comes
+// from the server clock, not from the model. Minutes and seconds
+// both come from the model's own visual read of the dial.
+//
+// Why both minutes and seconds (changed from seconds-only): a
+// seconds-only contract caps us at ±30 s of detectable drift (a
+// watch that's drifted ~45 s past the reference would wrap and
+// under-report). Real mechanical drift routinely exceeds 30 s over
+// a session, so we need the minute hand to disambiguate. Minute +
+// second gives us a ±30 *minute* detection range, which is more
+// than adequate for any realistic mechanical watch.
 
 import { resolveAiRunner, type AiRunnerEnv, type AiRunResponse } from "./runner";
 
 /**
- * A successful dial read. Only the second-hand position — hours and
- * minutes come from the reference clock in the verifier. A watch
- * without a visible second hand cannot produce a verified reading;
- * the model must return UNREADABLE in that case.
+ * A successful dial read. Minute + second hand positions only — the
+ * hour comes from the reference clock in the verifier because a
+ * 12-hour dial wrap makes any hour output ambiguous.
  */
 export interface DialReading {
-  // Second hand position (0-59). Hours + minutes come from the
-  // reference clock, not the model — the model is only asked for
-  // this one number.
+  // Minute hand position (0-59). Comes from the model's visual read.
+  minutes: number;
+  // Second hand position (0-59). Comes from the model's visual read.
   seconds: number;
   raw_response: string;
 }
@@ -42,28 +48,34 @@ export interface DialReaderError {
 
 export interface DialReaderEnv extends AiRunnerEnv {}
 
-// Strict parse: exactly 1-2 digits, no leading +/-, no decimals.
-// Anchored so we don't accept "42 seconds" or "about 42".
-const SECONDS_ONLY = /^\d{1,2}$/;
+// Strict parse: MM:SS with 1-2 digits each side, no leading +/-, no
+// decimals. Anchored so we don't accept "32:17 seconds" or "about
+// 32:17". The model is instructed to reply in this exact shape.
+const MINUTES_AND_SECONDS = /^(\d{1,2}):(\d{1,2})$/;
 
 const PROMPT_BASE = `You are reading a mechanical watch dial shown in a photo.
 
 The reference clock reads HH_ANCHOR right now. The watch is approximately
-synchronised with this reference. Your task is only to read the WATCH's
-second hand — the thinnest, usually centrally-mounted hand that sweeps
-once per minute.
+synchronised with this reference — typically within a few minutes either
+way. Your task is to read the watch's minute and second hand positions.
 
-Report only the position of the second hand as a single integer 0-59.
+Report the time the watch displays in the format MM:SS where:
+- MM is the minute value 0-59 (where the MINUTE hand points — usually
+  the slightly shorter, thicker hand that advances once per minute)
+- SS is the second value 0-59 (where the SECOND hand points — the
+  thinnest hand that sweeps continuously or ticks once per second)
 
-Do not explain. Do not guess if you cannot see the second hand clearly.
+Do not report the hour — we have that from the reference clock.
+Do not explain. Do not pad with zeros unless natural (both "3:07" and
+"03:07" are accepted).
 
-If you cannot read the second hand clearly, reply with exactly:
-UNREADABLE
+If you cannot read the minute or second hand clearly, reply with
+exactly: UNREADABLE
 
-If the image is not a watch, reply with exactly:
-NO_DIAL
+If the image is not a watch dial, reply with exactly: NO_DIAL
 
-Examples of valid replies: "0", "15", "42", "UNREADABLE", "NO_DIAL"`;
+Examples of valid replies: "32:17", "03:45", "59:0", "0:12",
+"UNREADABLE", "NO_DIAL"`;
 
 /**
  * Build the prompt. Embeds a reference timestamp as an HH:MM:SS
@@ -122,15 +134,24 @@ export async function readDialTime(
     return { error: "refused", raw_response: raw };
   }
 
-  if (!SECONDS_ONLY.test(raw)) {
+  const match = MINUTES_AND_SECONDS.exec(raw);
+  if (!match) {
     return { error: "unparseable", raw_response: raw };
   }
 
-  const seconds = Number(raw);
-  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 59) {
-    // e.g. "99" — two digits, passes the regex, but out of range.
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  if (
+    !Number.isFinite(minutes) ||
+    !Number.isFinite(seconds) ||
+    minutes < 0 ||
+    minutes > 59 ||
+    seconds < 0 ||
+    seconds > 59
+  ) {
+    // e.g. "99:17" — passes the regex but out of range.
     return { error: "implausible", raw_response: raw };
   }
 
-  return { seconds, raw_response: raw };
+  return { minutes, seconds, raw_response: raw };
 }

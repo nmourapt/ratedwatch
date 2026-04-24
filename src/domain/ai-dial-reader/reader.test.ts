@@ -32,28 +32,48 @@ function installFake(
 }
 
 describe("readDialTime", () => {
-  it("parses a single-digit seconds response", async () => {
-    installFake("7");
+  it("parses a two-digit MM:SS response", async () => {
+    installFake("32:17");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({ seconds: 7, raw_response: "7" });
+    expect(result).toEqual({ minutes: 32, seconds: 17, raw_response: "32:17" });
   });
 
-  it("parses a two-digit seconds response", async () => {
-    installFake("42");
+  it("parses single-digit components on either side", async () => {
+    installFake("3:7");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({ seconds: 42, raw_response: "42" });
+    expect(result).toEqual({ minutes: 3, seconds: 7, raw_response: "3:7" });
   });
 
-  it("parses zero", async () => {
-    installFake("0");
+  it("parses zero-padded components", async () => {
+    installFake("03:07");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({ seconds: 0, raw_response: "0" });
+    expect(result).toEqual({ minutes: 3, seconds: 7, raw_response: "03:07" });
+  });
+
+  it("parses the top of the minute", async () => {
+    installFake("0:0");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect(result).toEqual({ minutes: 0, seconds: 0, raw_response: "0:0" });
+  });
+
+  it("parses the end of the hour", async () => {
+    installFake("59:59");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect(result).toEqual({
+      minutes: 59,
+      seconds: 59,
+      raw_response: "59:59",
+    });
   });
 
   it("trims surrounding whitespace before parsing", async () => {
-    installFake("   15  \n");
+    installFake("   15:42  \n");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({ seconds: 15, raw_response: "15" });
+    expect(result).toEqual({
+      minutes: 15,
+      seconds: 42,
+      raw_response: "15:42",
+    });
   });
 
   it("returns refused for NO_DIAL", async () => {
@@ -69,11 +89,11 @@ describe("readDialTime", () => {
   });
 
   it("returns unparseable for prose responses", async () => {
-    installFake("The second hand is at about 42");
+    installFake("The time shown is 32:17 approximately");
     const result = await readDialTime(fakeImage, fakeEnv);
     expect("error" in result ? result.error : null).toBe("unparseable");
     if ("error" in result) {
-      expect(result.raw_response).toBe("The second hand is at about 42");
+      expect(result.raw_response).toBe("The time shown is 32:17 approximately");
     }
   });
 
@@ -86,30 +106,45 @@ describe("readDialTime", () => {
     }
   });
 
-  it("returns implausible for an out-of-range integer (60)", async () => {
-    installFake("60");
+  it("returns implausible when minutes are out of range", async () => {
+    installFake("99:17");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({ error: "implausible", raw_response: "60" });
+    expect(result).toEqual({ error: "implausible", raw_response: "99:17" });
   });
 
-  it("returns implausible for an out-of-range integer (99)", async () => {
-    installFake("99");
+  it("returns implausible when seconds are out of range", async () => {
+    installFake("32:99");
     const result = await readDialTime(fakeImage, fakeEnv);
-    expect(result).toEqual({ error: "implausible", raw_response: "99" });
+    expect(result).toEqual({ error: "implausible", raw_response: "32:99" });
+  });
+
+  it("returns implausible when seconds hit 60 (off-by-one from 59 max)", async () => {
+    installFake("32:60");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect(result).toEqual({ error: "implausible", raw_response: "32:60" });
   });
 
   it("returns unparseable for HH:MM:SS (legacy model output)", async () => {
-    // Regression guard: the previous model was prompted for
-    // HH:MM:SS; if a model ever returns that again, we want the
-    // reader to reject it cleanly rather than trying to salvage a
-    // number from it.
+    // Regression guard: an earlier model was prompted for HH:MM:SS.
+    // If a model ever returns that again, we want the reader to
+    // reject it cleanly rather than try to salvage a number from it.
     installFake("14:32:07");
     const result = await readDialTime(fakeImage, fakeEnv);
     expect("error" in result ? result.error : null).toBe("unparseable");
   });
 
+  it("returns unparseable for seconds-only (pre-MM:SS contract)", async () => {
+    // Regression guard: the previous seconds-only contract would
+    // have accepted "42". The new contract requires MM:SS; a bare
+    // integer must be rejected so we don't silently treat it as
+    // minutes=42, seconds=0 (or similar).
+    installFake("42");
+    const result = await readDialTime(fakeImage, fakeEnv);
+    expect("error" in result ? result.error : null).toBe("unparseable");
+  });
+
   it("returns unparseable for a signed number", async () => {
-    installFake("-5");
+    installFake("-5:10");
     const result = await readDialTime(fakeImage, fakeEnv);
     expect("error" in result ? result.error : null).toBe("unparseable");
   });
@@ -132,17 +167,17 @@ describe("readDialTime", () => {
     let captured: { image: Uint8Array; prompt: string } | null = null;
     __setTestAiRunner(async (inputs) => {
       captured = { image: inputs.image, prompt: inputs.prompt };
-      return { response: "10" };
+      return { response: "10:42" };
     });
     await readDialTime(fakeImage, fakeEnv);
     expect(captured).not.toBeNull();
     expect(Array.from(captured!.image)).toEqual([0xff, 0xd8, 0xff, 0xd9]);
-    // The new prompt asks for a single integer 0-59 only.
-    expect(captured!.prompt).toContain("second hand");
-    expect(captured!.prompt).toContain("0-59");
+    // The new prompt asks for MM:SS. It should mention both hands.
+    expect(captured!.prompt).toContain("minute and second hand");
+    expect(captured!.prompt).toContain("MM:SS");
     expect(captured!.prompt).toContain("NO_DIAL");
     expect(captured!.prompt).toContain("UNREADABLE");
-    // And it no longer asks for HH:MM:SS.
+    // And it no longer asks for seconds-only or HH:MM:SS.
     expect(captured!.prompt).not.toContain("HH:MM:SS");
   });
 
@@ -150,7 +185,7 @@ describe("readDialTime", () => {
     let captured: string | null = null;
     __setTestAiRunner(async (inputs) => {
       captured = inputs.prompt;
-      return { response: "15" };
+      return { response: "32:17" };
     });
     const hint = new Date(Date.UTC(2024, 0, 1, 14, 32, 5));
     await readDialTime(fakeImage, fakeEnv, hint);
@@ -160,10 +195,10 @@ describe("readDialTime", () => {
 });
 
 describe("buildPrompt", () => {
-  it("produces a prompt that asks for only the second hand (0-59)", () => {
+  it("produces a prompt that asks for MM:SS", () => {
     const prompt = buildPrompt();
-    expect(prompt).toContain("second hand");
-    expect(prompt).toContain("0-59");
+    expect(prompt).toContain("minute and second hand");
+    expect(prompt).toContain("MM:SS");
     expect(prompt).toContain("NO_DIAL");
     expect(prompt).toContain("UNREADABLE");
     expect(prompt).not.toContain("HH:MM:SS");
@@ -181,8 +216,8 @@ describe("buildPrompt", () => {
     expect(prompt).not.toMatch(/return this time/i);
     expect(prompt).not.toMatch(/reply with this time/i);
     // The prompt names the reference anchor, but the output surface
-    // is only the second hand — the model cannot honestly "copy" the
-    // reference without reading the dial.
+    // is MM:SS only — the model cannot honestly "copy" the reference
+    // without reading the dial.
     expect(prompt).toContain("reference clock");
   });
 });
