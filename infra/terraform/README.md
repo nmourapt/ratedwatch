@@ -113,25 +113,35 @@ can create R2 buckets but **not** R2 tokens (those are minted via the
 dashboard or a separate API call); we therefore treat the token as an
 out-of-band operator secret.
 
-1. Cloudflare dashboard → **R2** → **Manage R2 API Tokens** →
-   **Create API token**.
-2. Scope: **Object Read & Write**, limited to the `rated-watch-logs`
-   bucket. All other permissions off.
+**Option A — mint programmatically** (when a `CLOUDFLARE_BOOTSTRAP_TOKEN` is live; this is how the current token was minted):
+
+```bash
+set -a && source .env && set +a
+RESOURCE="com.cloudflare.edge.r2.bucket.${CLOUDFLARE_ACCOUNT_ID}_default_rated-watch-logs"
+curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/tokens" \
+  -H "Authorization: Bearer ${CLOUDFLARE_BOOTSTRAP_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"ratedwatch-logpush-r2\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"${RESOURCE}\":\"*\"},\"permission_groups\":[{\"id\":\"2efd5506f9c8494dacb1fa10a3e7d5b6\"}]}]}"
+# Derive S3 creds: Access Key ID = token.id, Secret = sha256(token.value)
+```
+
+**Option B — mint via dashboard** (fallback when the bootstrap token has already been revoked):
+
+1. Cloudflare dashboard → **R2** → **Manage R2 API Tokens** → **Create API token**.
+2. Scope: **Object Read & Write**, limited to the `rated-watch-logs` bucket. All other permissions off.
 3. Copy the **Access Key ID** and **Secret Access Key**.
-4. Append to `.env` (gitignored):
 
-   ```bash
-   export TF_VAR_logpush_r2_access_key_id="…"
-   export TF_VAR_logpush_r2_secret_access_key="…"
-   ```
+**Either way — apply the Terraform**:
 
-5. Run the normal plan/apply:
+```bash
+set -a && source .env && set +a
+export TF_VAR_logpush_r2_access_key_id="…"
+export TF_VAR_logpush_r2_secret_access_key="…"
+terraform -chdir=infra/terraform plan -out=tfplan
+terraform -chdir=infra/terraform apply tfplan
+```
 
-   ```bash
-   set -a && source .env && set +a
-   terraform -chdir=infra/terraform plan -out=tfplan
-   terraform -chdir=infra/terraform apply tfplan
-   ```
+> Tip: the TF token (`CLOUDFLARE_API_TOKEN`) must include **"Logs Write"** at the account level to create the Logpush job itself. `bootstrap.sh` mints it with this perm; older TF tokens can't create the job (403). Re-run `bootstrap.sh` if you're rotating.
 
 Post-apply, verify by triggering any request against the Worker and
 waiting ~30 seconds; a `logs/YYYY-MM-DD/…ndjson.gz` object should

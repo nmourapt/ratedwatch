@@ -67,6 +67,7 @@ PG_KV_WRITE=$(pg_id "Workers KV Storage Write")
 PG_WORKERS_SCRIPTS=$(pg_id "Workers Scripts Write")
 PG_WORKERS_TAIL=$(pg_id "Workers Tail Read")
 PG_ACCOUNT_SETTINGS=$(pg_id "Account Settings Read")
+PG_LOGS_WRITE=$(pg_id "Logs Write")
 PG_DNS_WRITE=$(pg_id "DNS Write")
 PG_ZONE_READ=$(pg_id "Zone Read")
 PG_WORKERS_ROUTES=$(pg_id "Workers Routes Write")
@@ -82,6 +83,7 @@ token_payload=$(jq -n \
   --arg ws "$PG_WORKERS_SCRIPTS" \
   --arg wt "$PG_WORKERS_TAIL" \
   --arg as "$PG_ACCOUNT_SETTINGS" \
+  --arg lw "$PG_LOGS_WRITE" \
   --arg dns "$PG_DNS_WRITE" \
   --arg zr "$PG_ZONE_READ" \
   --arg wr "$PG_WORKERS_ROUTES" \
@@ -93,7 +95,8 @@ token_payload=$(jq -n \
          resources: { ($acct): "*" },
          permission_groups: [
            { id: $d1 }, { id: $r2 }, { id: $kv },
-           { id: $ws }, { id: $wt }, { id: $as }
+           { id: $ws }, { id: $wt }, { id: $as },
+           { id: $lw }
          ]
        },
        {
