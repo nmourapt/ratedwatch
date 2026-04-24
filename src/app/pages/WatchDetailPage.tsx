@@ -186,8 +186,8 @@ export function WatchDetailPage() {
             disabled={togglingVisibility}
             className={
               watch.is_public
-                ? "inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
-                : "inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-60"
+                ? "inline-flex items-center gap-2 rounded-pill border border-line bg-surface-inset px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
+                : "inline-flex items-center gap-2 rounded-pill border border-accent/25 bg-accent/10 px-3 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-60"
             }
           >
             <span

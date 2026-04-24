@@ -213,7 +213,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           <button
             type="button"
             onClick={openFilePicker}
-            className="inline-flex w-full items-center justify-center rounded-full border border-accent bg-accent px-5 py-3 text-sm font-medium text-canvas transition-colors hover:bg-accent/90 sm:w-auto"
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-pill bg-accent px-5 py-3 text-sm font-medium text-accent-fg transition-colors hover:bg-accent/90 sm:w-auto"
           >
             Take photo
           </button>
@@ -262,14 +262,14 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
             <button
               type="button"
               onClick={handleSubmit}
-              className="inline-flex items-center justify-center rounded-full border border-accent bg-accent px-5 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-accent/90"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-pill bg-accent px-5 py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent/90"
             >
               Submit verified reading
             </button>
             <button
               type="button"
               onClick={handleCancelOrReset}
-              className="inline-flex items-center justify-center rounded-full border border-line bg-transparent px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink-muted"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-pill border border-line bg-canvas px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink-muted"
             >
               Choose a different photo
             </button>
@@ -294,9 +294,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
         >
           <p className="text-sm text-ink">
             Saved. Dial read at{" "}
-            <span className="font-mono text-accent">
-              {formatDialTime(state.reading)}
-            </span>
+            <span className="font-mono text-accent">{formatDialTime(state.reading)}</span>
             , deviation{" "}
             <span className="font-mono text-accent">
               {formatDeviation(state.reading.deviation_seconds)}
@@ -306,7 +304,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           <button
             type="button"
             onClick={handleCancelOrReset}
-            className="mt-3 inline-flex items-center justify-center rounded-full border border-line bg-transparent px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent"
+            className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-pill border border-line bg-canvas px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent"
           >
             Save another
           </button>

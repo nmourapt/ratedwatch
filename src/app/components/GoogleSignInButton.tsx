@@ -50,9 +50,10 @@ export function GoogleSignInButton({
         disabled={submitting}
         aria-label={label}
         className={
-          "inline-flex items-center justify-center gap-3 rounded-full border " +
+          "inline-flex min-h-[44px] items-center justify-center gap-3 rounded-pill border " +
           "border-line bg-canvas px-6 py-3 text-sm font-medium " +
-          "text-ink transition-colors hover:border-accent hover:text-ink " +
+          "text-ink shadow-card transition-colors transition-shadow " +
+          "hover:border-ink-muted hover:text-ink hover:shadow-lift " +
           "disabled:opacity-60 " +
           className
         }
