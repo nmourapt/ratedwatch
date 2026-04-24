@@ -47,6 +47,9 @@ const SEED = {
     name: "Gold Submariner",
     brand: "Rolex",
     model: "126610LN",
+    // Slice (issue #57): reference surfaces on the public page in
+    // the subtitle row ("Rolex · 126610LN · Ref 126610LN-0001").
+    reference: "126610LN-0001",
     is_public: 1,
   },
   privateWatch: {
@@ -55,6 +58,19 @@ const SEED = {
     brand: "Nomos",
     model: "Tangente",
     is_public: 0,
+  },
+  // Slice (issue #57): a watch with no reference set to prove the
+  // SSR output doesn't emit a dangling " · " separator when the
+  // slot is empty. Brand/model chosen to be distinct from the other
+  // fixtures so the "private watch doesn't leak" assertion elsewhere
+  // in this file keeps a unique needle to look for.
+  publicNoRef: {
+    id: id("w-public-noref"),
+    name: "Plain Worker",
+    brand: "Tissot",
+    model: "PRX",
+    reference: null,
+    is_public: 1,
   },
 };
 
@@ -85,12 +101,33 @@ async function seed() {
     )
     .run();
 
-  for (const w of [SEED.publicWatch, SEED.privateWatch]) {
+  const watchesToSeed: Array<{
+    id: string;
+    name: string;
+    brand: string;
+    model: string;
+    reference: string | null;
+    is_public: number;
+  }> = [
+    { ...SEED.publicWatch },
+    { ...SEED.privateWatch, reference: null },
+    { ...SEED.publicNoRef },
+  ];
+  for (const w of watchesToSeed) {
     await db
       .prepare(
-        "INSERT OR IGNORE INTO watches (id, user_id, name, brand, model, movement_id, is_public) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO watches (id, user_id, name, brand, model, reference, movement_id, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(w.id, SEED.user.id, w.name, w.brand, w.model, SEED.movement.id, w.is_public)
+      .bind(
+        w.id,
+        SEED.user.id,
+        w.name,
+        w.brand,
+        w.model,
+        w.reference,
+        SEED.movement.id,
+        w.is_public,
+      )
       .run();
   }
 
@@ -267,5 +304,32 @@ describe("GET /w/:watchId — public watch page", () => {
     );
     const body = await res.text();
     expect(body).toMatch(/data-verified-badge="true"/);
+  });
+
+  // Slice (issue #57): reference shows up in the subtitle when set,
+  // and leaves no dangling separator when absent.
+  it("renders the reference in the subtitle when the watch has one", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/w/${SEED.publicWatch.id}`),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain(`Ref ${SEED.publicWatch.reference}`);
+  });
+
+  it("omits the reference slot (no dangling separator) when the watch has none", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/w/${SEED.publicNoRef.id}`),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // Subtitle still renders brand + model but the "Ref …" slot is absent.
+    expect(body).toContain(SEED.publicNoRef.brand);
+    expect(body).toContain(SEED.publicNoRef.model);
+    expect(body).not.toContain("Ref ");
+    // No " · · " double-separator and no trailing separator right
+    // before the closing </p> of the subtitle.
+    expect(body).not.toMatch(/·\s*·/);
+    expect(body).not.toMatch(/·\s*<\/p>/);
   });
 });

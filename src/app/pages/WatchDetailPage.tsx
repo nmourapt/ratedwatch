@@ -216,6 +216,9 @@ export function WatchDetailPage() {
         <dt className="text-sm font-medium text-cf-text-muted">Movement</dt>
         <dd className="text-sm text-cf-text">{movementLabel}</dd>
 
+        <dt className="text-sm font-medium text-cf-text-muted">Reference</dt>
+        <dd className="font-mono text-sm text-cf-text">{watch.reference ?? "—"}</dd>
+
         {watch.notes ? (
           <>
             <dt className="text-sm font-medium text-cf-text-muted">Notes</dt>

@@ -55,9 +55,11 @@ export const WatchPage = ({ data }: WatchPageProps) => {
         <section class="cf-container cf-hero" aria-labelledby="w-title">
           <h1 id="w-title">{watch.name}</h1>
           <p class="cf-watch-sub">
-            {watch.brand ? <strong>{watch.brand}</strong> : null}
-            {watch.brand && watch.model ? " · " : null}
-            {watch.model ? <span>{watch.model}</span> : null}
+            <WatchSubtitle
+              brand={watch.brand}
+              model={watch.model}
+              reference={watch.reference}
+            />
           </p>
           <ul class="cf-watch-meta" aria-label="Watch details">
             <li>
@@ -139,6 +141,44 @@ export const WatchNotFoundPage = ({ watchId }: { watchId: string }) => (
     <Footer />
   </Layout>
 );
+
+/**
+ * Subtitle row under the watch name on the public page. Joins brand,
+ * model, and "Ref <reference>" with " · " separators, skipping parts
+ * that are null/empty so the surrounding punctuation never dangles.
+ */
+function WatchSubtitle({
+  brand,
+  model,
+  reference,
+}: {
+  brand: string | null;
+  model: string | null;
+  reference: string | null;
+}) {
+  const parts: Array<{ key: string; label: string; emphasis: boolean }> = [];
+  if (brand) parts.push({ key: "brand", label: brand, emphasis: true });
+  if (model) parts.push({ key: "model", label: model, emphasis: false });
+  if (reference) {
+    parts.push({ key: "reference", label: `Ref ${reference}`, emphasis: false });
+  }
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={p.key}>
+          {i > 0 ? <span class="cf-watch-sub__sep"> · </span> : null}
+          {p.emphasis ? (
+            <strong>{p.label}</strong>
+          ) : p.key === "reference" ? (
+            <span class="cf-watch-sub__ref">{p.label}</span>
+          ) : (
+            <span>{p.label}</span>
+          )}
+        </span>
+      ))}
+    </>
+  );
+}
 
 function WatchPhoto({ watch }: { watch: PublicWatch }) {
   if (watch.has_image) {

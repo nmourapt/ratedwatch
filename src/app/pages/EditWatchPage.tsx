@@ -50,6 +50,7 @@ async function hydrateInitialValues(watch: Watch): Promise<WatchFormValues> {
     name: watch.name,
     brand: watch.brand ?? "",
     model: watch.model ?? "",
+    reference: watch.reference ?? "",
     notes: watch.notes ?? "",
     is_public: watch.is_public,
     movement,
@@ -99,10 +100,14 @@ export function EditWatchPage() {
         },
       };
     }
+    // Trim every free-text field; for `reference` we send the trimmed
+    // value directly (even empty string) so the PATCH handler can map
+    // "" → NULL and clear a previously-set reference.
     const body = {
       name: values.name.trim(),
       brand: values.brand.trim() || undefined,
       model: values.model.trim() || undefined,
+      reference: values.reference.trim(),
       movement_id: values.movement.id,
       notes: values.notes.trim() || undefined,
       is_public: values.is_public,

@@ -14,7 +14,22 @@ import { z } from "zod";
 
 const NAME_MAX = 100;
 const MODEL_MAX = 100;
+const REFERENCE_MAX = 50;
 const NOTES_MAX = 1000;
+
+// Reference numbers are short collector identifiers — "3570.50",
+// "IW3777-14", "M79030B-0001". They're trimmed + length-capped like
+// every other free-text field. Kept as a plain optional string so
+// `""` passes through; the route's create/update paths map empty
+// string → NULL so a user can clear a previously-set reference by
+// submitting an empty value (same pattern brand/model use).
+const optionalReference = z
+  .string()
+  .trim()
+  .max(REFERENCE_MAX, {
+    message: `Reference must be ${REFERENCE_MAX} characters or fewer`,
+  })
+  .optional();
 
 // Reused across create + update so a later switch to a single
 // "upsert"-style handler stays trivial. Partial() on update keeps
@@ -35,6 +50,7 @@ export const createWatchSchema = z.object({
     .trim()
     .max(MODEL_MAX, { message: `Model must be ${MODEL_MAX} characters or fewer` })
     .optional(),
+  reference: optionalReference,
   movement_id: z
     .string({ message: "Movement is required" })
     .trim()
@@ -68,6 +84,7 @@ export const watchResponseSchema = z.object({
   name: z.string(),
   brand: z.string().nullable(),
   model: z.string().nullable(),
+  reference: z.string().nullable(),
   movement_id: z.string().nullable(),
   movement_canonical_name: z.string().nullable(),
   custom_movement_name: z.string().nullable(),

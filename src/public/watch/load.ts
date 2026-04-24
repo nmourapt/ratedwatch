@@ -24,6 +24,7 @@ export interface PublicWatch {
   name: string;
   brand: string | null;
   model: string | null;
+  reference: string | null;
   movement_id: string | null;
   movement_canonical_name: string | null;
   owner_username: string;
@@ -60,6 +61,7 @@ export async function loadPublicWatch(
       "watches.name as name",
       "watches.brand as brand",
       "watches.model as model",
+      "watches.reference as reference",
       "watches.movement_id as movement_id",
       "watches.image_r2_key as image_r2_key",
       "movements.canonical_name as movement_canonical_name",
@@ -97,6 +99,7 @@ export async function loadPublicWatch(
         name: row.name,
         brand: row.brand,
         model: row.model,
+        reference: row.reference,
         movement_id: row.movement_status === "approved" ? row.movement_id : null,
         movement_canonical_name:
           row.movement_status === "approved" ? row.movement_canonical_name : null,
