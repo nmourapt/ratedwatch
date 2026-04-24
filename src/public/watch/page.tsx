@@ -306,12 +306,12 @@ function formatSignedSeconds(s: number): string {
 function WatchPageStyles() {
   const css = `
 .cf-watch-sub {
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   font-size: 1.125rem;
   margin: 0 0 16px;
 }
 .cf-watch-sub strong {
-  color: var(--cf-text);
+  color: var(--ink);
   font-weight: 500;
 }
 
@@ -323,13 +323,13 @@ function WatchPageStyles() {
   flex-wrap: wrap;
   gap: 16px 24px;
   font-size: 0.95rem;
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
 }
 .cf-watch-meta__label {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--cf-text-subtle);
+  color: var(--ink-subtle);
   margin-right: 6px;
 }
 
@@ -341,7 +341,7 @@ function WatchPageStyles() {
 }
 
 .cf-watch-empty {
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   margin: 0;
 }
 
@@ -355,10 +355,10 @@ function WatchPageStyles() {
 }
 
 .cf-watch-photo {
-  border: 1px solid var(--cf-border);
+  border: 1px solid var(--line);
   border-radius: var(--cf-radius-lg);
   overflow: hidden;
-  background: var(--cf-surface);
+  background: var(--surface);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
@@ -366,7 +366,7 @@ function WatchPageStyles() {
 }
 .cf-watch-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cf-watch-photo--placeholder {
-  color: var(--cf-text-subtle);
+  color: var(--ink-subtle);
   font-size: 0.95rem;
 }
 
@@ -376,8 +376,8 @@ function WatchPageStyles() {
   gap: 16px;
   margin: 0;
   padding: 24px;
-  background: var(--cf-surface);
-  border: 1px solid var(--cf-border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--cf-radius-lg);
 }
 @media (min-width: 768px) {
@@ -388,7 +388,7 @@ function WatchPageStyles() {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--cf-text-subtle);
+  color: var(--ink-subtle);
   margin-bottom: 4px;
 }
 .cf-watch-stats dd {
@@ -400,25 +400,25 @@ function WatchPageStyles() {
 .cf-deviation-chart {
   width: 100%;
   height: auto;
-  background: var(--cf-surface);
-  border: 1px solid var(--cf-border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--cf-radius-lg);
 }
 .cf-deviation-chart__axes line {
-  stroke: var(--cf-border);
+  stroke: var(--line);
   stroke-width: 1;
 }
 .cf-deviation-chart__line {
-  stroke: var(--cf-accent);
+  stroke: var(--accent);
   stroke-width: 2;
 }
 .cf-deviation-chart__dot {
-  fill: var(--cf-accent);
-  stroke: var(--cf-surface);
+  fill: var(--accent);
+  stroke: var(--surface);
   stroke-width: 1;
 }
 .cf-deviation-chart__dot--verified {
-  fill: var(--cf-accent-hover);
+  fill: var(--accent-hover);
   stroke-width: 2;
 }
 
@@ -430,16 +430,16 @@ function WatchPageStyles() {
 .cf-watch-history thead th {
   text-align: left;
   padding: 12px;
-  border-bottom: 1px solid var(--cf-border);
+  border-bottom: 1px solid var(--line);
   font-weight: 500;
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   font-size: 0.85rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .cf-watch-history tbody td {
   padding: 12px;
-  border-bottom: 1px solid var(--cf-border-light);
+  border-bottom: 1px solid var(--line-light);
   vertical-align: middle;
 }
 .cf-watch-history__num {
@@ -454,7 +454,7 @@ function WatchPageStyles() {
   gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
-  background: var(--cf-accent);
+  background: var(--accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;
@@ -462,7 +462,7 @@ function WatchPageStyles() {
 }
 .cf-lb-badge--muted {
   background: transparent;
-  color: var(--cf-text-subtle);
+  color: var(--ink-subtle);
 }
 .cf-lb-badge__check {
   font-weight: 700;

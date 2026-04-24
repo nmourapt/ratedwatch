@@ -103,14 +103,14 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
     <form
       onSubmit={handleSubmit}
       noValidate
-      className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5"
+      className="mb-6 rounded-lg border border-line bg-surface p-5"
     >
-      <h2 className="mb-4 text-sm font-medium text-cf-text">Log a reading</h2>
+      <h2 className="mb-4 text-sm font-medium text-ink">Log a reading</h2>
 
       {error ? (
         <p
           role="alert"
-          className="mb-4 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-4 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
         >
           {error}
         </p>
@@ -118,10 +118,10 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block text-cf-text-muted">
+          <span className="mb-1 block text-ink-muted">
             Deviation (seconds){" "}
             <span
-              className="text-cf-text-subtle"
+              className="text-ink-subtle"
               title="Positive if watch is AHEAD of reference time; negative if behind"
             >
               ⓘ
@@ -136,23 +136,23 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
             disabled={isBaseline || submitting}
             placeholder="e.g. 2.5 or -1.3"
             aria-invalid={!!fieldErrors.deviation_seconds}
-            className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-mono text-sm text-cf-text placeholder:text-cf-text-subtle focus:border-cf-accent focus:outline-none disabled:opacity-60"
+            className="w-full rounded-md border border-line bg-canvas px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none disabled:opacity-60"
           />
           {fieldErrors.deviation_seconds ? (
-            <span className="mt-1 block text-xs text-cf-accent">
+            <span className="mt-1 block text-xs text-accent">
               {fieldErrors.deviation_seconds}
             </span>
           ) : null}
         </label>
 
         <label className="block text-sm">
-          <span className="mb-1 block text-cf-text-muted">Reference time</span>
+          <span className="mb-1 block text-ink-muted">Reference time</span>
           <input
             type="datetime-local"
             value={refInput}
             onChange={(e) => setRefInput(e.target.value)}
             disabled={submitting}
-            className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-mono text-sm text-cf-text focus:border-cf-accent focus:outline-none disabled:opacity-60"
+            className="w-full rounded-md border border-line bg-canvas px-3 py-2 font-mono text-sm text-ink focus:border-accent focus:outline-none disabled:opacity-60"
           />
         </label>
       </div>
@@ -163,25 +163,25 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
           checked={isBaseline}
           onChange={(e) => setIsBaseline(e.target.checked)}
           disabled={submitting}
-          className="mt-0.5 h-4 w-4 rounded border-cf-border text-cf-accent focus:ring-cf-accent"
+          className="mt-0.5 h-4 w-4 rounded border-line text-accent focus:ring-accent"
         />
         <span>
-          <span className="text-cf-text">This is a baseline</span>
-          <span className="ml-1 text-cf-text-muted">
+          <span className="text-ink">This is a baseline</span>
+          <span className="ml-1 text-ink-muted">
             — watch just set to the exact time; deviation = 0
           </span>
         </span>
       </label>
 
       <label className="mb-4 block text-sm">
-        <span className="mb-1 block text-cf-text-muted">Notes (optional)</span>
+        <span className="mb-1 block text-ink-muted">Notes (optional)</span>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           disabled={submitting}
           rows={2}
           maxLength={500}
-          className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 text-sm text-cf-text placeholder:text-cf-text-subtle focus:border-cf-accent focus:outline-none disabled:opacity-60"
+          className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none disabled:opacity-60"
           placeholder="e.g. worn overnight face-up, 20ºC"
         />
       </label>
@@ -189,7 +189,7 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
       <button
         type="submit"
         disabled={submitting}
-        className="inline-flex items-center justify-center rounded-full border border-cf-accent bg-cf-accent px-5 py-2.5 text-sm font-medium text-cf-bg transition-colors hover:bg-cf-accent/90 disabled:opacity-60"
+        className="inline-flex items-center justify-center rounded-full border border-accent bg-accent px-5 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-accent/90 disabled:opacity-60"
       >
         {submitting ? "Logging…" : "Log reading"}
       </button>

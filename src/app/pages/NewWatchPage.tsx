@@ -38,10 +38,10 @@ export function NewWatchPage() {
 
   return (
     <section className="mx-auto max-w-2xl">
-      <h1 className="mb-2 text-4xl font-medium tracking-tight text-cf-text">
+      <h1 className="mb-2 text-4xl font-medium tracking-tight text-ink">
         Add a watch
       </h1>
-      <p className="mb-6 text-cf-text-muted">
+      <p className="mb-6 text-ink-muted">
         Add one of your watches to start tracking accuracy. You can always rename or
         toggle visibility later.
       </p>
@@ -53,7 +53,7 @@ export function NewWatchPage() {
         secondaryAction={
           <Link
             to="/app/dashboard"
-            className="text-sm text-cf-text-muted hover:text-cf-text"
+            className="text-sm text-ink-muted hover:text-ink"
           >
             Cancel
           </Link>

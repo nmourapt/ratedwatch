@@ -121,7 +121,7 @@ export function EditWatchPage() {
   if (state.kind === "loading") {
     return (
       <section className="mx-auto max-w-2xl">
-        <p className="font-mono text-sm text-cf-text-subtle">Loading watch…</p>
+        <p className="font-mono text-sm text-ink-subtle">Loading watch…</p>
       </section>
     );
   }
@@ -130,13 +130,13 @@ export function EditWatchPage() {
       <section className="mx-auto max-w-2xl">
         <p
           role="alert"
-          className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+          className="rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
         >
           {state.message}
         </p>
         <Link
           to="/app/dashboard"
-          className="mt-4 inline-block text-sm text-cf-accent hover:underline"
+          className="mt-4 inline-block text-sm text-accent hover:underline"
         >
           ← Back to dashboard
         </Link>
@@ -146,10 +146,10 @@ export function EditWatchPage() {
 
   return (
     <section className="mx-auto max-w-2xl">
-      <h1 className="mb-2 text-4xl font-medium tracking-tight text-cf-text">
+      <h1 className="mb-2 text-4xl font-medium tracking-tight text-ink">
         Edit watch
       </h1>
-      <p className="mb-6 text-cf-text-muted">
+      <p className="mb-6 text-ink-muted">
         Update details, movement, or visibility. Readings are not affected.
       </p>
       <WatchForm
@@ -160,7 +160,7 @@ export function EditWatchPage() {
         secondaryAction={
           <Link
             to={`/app/watches/${state.watch.id}`}
-            className="text-sm text-cf-text-muted hover:text-cf-text"
+            className="text-sm text-ink-muted hover:text-ink"
           >
             Cancel
           </Link>

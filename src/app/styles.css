@@ -44,8 +44,11 @@
   --color-line: #e5e5e5;
   --color-line-subtle: rgba(0, 0, 0, 0.05);
 
-  /* Accent (primary CTA) */
+  /* Accent (primary CTA). `accent-hover` is a near-black lift — most
+   * pill buttons prefer opacity:0.88 via CSS, but call sites that stick
+   * to bg-utilities still get a visible state change. */
   --color-accent: #000000;
+  --color-accent-hover: #1a1a1a;
   --color-accent-fg: #ffffff;
 
   /* Shadows — multi-layer stacks at sub-0.1 opacity. Tailwind v4
@@ -99,6 +102,7 @@
     --color-line-subtle: rgba(255, 255, 255, 0.05);
 
     --color-accent: #f5f5f5;
+    --color-accent-hover: #ffffff;
     --color-accent-fg: #0a0a0a;
 
     /* Dark-mode shadow overrides: black shadows disappear on near-black

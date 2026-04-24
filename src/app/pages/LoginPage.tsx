@@ -30,9 +30,9 @@ export function LoginPage() {
 
   return (
     <section className="mx-auto max-w-md">
-      <h1 className="mb-6 text-4xl font-medium tracking-tight text-cf-text">Sign in</h1>
+      <h1 className="mb-6 text-4xl font-medium tracking-tight text-ink">Sign in</h1>
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
-        <label className="flex flex-col gap-1 text-sm font-medium text-cf-text">
+        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
           Email
           <input
             type="email"
@@ -40,10 +40,10 @@ export function LoginPage() {
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
+            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm font-medium text-cf-text">
+        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
           Password
           <input
             type="password"
@@ -52,13 +52,13 @@ export function LoginPage() {
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
+            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
           />
         </label>
         {error ? (
           <p
             role="alert"
-            className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+            className="rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
           >
             {error}
           </p>
@@ -66,7 +66,7 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-2 inline-flex items-center justify-center rounded-full bg-cf-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-accent-hover disabled:opacity-60"
+          className="mt-2 inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-accent-hover disabled:opacity-60"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
@@ -74,17 +74,17 @@ export function LoginPage() {
       {/* OAuth divider + Google button. The divider is decorative
           (aria-hidden) so screen readers just hear the two actions. */}
       <div
-        className="my-6 flex items-center gap-3 text-xs uppercase tracking-wide text-cf-text-muted"
+        className="my-6 flex items-center gap-3 text-xs uppercase tracking-wide text-ink-muted"
         aria-hidden="true"
       >
-        <span className="h-px flex-1 bg-cf-border" />
+        <span className="h-px flex-1 bg-line" />
         <span>or</span>
-        <span className="h-px flex-1 bg-cf-border" />
+        <span className="h-px flex-1 bg-line" />
       </div>
       <GoogleSignInButton label="Continue with Google" />
-      <p className="mt-6 text-sm text-cf-text-muted">
+      <p className="mt-6 text-sm text-ink-muted">
         New here?{" "}
-        <Link to="/app/register" className="text-cf-accent hover:underline">
+        <Link to="/app/register" className="text-accent hover:underline">
           Create an account
         </Link>
         .

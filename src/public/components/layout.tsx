@@ -47,6 +47,7 @@ function DesignTokensStyle() {
   --color-line: ${l.line};
   --color-line-subtle: ${l.lineSubtle};
   --color-accent: ${l.accent};
+  --color-accent-hover: ${l.accentHover};
   --color-accent-fg: ${l.accentFg};
 
   --shadow-inset-edge: rgba(0, 0, 0, 0.075) 0 0 0 0.5px inset;
@@ -84,6 +85,7 @@ function DesignTokensStyle() {
     --color-line: ${d.line};
     --color-line-subtle: ${d.lineSubtle};
     --color-accent: ${d.accent};
+    --color-accent-hover: ${d.accentHover};
     --color-accent-fg: ${d.accentFg};
 
     /* Dark-mode shadows: swap black for thin warm-white rings —

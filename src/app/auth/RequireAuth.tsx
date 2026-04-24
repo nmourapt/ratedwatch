@@ -12,7 +12,7 @@ export function RequireAuth() {
   if (status === "loading") {
     return (
       <section className="mx-auto flex min-h-[60vh] max-w-[1200px] items-center justify-center">
-        <p className="font-mono text-sm text-cf-text-subtle">Checking session…</p>
+        <p className="font-mono text-sm text-ink-subtle">Checking session…</p>
       </section>
     );
   }

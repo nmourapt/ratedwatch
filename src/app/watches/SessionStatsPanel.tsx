@@ -37,8 +37,8 @@ function formatDeviation(secs: number): string {
 export function SessionStatsPanel({ stats }: Props) {
   if (!stats || stats.reading_count === 0) {
     return (
-      <div className="mb-6 rounded-lg border border-cf-border bg-cf-surface px-5 py-4 text-sm text-cf-text-muted">
-        <p className="mb-1 font-medium text-cf-text">No readings yet</p>
+      <div className="mb-6 rounded-lg border border-line bg-surface px-5 py-4 text-sm text-ink-muted">
+        <p className="mb-1 font-medium text-ink">No readings yet</p>
         <p>
           Log your first reading below. Mark it as a baseline to start a tracking session.
         </p>
@@ -52,25 +52,25 @@ export function SessionStatsPanel({ stats }: Props) {
   const showAvgDrift = stats.reading_count >= 2 && stats.avg_drift_rate_spd !== null;
 
   return (
-    <div className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5">
+    <div className="mb-6 rounded-lg border border-line bg-surface p-5">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h2 className="mr-2 text-sm font-medium text-cf-text">
+        <h2 className="mr-2 text-sm font-medium text-ink">
           {hasSession ? "Current session" : "Readings logged"}
         </h2>
         {hasSession && stats.eligible ? (
-          <span className="rounded-full border border-cf-accent/40 bg-cf-accent/10 px-2.5 py-0.5 text-xs font-medium text-cf-accent">
+          <span className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
             Eligible
           </span>
         ) : hasSession ? (
           <span
-            className="rounded-full border border-cf-border bg-cf-bg px-2.5 py-0.5 text-xs font-medium text-cf-text-muted"
+            className="rounded-full border border-line bg-canvas px-2.5 py-0.5 text-xs font-medium text-ink-muted"
             title="Eligible for ranking after 7 days and 3 readings"
           >
             Not eligible yet
           </span>
         ) : null}
         {stats.verified_badge ? (
-          <span className="rounded-full border border-cf-accent/40 bg-cf-accent/10 px-2.5 py-0.5 text-xs font-medium text-cf-accent">
+          <span className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
             Verified
           </span>
         ) : null}
@@ -78,35 +78,35 @@ export function SessionStatsPanel({ stats }: Props) {
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-cf-text-muted">Session length</dt>
-          <dd className="mt-0.5 font-mono text-base text-cf-text">
+          <dt className="text-ink-muted">Session length</dt>
+          <dd className="mt-0.5 font-mono text-base text-ink">
             {hasSession ? formatDays(stats.session_days) : "—"}
           </dd>
         </div>
         <div>
-          <dt className="text-cf-text-muted">Readings</dt>
-          <dd className="mt-0.5 font-mono text-base text-cf-text">
+          <dt className="text-ink-muted">Readings</dt>
+          <dd className="mt-0.5 font-mono text-base text-ink">
             {stats.reading_count}
           </dd>
         </div>
         {showAvgDrift ? (
           <div>
-            <dt className="text-cf-text-muted">Average drift</dt>
-            <dd className="mt-0.5 font-mono text-base text-cf-text">
+            <dt className="text-ink-muted">Average drift</dt>
+            <dd className="mt-0.5 font-mono text-base text-ink">
               {formatDrift(stats.avg_drift_rate_spd!)}
             </dd>
           </div>
         ) : null}
         <div>
-          <dt className="text-cf-text-muted">Verified ratio</dt>
-          <dd className="mt-0.5 font-mono text-base text-cf-text">
+          <dt className="text-ink-muted">Verified ratio</dt>
+          <dd className="mt-0.5 font-mono text-base text-ink">
             {Math.round(stats.verified_ratio * 100)}%
           </dd>
         </div>
         {hasSession ? (
           <div>
-            <dt className="text-cf-text-muted">Latest deviation</dt>
-            <dd className="mt-0.5 font-mono text-base text-cf-text">
+            <dt className="text-ink-muted">Latest deviation</dt>
+            <dd className="mt-0.5 font-mono text-base text-ink">
               {formatDeviation(stats.latest_deviation_seconds)}
             </dd>
           </div>

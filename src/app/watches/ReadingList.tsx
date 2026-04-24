@@ -65,13 +65,13 @@ export function ReadingList({ readings, perInterval, onDeleted }: Props) {
   }
 
   return (
-    <div className="mb-6 overflow-hidden rounded-lg border border-cf-border bg-cf-surface">
-      <div className="border-b border-cf-border px-5 py-3 text-sm font-medium text-cf-text">
+    <div className="mb-6 overflow-hidden rounded-lg border border-line bg-surface">
+      <div className="border-b border-line px-5 py-3 text-sm font-medium text-ink">
         Reading log
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-cf-bg text-left text-xs uppercase tracking-wide text-cf-text-subtle">
+          <thead className="bg-canvas text-left text-xs uppercase tracking-wide text-ink-subtle">
             <tr>
               <th className="px-4 py-2">Reference time</th>
               <th className="px-4 py-2">Deviation</th>
@@ -87,26 +87,26 @@ export function ReadingList({ readings, perInterval, onDeleted }: Props) {
               return (
                 <tr
                   key={r.id}
-                  className="border-t border-cf-border align-top first:border-t-0"
+                  className="border-t border-line align-top first:border-t-0"
                 >
-                  <td className="px-4 py-3 font-mono text-xs text-cf-text">
+                  <td className="px-4 py-3 font-mono text-xs text-ink">
                     {formatTime(r.reference_timestamp)}
                     {r.is_baseline ? (
-                      <span className="ml-2 rounded-full border border-cf-accent/40 bg-cf-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-cf-accent">
+                      <span className="ml-2 rounded-full border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
                         baseline
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 font-mono text-cf-text">
+                  <td className="px-4 py-3 font-mono text-ink">
                     {formatDeviation(r.deviation_seconds)}
                   </td>
-                  <td className="px-4 py-3 font-mono text-cf-text-muted">
+                  <td className="px-4 py-3 font-mono text-ink-muted">
                     {drift === undefined ? "—" : formatDrift(drift)}
                   </td>
-                  <td className="px-4 py-3 text-cf-text-muted">
+                  <td className="px-4 py-3 text-ink-muted">
                     {r.verified ? "✓" : "—"}
                   </td>
-                  <td className="px-4 py-3 text-cf-text-muted">
+                  <td className="px-4 py-3 text-ink-muted">
                     {r.notes ? r.notes : ""}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -114,7 +114,7 @@ export function ReadingList({ readings, perInterval, onDeleted }: Props) {
                       type="button"
                       onClick={() => handleDelete(r.id)}
                       disabled={deletingId === r.id}
-                      className="text-xs text-cf-text-muted transition-colors hover:text-cf-accent disabled:opacity-60"
+                      className="text-xs text-ink-muted transition-colors hover:text-accent disabled:opacity-60"
                     >
                       {deletingId === r.id ? "Deleting…" : "Delete"}
                     </button>

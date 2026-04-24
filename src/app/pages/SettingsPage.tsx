@@ -70,20 +70,20 @@ export function SettingsPage() {
 
   return (
     <section className="mx-auto max-w-2xl">
-      <h1 className="mb-6 text-4xl font-medium tracking-tight text-cf-text">Settings</h1>
+      <h1 className="mb-6 text-4xl font-medium tracking-tight text-ink">Settings</h1>
 
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
-        <label className="flex flex-col gap-1 text-sm font-medium text-cf-text">
+        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
           Email
           <input
             type="email"
             readOnly
             value={user?.email ?? ""}
-            className="rounded-md border border-cf-border bg-cf-surface px-3 py-2 font-sans text-base text-cf-text-muted outline-none"
+            className="rounded-md border border-line bg-surface px-3 py-2 font-sans text-base text-ink-muted outline-none"
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm font-medium text-cf-text">
+        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
           Username
           <input
             type="text"
@@ -106,14 +106,14 @@ export function SettingsPage() {
             }}
             aria-invalid={fieldError ? true : undefined}
             aria-describedby={fieldError ? "username-error" : undefined}
-            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
+            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
           />
           {fieldError ? (
-            <span id="username-error" role="alert" className="text-sm text-cf-accent">
+            <span id="username-error" role="alert" className="text-sm text-accent">
               {fieldError}
             </span>
           ) : (
-            <span className="text-sm text-cf-text-muted">
+            <span className="text-sm text-ink-muted">
               2–30 characters. Letters, numbers, <code>_</code>, <code>.</code>,{" "}
               <code>-</code>.
             </span>
@@ -123,7 +123,7 @@ export function SettingsPage() {
         {status.kind === "error" ? (
           <p
             role="alert"
-            className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+            className="rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
           >
             {status.message}
           </p>
@@ -131,7 +131,7 @@ export function SettingsPage() {
         {status.kind === "success" ? (
           <p
             role="status"
-            className="rounded-md border border-cf-border bg-cf-surface px-3 py-2 text-sm text-cf-text"
+            className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink"
           >
             {status.message}
           </p>
@@ -144,7 +144,7 @@ export function SettingsPage() {
             status.kind === "submitting" ||
             username.trim() === (user?.username ?? "")
           }
-          className="mt-2 inline-flex items-center justify-center self-start rounded-full bg-cf-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-accent-hover disabled:opacity-60"
+          className="mt-2 inline-flex items-center justify-center self-start rounded-full bg-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-accent-hover disabled:opacity-60"
         >
           {status.kind === "submitting" ? "Saving…" : "Save changes"}
         </button>

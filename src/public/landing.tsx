@@ -49,7 +49,7 @@ export const LandingPage = ({ topVerified = [] }: LandingPageProps) => (
       <section class="cf-container cf-section" aria-labelledby="top-verified-title">
         <h2
           id="top-verified-title"
-          style="margin:0 0 24px;font-size:1.25rem;font-weight:500;letter-spacing:-0.02em;color:var(--cf-text-muted)"
+          style="margin:0 0 24px;font-size:1.25rem;font-weight:500;letter-spacing:-0.02em;color:var(--ink-muted)"
         >
           Top verified watches
         </h2>
@@ -71,13 +71,13 @@ export const LandingPage = ({ topVerified = [] }: LandingPageProps) => (
               >
                 <p style="margin:0 0 8px">
                   <a href={`/m/${w.movement_id}`}>{w.movement_canonical_name}</a>
-                  <span style="color:var(--cf-text-subtle)"> · </span>
+                  <span style="color:var(--ink-subtle)"> · </span>
                   <a href={`/u/${w.owner_username}`}>@{w.owner_username}</a>
                 </p>
                 <p style="margin:0;font-family:var(--cf-font-mono)">
                   Drift{" "}
                   <strong>{formatDriftRate(w.session_stats.avg_drift_rate_spd)}</strong>{" "}
-                  <span style="color:var(--cf-text-subtle)">
+                  <span style="color:var(--ink-subtle)">
                     · rank #{String(w.rank)}
                   </span>
                 </p>

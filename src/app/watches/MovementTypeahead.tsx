@@ -116,15 +116,15 @@ export function MovementTypeahead({
   }
 
   return (
-    <div className="flex flex-col gap-1 text-sm font-medium text-cf-text">
+    <div className="flex flex-col gap-1 text-sm font-medium text-ink">
       <label htmlFor={inputId}>{label}</label>
 
       {selection ? (
-        <div className="flex items-center gap-2 rounded-md border border-cf-border bg-cf-surface px-3 py-2">
-          <span className="flex-1 text-cf-text">
+        <div className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2">
+          <span className="flex-1 text-ink">
             {selection.canonical_name}
             {selection.status === "pending" ? (
-              <span className="ml-2 rounded-full bg-cf-accent/20 px-2 py-0.5 text-xs text-cf-accent">
+              <span className="ml-2 rounded-full bg-accent/20 px-2 py-0.5 text-xs text-accent">
                 Pending approval
               </span>
             ) : null}
@@ -132,7 +132,7 @@ export function MovementTypeahead({
           <button
             type="button"
             onClick={handleClear}
-            className="text-xs text-cf-accent hover:underline"
+            className="text-xs text-accent hover:underline"
           >
             Change
           </button>
@@ -160,18 +160,18 @@ export function MovementTypeahead({
             placeholder="Search calibers — e.g. ETA 2892-A2"
             aria-invalid={errorMessage ? true : undefined}
             aria-describedby={errorMessage ? `${inputId}-error` : undefined}
-            className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
+            className="w-full rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
           />
 
           {open && query.trim().length > 0 ? (
             <ul
               role="listbox"
-              className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-auto rounded-md border border-cf-border bg-cf-bg shadow-lg"
+              className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-auto rounded-md border border-line bg-canvas shadow-lg"
             >
               {loading ? (
-                <li className="px-3 py-2 text-sm text-cf-text-muted">Searching…</li>
+                <li className="px-3 py-2 text-sm text-ink-muted">Searching…</li>
               ) : options.length === 0 && suggestions.length === 0 ? (
-                <li className="px-3 py-2 text-sm text-cf-text-muted">
+                <li className="px-3 py-2 text-sm text-ink-muted">
                   No calibers match “{query.trim()}”.{" "}
                   <button
                     type="button"
@@ -180,7 +180,7 @@ export function MovementTypeahead({
                       setSubmitOpen(true);
                       setOpen(false);
                     }}
-                    className="text-cf-accent hover:underline"
+                    className="text-accent hover:underline"
                   >
                     Can&rsquo;t find it? Submit new movement
                   </button>
@@ -198,19 +198,19 @@ export function MovementTypeahead({
                           event.preventDefault();
                           handleSelect(option);
                         }}
-                        className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-cf-surface"
+                        className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-surface"
                       >
-                        <span className="font-sans text-base text-cf-text">
+                        <span className="font-sans text-base text-ink">
                           {option.canonical_name}
                         </span>
-                        <span className="text-xs text-cf-text-muted">
+                        <span className="text-xs text-ink-muted">
                           {option.manufacturer} · {option.caliber} · {option.type}
                         </span>
                       </button>
                     </li>
                   ))}
                   {suggestions.length > 0 ? (
-                    <li className="border-t border-cf-border bg-cf-surface px-3 py-1 text-xs font-medium uppercase tracking-wide text-cf-text-muted">
+                    <li className="border-t border-line bg-surface px-3 py-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
                       Your pending submissions
                     </li>
                   ) : null}
@@ -222,21 +222,21 @@ export function MovementTypeahead({
                           event.preventDefault();
                           handleSelect(option);
                         }}
-                        className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-cf-surface"
+                        className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-surface"
                       >
-                        <span className="font-sans text-base text-cf-text">
+                        <span className="font-sans text-base text-ink">
                           {option.canonical_name}
-                          <span className="ml-2 rounded-full bg-cf-accent/20 px-2 py-0.5 text-xs text-cf-accent">
+                          <span className="ml-2 rounded-full bg-accent/20 px-2 py-0.5 text-xs text-accent">
                             Pending
                           </span>
                         </span>
-                        <span className="text-xs text-cf-text-muted">
+                        <span className="text-xs text-ink-muted">
                           {option.manufacturer} · {option.caliber} · {option.type}
                         </span>
                       </button>
                     </li>
                   ))}
-                  <li className="border-t border-cf-border px-3 py-2 text-sm">
+                  <li className="border-t border-line px-3 py-2 text-sm">
                     <button
                       type="button"
                       onMouseDown={(event) => {
@@ -244,7 +244,7 @@ export function MovementTypeahead({
                         setSubmitOpen(true);
                         setOpen(false);
                       }}
-                      className="text-cf-accent hover:underline"
+                      className="text-accent hover:underline"
                     >
                       Can&rsquo;t find it? Submit new movement
                     </button>
@@ -267,7 +267,7 @@ export function MovementTypeahead({
       {submitNotice ? (
         <p
           role="status"
-          className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+          className="rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
         >
           {submitNotice.kind === "created" ? (
             <>
@@ -284,11 +284,11 @@ export function MovementTypeahead({
       ) : null}
 
       {errorMessage ? (
-        <span id={`${inputId}-error`} role="alert" className="text-sm text-cf-accent">
+        <span id={`${inputId}-error`} role="alert" className="text-sm text-accent">
           {errorMessage}
         </span>
       ) : (
-        <span className="text-sm text-cf-text-muted">
+        <span className="text-sm text-ink-muted">
           Movements power the accuracy leaderboards.
         </span>
       )}
