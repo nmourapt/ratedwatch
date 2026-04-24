@@ -176,6 +176,50 @@
   color-scheme: light;
 }
 
+/* Tailwind v4 `.shadow-<name>` utility overrides for dark-mode
+ * support. Tailwind compiles `@theme { --shadow-<name>: … }` into
+ * utility classes whose box-shadow values are SNAPSHOTTED at build
+ * time as the LIGHT-mode literal — the @media (prefers-color-scheme:
+ * dark) :root block above redefines --shadow-* to warm-white rings,
+ * but Tailwind's emitted utility ignores that override because it
+ * was baked in at build time. Call sites like
+ * `<button className="hover:shadow-lift">` therefore show invisible
+ * black shadows on near-black surfaces in dark mode.
+ *
+ * `@utility` is Tailwind v4's first-class hook for (re)defining a
+ * utility — Tailwind handles variant generation (hover, md, etc.)
+ * automatically and the override emerges later in the cascade than
+ * the @theme-generated rule, winning by source order. The body
+ * resolves `var(--shadow-<name>)` at runtime so prefers-color-scheme
+ * picks up the dark-mode redefinition.
+ *
+ * Tailwind v4 keeps the @theme `--shadow-*` tokens available as
+ * :root,:host CSS custom properties (alongside snapshotting them
+ * into utility-class literals), so `var(--shadow-<name>)` resolves
+ * to the light-mode value at the cascade root and to the warm-white
+ * variant under the dark @media query.
+ *
+ * Scope: only the utilities actually referenced as Tailwind classes
+ * in src/app/**\/*.tsx are overridden — `shadow-card`,
+ * `shadow-inset-edge`, and `hover:shadow-lift`. shadow-warm,
+ * shadow-soft, and shadow-outline are only consumed via
+ * `box-shadow: var(--shadow-<name>)` from .cf-* classes
+ * (src/public/**) and other plain-CSS rules, which already read
+ * the runtime CSS var and pick up the dark-mode override correctly.
+ *
+ * The base `shadow-lift` is included for parity even though only
+ * `hover:shadow-lift` is currently used — keeps the override
+ * surface consistent and future-proofs a non-hover use. */
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+@utility shadow-inset-edge {
+  box-shadow: var(--shadow-inset-edge);
+}
+@utility shadow-lift {
+  box-shadow: var(--shadow-lift);
+}
+
 html,
 body {
   background: var(--color-canvas);
