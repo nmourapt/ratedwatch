@@ -306,12 +306,12 @@ function formatSignedSeconds(s: number): string {
 function WatchPageStyles() {
   const css = `
 .cf-watch-sub {
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font-size: 1.125rem;
   margin: 0 0 16px;
 }
 .cf-watch-sub strong {
-  color: var(--ink);
+  color: var(--color-ink);
   font-weight: 500;
 }
 
@@ -323,13 +323,13 @@ function WatchPageStyles() {
   flex-wrap: wrap;
   gap: 16px 24px;
   font-size: 0.95rem;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
 }
 .cf-watch-meta__label {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
   margin-right: 6px;
 }
 
@@ -341,7 +341,7 @@ function WatchPageStyles() {
 }
 
 .cf-watch-empty {
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   margin: 0;
 }
 
@@ -355,10 +355,10 @@ function WatchPageStyles() {
 }
 
 .cf-watch-photo {
-  border: 1px solid var(--line);
-  border-radius: var(--cf-radius-lg);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--surface);
+  background: var(--color-surface);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
@@ -366,7 +366,7 @@ function WatchPageStyles() {
 }
 .cf-watch-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cf-watch-photo--placeholder {
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
   font-size: 0.95rem;
 }
 
@@ -376,9 +376,9 @@ function WatchPageStyles() {
   gap: 16px;
   margin: 0;
   padding: 24px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--cf-radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
 }
 @media (min-width: 768px) {
   .cf-watch-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -388,37 +388,37 @@ function WatchPageStyles() {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
   margin-bottom: 4px;
 }
 .cf-watch-stats dd {
   margin: 0;
-  font-family: var(--cf-font-mono);
+  font-family: var(--font-mono);
   font-size: 1rem;
 }
 
 .cf-deviation-chart {
   width: 100%;
   height: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--cf-radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
 }
 .cf-deviation-chart__axes line {
-  stroke: var(--line);
+  stroke: var(--color-line);
   stroke-width: 1;
 }
 .cf-deviation-chart__line {
-  stroke: var(--accent);
+  stroke: var(--color-accent);
   stroke-width: 2;
 }
 .cf-deviation-chart__dot {
-  fill: var(--accent);
-  stroke: var(--surface);
+  fill: var(--color-accent);
+  stroke: var(--color-surface);
   stroke-width: 1;
 }
 .cf-deviation-chart__dot--verified {
-  fill: var(--accent-hover);
+  fill: var(--color-accent-hover);
   stroke-width: 2;
 }
 
@@ -430,20 +430,20 @@ function WatchPageStyles() {
 .cf-watch-history thead th {
   text-align: left;
   padding: 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--color-line);
   font-weight: 500;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font-size: 0.85rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .cf-watch-history tbody td {
   padding: 12px;
-  border-bottom: 1px solid var(--line-light);
+  border-bottom: 1px solid var(--color-line-subtle);
   vertical-align: middle;
 }
 .cf-watch-history__num {
-  font-family: var(--cf-font-mono);
+  font-family: var(--font-mono);
   text-align: right;
   white-space: nowrap;
 }
@@ -453,8 +453,8 @@ function WatchPageStyles() {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border-radius: var(--cf-radius-full);
-  background: var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;
@@ -462,7 +462,7 @@ function WatchPageStyles() {
 }
 .cf-lb-badge--muted {
   background: transparent;
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
 }
 .cf-lb-badge__check {
   font-weight: 700;

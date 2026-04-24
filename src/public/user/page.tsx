@@ -172,15 +172,15 @@ function WatchCard({ watch }: { watch: import("./load").ProfileWatchCard }) {
 function UserPageStyles() {
   const css = `
 .cf-user-meta {
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font-size: 1rem;
   margin: 0;
 }
 .cf-user-meta code {
-  font-family: var(--cf-font-mono);
-  background: var(--surface);
+  font-family: var(--font-mono);
+  background: var(--color-surface);
   padding: 1px 6px;
-  border-radius: var(--cf-radius-sm);
+  border-radius: var(--radius-tight);
 }
 
 .cf-user-grid {
@@ -198,17 +198,17 @@ function UserPageStyles() {
 .cf-user-card {
   position: relative;
   display: block;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--cf-radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
   padding: 24px;
-  color: var(--ink);
+  color: var(--color-ink);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .cf-user-card:hover {
-  border-color: var(--accent);
-  background: var(--surface-inset);
-  color: var(--ink);
+  border-color: var(--color-accent);
+  background: var(--color-surface-inset);
+  color: var(--color-ink);
 }
 .cf-user-card__title {
   font-size: 1.125rem;
@@ -217,12 +217,12 @@ function UserPageStyles() {
   margin: 0 0 4px;
 }
 .cf-user-card__movement {
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font-size: 0.9rem;
   margin-bottom: 16px;
 }
 .cf-user-card__movement a { color: inherit; }
-.cf-user-card__movement a:hover { color: var(--accent); }
+.cf-user-card__movement a:hover { color: var(--color-accent); }
 
 .cf-user-card__stats {
   display: grid;
@@ -235,12 +235,12 @@ function UserPageStyles() {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
   margin-bottom: 4px;
 }
 .cf-user-card__stats dd {
   margin: 0;
-  font-family: var(--cf-font-mono);
+  font-family: var(--font-mono);
   font-size: 0.9rem;
 }
 
@@ -249,8 +249,8 @@ function UserPageStyles() {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border-radius: var(--cf-radius-full);
-  background: var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;
@@ -258,7 +258,7 @@ function UserPageStyles() {
 }
 .cf-lb-badge--muted {
   background: transparent;
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
 }
 .cf-lb-badge__check {
   font-weight: 700;
