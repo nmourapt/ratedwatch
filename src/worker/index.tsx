@@ -8,7 +8,7 @@ import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
 import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
 import { logEvent } from "@/observability/events";
-import { withSentry } from "@/observability/sentry";
+import { captureException, withSentry } from "@/observability/sentry";
 import { LandingPage } from "@/public/landing";
 import { LeaderboardPage } from "@/public/leaderboard/page";
 import { buildSetCookie, parseCookie } from "@/public/lib/cookie";
@@ -35,6 +35,31 @@ type Bindings = AuthEnv & {
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Hono catches handler errors internally and returns 500 — the
+// exception never reaches the outer fetch handler where
+// Sentry.withSentry's auto-capture lives. Route Hono's onError hook
+// through captureException so errors still land in Sentry with route
+// context. Return the default 500 response afterwards (Hono's default
+// behaviour) so we don't regress error responses.
+app.onError((err, c) => {
+  const user = (c.get as (k: string) => { id?: string } | undefined)("user");
+  const flushPromise = captureException(err, {
+    route: c.req.routePath ?? c.req.path,
+    method: c.req.method,
+    userId: user?.id ?? null,
+  });
+  // Defer Sentry's HTTP POST to after-response via waitUntil so the
+  // user's 500 isn't blocked by Sentry ingestion latency, but the
+  // Worker isolate stays alive long enough for Sentry's transport
+  // to actually send. Without this, @sentry/cloudflare queues the
+  // event internally but the Worker terminates before the outbound
+  // request completes, silently dropping the event.
+  if (flushPromise) {
+    c.executionCtx.waitUntil(flushPromise);
+  }
+  return c.text("Internal Server Error", 500);
+});
 
 // ---- Verified-filter cookie helpers -------------------------------
 //

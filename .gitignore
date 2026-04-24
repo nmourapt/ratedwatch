@@ -44,3 +44,6 @@ infra/terraform/tfplan
 infra/terraform/*.tfplan
 # Keep .terraform.lock.hcl under version control.
 
+
+# Design preview (pre-palette-swap eyeballing)
+design-preview.html
