@@ -41,7 +41,9 @@
       "/w/*",
       "/out/*",
       "/api/*",
-      "/images/*"
+      "/images/*",
+      "/robots.txt",
+      "/sitemap.xml"
     ]
   },
 
