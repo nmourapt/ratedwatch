@@ -91,9 +91,21 @@ export function WatchForm({
     }
   }
 
+  // Shared class fragments so the 4 text inputs + textarea stay in
+  // lockstep. Focus ring is soft black (10 % opacity) per DESIGN.md
+  // section 6; errored state uses a subtle red hue without a loud box.
+  const fieldBase =
+    "rounded-md bg-canvas px-3.5 py-2.5 font-sans text-base text-ink shadow-inset-edge outline-none transition-colors focus:outline-none placeholder:text-ink-subtle";
+  const fieldIdleCx =
+    "border border-line focus:border-ink focus:ring-2 focus:ring-black/10";
+  const fieldErrorCx =
+    "border border-accent/60 focus:border-accent focus:ring-2 focus:ring-red-500/20";
+  const labelCx =
+    "flex flex-col gap-1.5 text-sm font-medium tracking-wide text-ink-muted";
+
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
-      <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+      <label className={labelCx}>
         Name
         <input
           type="text"
@@ -102,7 +114,7 @@ export function WatchForm({
           value={values.name}
           onChange={(event) => update("name", event.target.value)}
           aria-invalid={fieldErrors.name ? true : undefined}
-          className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+          className={`${fieldBase} ${fieldErrors.name ? fieldErrorCx : fieldIdleCx}`}
         />
         {fieldErrors.name ? (
           <span role="alert" className="text-sm text-accent">
@@ -112,7 +124,7 @@ export function WatchForm({
       </label>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+        <label className={labelCx}>
           Brand
           <input
             type="text"
@@ -120,7 +132,7 @@ export function WatchForm({
             value={values.brand}
             onChange={(event) => update("brand", event.target.value)}
             aria-invalid={fieldErrors.brand ? true : undefined}
-            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+            className={`${fieldBase} ${fieldErrors.brand ? fieldErrorCx : fieldIdleCx}`}
           />
           {fieldErrors.brand ? (
             <span role="alert" className="text-sm text-accent">
@@ -129,7 +141,7 @@ export function WatchForm({
           ) : null}
         </label>
 
-        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+        <label className={labelCx}>
           Model
           <input
             type="text"
@@ -137,7 +149,7 @@ export function WatchForm({
             value={values.model}
             onChange={(event) => update("model", event.target.value)}
             aria-invalid={fieldErrors.model ? true : undefined}
-            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+            className={`${fieldBase} ${fieldErrors.model ? fieldErrorCx : fieldIdleCx}`}
           />
           {fieldErrors.model ? (
             <span role="alert" className="text-sm text-accent">
@@ -147,7 +159,7 @@ export function WatchForm({
         </label>
       </div>
 
-      <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+      <label className={labelCx}>
         Reference (optional)
         <input
           type="text"
@@ -156,7 +168,7 @@ export function WatchForm({
           value={values.reference}
           onChange={(event) => update("reference", event.target.value)}
           aria-invalid={fieldErrors.reference ? true : undefined}
-          className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink placeholder:text-ink-subtle outline-none focus:border-accent"
+          className={`${fieldBase} ${fieldErrors.reference ? fieldErrorCx : fieldIdleCx}`}
         />
         {fieldErrors.reference ? (
           <span role="alert" className="text-sm text-accent">
@@ -172,7 +184,7 @@ export function WatchForm({
         errorMessage={fieldErrors.movement_id}
       />
 
-      <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+      <label className={labelCx}>
         Notes
         <textarea
           rows={3}
@@ -180,7 +192,7 @@ export function WatchForm({
           value={values.notes}
           onChange={(event) => update("notes", event.target.value)}
           aria-invalid={fieldErrors.notes ? true : undefined}
-          className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+          className={`${fieldBase} ${fieldErrors.notes ? fieldErrorCx : fieldIdleCx}`}
         />
         {fieldErrors.notes ? (
           <span role="alert" className="text-sm text-accent">
@@ -212,7 +224,7 @@ export function WatchForm({
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-accent-hover disabled:opacity-60"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-pill bg-accent px-6 py-3 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60"
         >
           {submitting ? submittingLabel : submitLabel}
         </button>

@@ -116,15 +116,15 @@ export function MovementTypeahead({
   }
 
   return (
-    <div className="flex flex-col gap-1 text-sm font-medium text-ink">
+    <div className="flex flex-col gap-1.5 text-sm font-medium tracking-wide text-ink-muted">
       <label htmlFor={inputId}>{label}</label>
 
       {selection ? (
-        <div className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2">
+        <div className="flex items-center gap-2 rounded-md border border-line bg-surface-inset px-3.5 py-2.5 shadow-inset-edge">
           <span className="flex-1 text-ink">
             {selection.canonical_name}
             {selection.status === "pending" ? (
-              <span className="ml-2 rounded-full bg-accent/20 px-2 py-0.5 text-xs text-accent">
+              <span className="ml-2 inline-flex items-center gap-1 rounded-pill border border-accent/25 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
                 Pending approval
               </span>
             ) : null}
@@ -160,13 +160,13 @@ export function MovementTypeahead({
             placeholder="Search calibers — e.g. ETA 2892-A2"
             aria-invalid={errorMessage ? true : undefined}
             aria-describedby={errorMessage ? `${inputId}-error` : undefined}
-            className="w-full rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+            className="w-full rounded-md border border-line bg-canvas px-3.5 py-2.5 font-sans text-base text-ink shadow-inset-edge outline-none transition-colors placeholder:text-ink-subtle focus:border-ink focus:outline-none focus:ring-2 focus:ring-black/10"
           />
 
           {open && query.trim().length > 0 ? (
             <ul
               role="listbox"
-              className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-auto rounded-md border border-line bg-canvas shadow-lg"
+              className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-auto rounded-card border border-line bg-canvas shadow-card"
             >
               {loading ? (
                 <li className="px-3 py-2 text-sm text-ink-muted">Searching…</li>

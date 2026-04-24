@@ -333,7 +333,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
             rows={2}
             maxLength={500}
             placeholder="e.g. worn overnight face-up, 20ºC"
-            className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none disabled:opacity-60"
+            className="w-full rounded-md border border-line bg-canvas px-3.5 py-2.5 text-sm text-ink shadow-inset-edge outline-none transition-colors placeholder:text-ink-subtle focus:border-ink focus:outline-none focus:ring-2 focus:ring-black/10 disabled:opacity-60"
           />
         </label>
       ) : null}

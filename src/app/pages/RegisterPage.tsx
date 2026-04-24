@@ -32,14 +32,14 @@ export function RegisterPage() {
 
   return (
     <section className="mx-auto max-w-md">
-      <h1 className="mb-2 text-4xl font-medium tracking-tight text-ink">
+      <h1 className="mb-2 font-display text-4xl font-light tracking-tight text-ink">
         Create an account
       </h1>
       <p className="mb-6 text-ink-muted">
         You'll get an auto-generated username you can rename later.
       </p>
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
-        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-medium tracking-wide text-ink-muted">
           Display name
           <input
             type="text"
@@ -49,10 +49,10 @@ export function RegisterPage() {
             maxLength={100}
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+            className="rounded-md border border-line bg-canvas px-3.5 py-2.5 font-sans text-base text-ink shadow-inset-edge outline-none transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-black/10"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-medium tracking-wide text-ink-muted">
           Email
           <input
             type="email"
@@ -60,10 +60,10 @@ export function RegisterPage() {
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+            className="rounded-md border border-line bg-canvas px-3.5 py-2.5 font-sans text-base text-ink shadow-inset-edge outline-none transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-black/10"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+        <label className="flex flex-col gap-1.5 text-sm font-medium tracking-wide text-ink-muted">
           Password
           <input
             type="password"
@@ -72,7 +72,7 @@ export function RegisterPage() {
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="rounded-md border border-line bg-canvas px-3 py-2 font-sans text-base text-ink outline-none focus:border-accent"
+            className="rounded-md border border-line bg-canvas px-3.5 py-2.5 font-sans text-base text-ink shadow-inset-edge outline-none transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-black/10"
           />
         </label>
         {error ? (
@@ -86,7 +86,7 @@ export function RegisterPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-2 inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-accent-hover disabled:opacity-60"
+          className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-pill bg-accent px-6 py-3 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60"
         >
           {submitting ? "Creating account…" : "Create account"}
         </button>
