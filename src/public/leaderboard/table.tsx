@@ -183,14 +183,14 @@ export function LeaderboardStyles() {
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius-full);
 }
-.cf-lb-filters a:hover { color: var(--cf-text); background: var(--cf-bg-300); }
+.cf-lb-filters a:hover { color: var(--cf-text); background: var(--cf-surface-inset); }
 .cf-lb-filter--active {
   color: var(--cf-text) !important;
-  border-color: var(--cf-orange) !important;
-  background: var(--cf-bg-200);
+  border-color: var(--cf-accent) !important;
+  background: var(--cf-surface);
 }
 .cf-lb-filter__check {
-  color: var(--cf-orange);
+  color: var(--cf-accent);
   font-weight: 700;
 }
 
@@ -231,7 +231,7 @@ export function LeaderboardStyles() {
   gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
-  background: var(--cf-orange);
+  background: var(--cf-accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;
@@ -251,7 +251,7 @@ export function LeaderboardStyles() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--cf-orange);
+  background: var(--cf-accent);
   vertical-align: middle;
   margin: 0 4px;
 }

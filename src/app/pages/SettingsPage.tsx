@@ -79,7 +79,7 @@ export function SettingsPage() {
             type="email"
             readOnly
             value={user?.email ?? ""}
-            className="rounded-md border border-cf-border bg-cf-bg-200 px-3 py-2 font-sans text-base text-cf-text-muted outline-none"
+            className="rounded-md border border-cf-border bg-cf-surface px-3 py-2 font-sans text-base text-cf-text-muted outline-none"
           />
         </label>
 
@@ -106,10 +106,10 @@ export function SettingsPage() {
             }}
             aria-invalid={fieldError ? true : undefined}
             aria-describedby={fieldError ? "username-error" : undefined}
-            className="rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-orange"
+            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
           />
           {fieldError ? (
-            <span id="username-error" role="alert" className="text-sm text-cf-orange">
+            <span id="username-error" role="alert" className="text-sm text-cf-accent">
               {fieldError}
             </span>
           ) : (
@@ -123,7 +123,7 @@ export function SettingsPage() {
         {status.kind === "error" ? (
           <p
             role="alert"
-            className="rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+            className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
           >
             {status.message}
           </p>
@@ -131,7 +131,7 @@ export function SettingsPage() {
         {status.kind === "success" ? (
           <p
             role="status"
-            className="rounded-md border border-cf-border bg-cf-bg-200 px-3 py-2 text-sm text-cf-text"
+            className="rounded-md border border-cf-border bg-cf-surface px-3 py-2 text-sm text-cf-text"
           >
             {status.message}
           </p>
@@ -144,7 +144,7 @@ export function SettingsPage() {
             status.kind === "submitting" ||
             username.trim() === (user?.username ?? "")
           }
-          className="mt-2 inline-flex items-center justify-center self-start rounded-full bg-cf-orange px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-orange-hover disabled:opacity-60"
+          className="mt-2 inline-flex items-center justify-center self-start rounded-full bg-cf-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-accent-hover disabled:opacity-60"
         >
           {status.kind === "submitting" ? "Saving…" : "Save changes"}
         </button>

@@ -5,7 +5,7 @@
 // Design rules (AGENTS.md):
 //   * Hide avg_drift when reading_count < 2 (no drift computable yet).
 //   * Show eligibility + verified-badge as chips. Tone stays neutral
-//     while the watch is ineligible; warm CF orange when a milestone
+//     while the watch is ineligible; accent color when a milestone
 //     is hit.
 
 import type { SessionStats } from "./readings";
@@ -37,7 +37,7 @@ function formatDeviation(secs: number): string {
 export function SessionStatsPanel({ stats }: Props) {
   if (!stats || stats.reading_count === 0) {
     return (
-      <div className="mb-6 rounded-lg border border-cf-border bg-cf-bg-200 px-5 py-4 text-sm text-cf-text-muted">
+      <div className="mb-6 rounded-lg border border-cf-border bg-cf-surface px-5 py-4 text-sm text-cf-text-muted">
         <p className="mb-1 font-medium text-cf-text">No readings yet</p>
         <p>
           Log your first reading below. Mark it as a baseline to start a tracking session.
@@ -52,25 +52,25 @@ export function SessionStatsPanel({ stats }: Props) {
   const showAvgDrift = stats.reading_count >= 2 && stats.avg_drift_rate_spd !== null;
 
   return (
-    <div className="mb-6 rounded-lg border border-cf-border bg-cf-bg-200 p-5">
+    <div className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <h2 className="mr-2 text-sm font-medium text-cf-text">
           {hasSession ? "Current session" : "Readings logged"}
         </h2>
         {hasSession && stats.eligible ? (
-          <span className="rounded-full border border-cf-orange/40 bg-cf-orange/10 px-2.5 py-0.5 text-xs font-medium text-cf-orange">
+          <span className="rounded-full border border-cf-accent/40 bg-cf-accent/10 px-2.5 py-0.5 text-xs font-medium text-cf-accent">
             Eligible
           </span>
         ) : hasSession ? (
           <span
-            className="rounded-full border border-cf-border bg-cf-bg-100 px-2.5 py-0.5 text-xs font-medium text-cf-text-muted"
+            className="rounded-full border border-cf-border bg-cf-bg px-2.5 py-0.5 text-xs font-medium text-cf-text-muted"
             title="Eligible for ranking after 7 days and 3 readings"
           >
             Not eligible yet
           </span>
         ) : null}
         {stats.verified_badge ? (
-          <span className="rounded-full border border-cf-orange/40 bg-cf-orange/10 px-2.5 py-0.5 text-xs font-medium text-cf-orange">
+          <span className="rounded-full border border-cf-accent/40 bg-cf-accent/10 px-2.5 py-0.5 text-xs font-medium text-cf-accent">
             Verified
           </span>
         ) : null}

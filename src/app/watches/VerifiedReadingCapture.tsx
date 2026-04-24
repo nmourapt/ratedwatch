@@ -184,7 +184,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
   return (
     <section
       aria-label="Verified reading"
-      className="mb-6 rounded-lg border border-cf-border bg-cf-bg-200 p-5"
+      className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5"
     >
       <h2 className="mb-1 text-sm font-medium text-cf-text">Log a verified reading</h2>
       <p className="mb-4 text-xs text-cf-text-muted">
@@ -213,7 +213,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           <button
             type="button"
             onClick={openFilePicker}
-            className="inline-flex w-full items-center justify-center rounded-full border border-cf-orange bg-cf-orange px-5 py-3 text-sm font-medium text-cf-bg-100 transition-colors hover:bg-cf-orange/90 sm:w-auto"
+            className="inline-flex w-full items-center justify-center rounded-full border border-cf-accent bg-cf-accent px-5 py-3 text-sm font-medium text-cf-bg transition-colors hover:bg-cf-accent/90 sm:w-auto"
           >
             Take photo
           </button>
@@ -235,7 +235,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
       {state.kind === "error" ? (
         <p
           role="alert"
-          className="mb-4 rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-4 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
         >
           {state.message}
         </p>
@@ -248,7 +248,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
               type="checkbox"
               checked={isBaseline}
               onChange={(e) => setIsBaseline(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-cf-border text-cf-orange focus:ring-cf-orange"
+              className="mt-0.5 h-4 w-4 rounded border-cf-border text-cf-accent focus:ring-cf-accent"
             />
             <span>
               <span className="text-cf-text">This is a baseline</span>
@@ -262,7 +262,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
             <button
               type="button"
               onClick={handleSubmit}
-              className="inline-flex items-center justify-center rounded-full border border-cf-orange bg-cf-orange px-5 py-2.5 text-sm font-medium text-cf-bg-100 transition-colors hover:bg-cf-orange/90"
+              className="inline-flex items-center justify-center rounded-full border border-cf-accent bg-cf-accent px-5 py-2.5 text-sm font-medium text-cf-bg transition-colors hover:bg-cf-accent/90"
             >
               Submit verified reading
             </button>
@@ -281,7 +281,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
         <p className="flex items-center gap-2 text-sm text-cf-text-muted">
           <span
             aria-hidden="true"
-            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-cf-orange border-t-transparent"
+            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-cf-accent border-t-transparent"
           />
           Reading the dial…
         </p>
@@ -290,15 +290,15 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
       {showSuccess ? (
         <div
           role="status"
-          className="rounded-md border border-cf-orange/30 bg-cf-bg-100 px-4 py-3"
+          className="rounded-md border border-cf-accent/30 bg-cf-bg px-4 py-3"
         >
           <p className="text-sm text-cf-text">
             Saved. Dial read at{" "}
-            <span className="font-mono text-cf-orange">
+            <span className="font-mono text-cf-accent">
               {formatDialTime(state.reading)}
             </span>
             , deviation{" "}
-            <span className="font-mono text-cf-orange">
+            <span className="font-mono text-cf-accent">
               {formatDeviation(state.reading.deviation_seconds)}
             </span>
             .
@@ -306,7 +306,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           <button
             type="button"
             onClick={handleCancelOrReset}
-            className="mt-3 inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-4 py-2 text-sm font-medium text-cf-text transition-colors hover:border-cf-orange hover:text-cf-orange"
+            className="mt-3 inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-4 py-2 text-sm font-medium text-cf-text transition-colors hover:border-cf-accent hover:text-cf-accent"
           >
             Save another
           </button>

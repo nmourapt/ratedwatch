@@ -318,7 +318,7 @@ function WatchPageStyles() {
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius-lg);
   overflow: hidden;
-  background: var(--cf-bg-200);
+  background: var(--cf-surface);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
@@ -336,7 +336,7 @@ function WatchPageStyles() {
   gap: 16px;
   margin: 0;
   padding: 24px;
-  background: var(--cf-bg-200);
+  background: var(--cf-surface);
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius-lg);
 }
@@ -360,7 +360,7 @@ function WatchPageStyles() {
 .cf-deviation-chart {
   width: 100%;
   height: auto;
-  background: var(--cf-bg-200);
+  background: var(--cf-surface);
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius-lg);
 }
@@ -369,16 +369,16 @@ function WatchPageStyles() {
   stroke-width: 1;
 }
 .cf-deviation-chart__line {
-  stroke: var(--cf-orange);
+  stroke: var(--cf-accent);
   stroke-width: 2;
 }
 .cf-deviation-chart__dot {
-  fill: var(--cf-orange);
-  stroke: var(--cf-bg-200);
+  fill: var(--cf-accent);
+  stroke: var(--cf-surface);
   stroke-width: 1;
 }
 .cf-deviation-chart__dot--verified {
-  fill: var(--cf-orange-hover);
+  fill: var(--cf-accent-hover);
   stroke-width: 2;
 }
 
@@ -414,7 +414,7 @@ function WatchPageStyles() {
   gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
-  background: var(--cf-orange);
+  background: var(--cf-accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;

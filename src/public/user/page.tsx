@@ -178,7 +178,7 @@ function UserPageStyles() {
 }
 .cf-user-meta code {
   font-family: var(--cf-font-mono);
-  background: var(--cf-bg-200);
+  background: var(--cf-surface);
   padding: 1px 6px;
   border-radius: var(--cf-radius-sm);
 }
@@ -198,7 +198,7 @@ function UserPageStyles() {
 .cf-user-card {
   position: relative;
   display: block;
-  background: var(--cf-bg-200);
+  background: var(--cf-surface);
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius-lg);
   padding: 24px;
@@ -206,8 +206,8 @@ function UserPageStyles() {
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .cf-user-card:hover {
-  border-color: var(--cf-orange);
-  background: var(--cf-bg-300);
+  border-color: var(--cf-accent);
+  background: var(--cf-surface-inset);
   color: var(--cf-text);
 }
 .cf-user-card__title {
@@ -222,7 +222,7 @@ function UserPageStyles() {
   margin-bottom: 16px;
 }
 .cf-user-card__movement a { color: inherit; }
-.cf-user-card__movement a:hover { color: var(--cf-orange); }
+.cf-user-card__movement a:hover { color: var(--cf-accent); }
 
 .cf-user-card__stats {
   display: grid;
@@ -250,7 +250,7 @@ function UserPageStyles() {
   gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
-  background: var(--cf-orange);
+  background: var(--cf-accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;

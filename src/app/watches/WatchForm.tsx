@@ -99,10 +99,10 @@ export function WatchForm({
           value={values.name}
           onChange={(event) => update("name", event.target.value)}
           aria-invalid={fieldErrors.name ? true : undefined}
-          className="rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-orange"
+          className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
         />
         {fieldErrors.name ? (
-          <span role="alert" className="text-sm text-cf-orange">
+          <span role="alert" className="text-sm text-cf-accent">
             {fieldErrors.name}
           </span>
         ) : null}
@@ -117,10 +117,10 @@ export function WatchForm({
             value={values.brand}
             onChange={(event) => update("brand", event.target.value)}
             aria-invalid={fieldErrors.brand ? true : undefined}
-            className="rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-orange"
+            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
           />
           {fieldErrors.brand ? (
-            <span role="alert" className="text-sm text-cf-orange">
+            <span role="alert" className="text-sm text-cf-accent">
               {fieldErrors.brand}
             </span>
           ) : null}
@@ -134,10 +134,10 @@ export function WatchForm({
             value={values.model}
             onChange={(event) => update("model", event.target.value)}
             aria-invalid={fieldErrors.model ? true : undefined}
-            className="rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-orange"
+            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
           />
           {fieldErrors.model ? (
-            <span role="alert" className="text-sm text-cf-orange">
+            <span role="alert" className="text-sm text-cf-accent">
               {fieldErrors.model}
             </span>
           ) : null}
@@ -159,10 +159,10 @@ export function WatchForm({
           value={values.notes}
           onChange={(event) => update("notes", event.target.value)}
           aria-invalid={fieldErrors.notes ? true : undefined}
-          className="rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-orange"
+          className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
         />
         {fieldErrors.notes ? (
-          <span role="alert" className="text-sm text-cf-orange">
+          <span role="alert" className="text-sm text-cf-accent">
             {fieldErrors.notes}
           </span>
         ) : null}
@@ -173,7 +173,7 @@ export function WatchForm({
           type="checkbox"
           checked={values.is_public}
           onChange={(event) => update("is_public", event.target.checked)}
-          className="h-4 w-4 rounded border-cf-border accent-cf-orange"
+          className="h-4 w-4 rounded border-cf-border accent-cf-accent"
         />
         Public — visible on leaderboards and your public profile
       </label>
@@ -181,7 +181,7 @@ export function WatchForm({
       {formError ? (
         <p
           role="alert"
-          className="rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+          className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
         >
           {formError}
         </p>
@@ -191,7 +191,7 @@ export function WatchForm({
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center justify-center rounded-full bg-cf-orange px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-orange-hover disabled:opacity-60"
+          className="inline-flex items-center justify-center rounded-full bg-cf-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-accent-hover disabled:opacity-60"
         >
           {submitting ? submittingLabel : submitLabel}
         </button>

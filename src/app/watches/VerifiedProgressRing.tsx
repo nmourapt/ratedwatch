@@ -94,7 +94,7 @@ export function VerifiedProgressRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          className={earned ? "stroke-cf-orange" : "stroke-cf-orange/80"}
+          className={earned ? "stroke-cf-accent" : "stroke-cf-accent/80"}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={`${dashLength} ${dashGap}`}

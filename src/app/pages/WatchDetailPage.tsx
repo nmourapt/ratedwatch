@@ -142,13 +142,13 @@ export function WatchDetailPage() {
       <section className="mx-auto max-w-2xl">
         <p
           role="alert"
-          className="rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+          className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
         >
           {state.message}
         </p>
         <Link
           to="/app/dashboard"
-          className="mt-4 inline-block text-sm text-cf-orange hover:underline"
+          className="mt-4 inline-block text-sm text-cf-accent hover:underline"
         >
           ← Back to dashboard
         </Link>
@@ -186,8 +186,8 @@ export function WatchDetailPage() {
             disabled={togglingVisibility}
             className={
               watch.is_public
-                ? "inline-flex items-center gap-2 rounded-full border border-cf-border bg-cf-bg-200 px-3 py-1 text-xs font-medium text-cf-text-muted transition-colors hover:border-cf-orange hover:text-cf-orange disabled:opacity-60"
-                : "inline-flex items-center gap-2 rounded-full border border-cf-orange/40 bg-cf-orange/10 px-3 py-1 text-xs font-medium text-cf-orange transition-colors hover:bg-cf-orange/20 disabled:opacity-60"
+                ? "inline-flex items-center gap-2 rounded-full border border-cf-border bg-cf-surface px-3 py-1 text-xs font-medium text-cf-text-muted transition-colors hover:border-cf-accent hover:text-cf-accent disabled:opacity-60"
+                : "inline-flex items-center gap-2 rounded-full border border-cf-accent/40 bg-cf-accent/10 px-3 py-1 text-xs font-medium text-cf-accent transition-colors hover:bg-cf-accent/20 disabled:opacity-60"
             }
           >
             <span
@@ -195,7 +195,7 @@ export function WatchDetailPage() {
               className={
                 watch.is_public
                   ? "inline-block h-2 w-2 rounded-full bg-cf-text-muted"
-                  : "inline-block h-2 w-2 rounded-full bg-cf-orange"
+                  : "inline-block h-2 w-2 rounded-full bg-cf-accent"
               }
             />
             {togglingVisibility
@@ -205,7 +205,7 @@ export function WatchDetailPage() {
                 : "Private"}
           </button>
           {visibilityError ? (
-            <p role="alert" className="text-xs text-cf-orange">
+            <p role="alert" className="text-xs text-cf-accent">
               {visibilityError}
             </p>
           ) : null}
@@ -232,7 +232,7 @@ export function WatchDetailPage() {
       {readings.error ? (
         <p
           role="alert"
-          className="mb-4 rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-4 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
         >
           {readings.error}
         </p>
@@ -246,7 +246,7 @@ export function WatchDetailPage() {
 
       <SessionStatsPanel stats={readings.session_stats} />
       {readings.session_stats && readings.session_stats.reading_count > 0 ? (
-        <div className="mb-6 rounded-lg border border-cf-border bg-cf-bg-200 p-5">
+        <div className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5">
           <VerifiedProgressRing
             verifiedCount={Math.round(
               readings.session_stats.reading_count *
@@ -268,7 +268,7 @@ export function WatchDetailPage() {
       <div className="mt-10 flex flex-wrap items-center gap-3">
         <Link
           to={`/app/watches/${watch.id}/edit`}
-          className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-orange hover:text-cf-orange"
+          className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-accent hover:text-cf-accent"
         >
           Edit
         </Link>
@@ -276,7 +276,7 @@ export function WatchDetailPage() {
           type="button"
           onClick={handleDelete}
           disabled={deleting}
-          className="inline-flex items-center justify-center rounded-full border border-cf-orange/40 bg-cf-orange/10 px-5 py-2.5 text-sm font-medium text-cf-orange transition-colors hover:border-cf-orange hover:bg-cf-orange/20 disabled:opacity-60"
+          className="inline-flex items-center justify-center rounded-full border border-cf-accent/40 bg-cf-accent/10 px-5 py-2.5 text-sm font-medium text-cf-accent transition-colors hover:border-cf-accent hover:bg-cf-accent/20 disabled:opacity-60"
         >
           {deleting ? "Deleting…" : "Delete"}
         </button>
