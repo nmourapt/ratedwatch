@@ -20,6 +20,15 @@
 // `captureException` signature is preserved so callsites from slice
 // #19 don't change.
 import * as Sentry from "@sentry/cloudflare";
+import type { ErrorEvent, EventHint } from "@sentry/cloudflare";
+
+// Error names / exception types we never want to send to Sentry.
+// These are infra-level noise, not actionable code bugs:
+//   - AbortError: Workers runtime throws when a client disconnects
+//     mid-response (writes after the response body has been consumed).
+//   - WorkerTimeout: emitted near the CPU-time limit; indicates a
+//     platform ceiling, not a logic error.
+const DROPPED_ERROR_NAMES = new Set(["AbortError", "WorkerTimeout"]);
 
 export interface CaptureContext {
   // Primitives only — the same shape as the slice-19 stub. Sentry
@@ -88,11 +97,31 @@ export function captureException(
 }
 
 /**
+ * Sentry `beforeSend` hook: return `null` to drop an event, or the
+ * event (optionally mutated) to let it through. We drop known-noisy
+ * runtime errors (see DROPPED_ERROR_NAMES) so they don't burn event
+ * budget. Everything else — TypeError, ReferenceError, app errors —
+ * passes through untouched.
+ */
+export function beforeSend(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
+  const originalName =
+    hint.originalException instanceof Error ? hint.originalException.name : undefined;
+  const payloadType = event.exception?.values?.[0]?.type;
+  if (originalName && DROPPED_ERROR_NAMES.has(originalName)) return null;
+  if (payloadType && DROPPED_ERROR_NAMES.has(payloadType)) return null;
+  return event;
+}
+
+/**
  * Wrap the Worker's default export so Sentry automatically captures
  * every unhandled exception.
  *
  * When `SENTRY_DSN` is not set (local dev, anonymous preview), this
  * returns the handler unchanged so the Worker still boots.
+ *
+ * The `beforeSend` option filters out known-noisy runtime errors
+ * (AbortError, WorkerTimeout) so the Sentry event budget isn't
+ * consumed by infra-level noise that isn't actionable.
  */
 export function withSentry<THandler>(handler: THandler): THandler {
   // Broad generic rather than `ExportedHandler<Env>` because Hono's
@@ -128,6 +157,8 @@ export function withSentry<THandler>(handler: THandler): THandler {
       // set it here — future followup if release-tracking becomes a
       // real need.
       environment: "production",
+      // Filter noisy runtime errors before they hit the ingest.
+      beforeSend,
     };
   }, handler);
   return wrapped;
