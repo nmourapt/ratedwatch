@@ -137,14 +137,24 @@ function resolveVerifiedFilter(req: Request): {
  * the personalised `@username` in the header makes the HTML unique
  * per session, and a shared public cache would poison responses
  * for subsequent viewers (first signed-in view would be cached and
- * served to everyone). A future Vary: Cookie + CF cache rule sharding
- * pass could restore edge caching for signed-in users; not worth it
- * until real traffic shows the win.
+ * served to everyone).
+ *
+ * Both branches emit `Vary: Cookie` unconditionally. Browser (per-
+ * device) caches honour it today: after a user signs out, their
+ * local cache won't replay the personalised HTML because the Cookie
+ * header that keyed the stored response is no longer on the request.
+ *
+ * The matching CF edge cache-rule that would let the shared edge
+ * keep caching signed-in HTML (keyed on the session cookie) is
+ * intentionally deferred — it needs real-traffic validation and
+ * Terraform infra work. Emitting the header now means that future
+ * rule can be layered on without re-touching this helper.
  */
 function applyPublicCacheHeader(
   c: { header: (name: string, value: string) => void },
   user: PublicSessionUser | null,
 ): void {
+  c.header("Vary", "Cookie");
   if (user) {
     c.header("Cache-Control", "private, max-age=0, must-revalidate");
     return;
@@ -182,6 +192,10 @@ app.get("/leaderboard", async (c) => {
   // because the Set-Cookie side-effect must not be shared either.
   if (setCookie) {
     c.header("Set-Cookie", setCookie);
+    // no-store is correct here (the Set-Cookie side-effect must not
+    // be shared), but the Vary: Cookie contract still applies so
+    // browser caches differentiate a subsequent signed-out replay.
+    c.header("Vary", "Cookie");
     c.header("Cache-Control", "private, no-store");
     await logEvent("leaderboard_filter_changed", { verifiedOnly }, c.env);
   } else {
@@ -212,6 +226,9 @@ app.get("/m/:movementId", async (c) => {
   );
   if (setCookie) {
     c.header("Set-Cookie", setCookie);
+    // See /leaderboard above — same reasoning for keeping the
+    // Vary: Cookie contract on the no-store branch.
+    c.header("Vary", "Cookie");
     c.header("Cache-Control", "private, no-store");
     await logEvent("leaderboard_filter_changed", { verifiedOnly }, c.env);
   } else {

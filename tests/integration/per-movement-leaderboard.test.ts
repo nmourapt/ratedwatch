@@ -316,6 +316,23 @@ describe("GET /m/:movementId — public HTML", () => {
     expect(cacheControl).toMatch(/stale-while-revalidate=86400/);
   });
 
+  // Followup (cache-vary-cookie): Vary: Cookie on the anon path.
+  it("emits Vary: Cookie on the anon no-toggle path", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/m/${SEED.movements.alpha.id}`),
+    );
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
+  });
+
+  it("emits Vary: Cookie on the Set-Cookie filter-toggle path", async () => {
+    const res = await exports.default.fetch(
+      new Request(`https://ratedwatch.test/m/${SEED.movements.alpha.id}?verified=1`),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control") ?? "").toMatch(/private,\s*no-store/);
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
+  });
+
   it("returns 404 HTML for a pending movement", async () => {
     const res = await exports.default.fetch(
       new Request(`https://ratedwatch.test/m/${SEED.movements.pending.id}`),

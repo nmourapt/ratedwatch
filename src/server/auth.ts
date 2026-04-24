@@ -83,11 +83,40 @@ export function getAuth(env: AuthEnv): Auth {
         }
       : undefined;
 
+  // baseURL + trustedOrigins are pinned explicitly. Without these,
+  // Better Auth infers the trusted origin from `request.url` at
+  // request time. That's fragile in two ways:
+  //
+  //   1. Mobile browsers (especially iOS Safari, after a privacy-mode
+  //      redirect chain) sometimes strip the `Origin` header to
+  //      `null` for same-origin POSTs. Better Auth then throws
+  //      MISSING_OR_NULL_ORIGIN — surfacing as the "invalid origin"
+  //      error mobile users were hitting on rated.watch.
+  //   2. The Worker is reachable on multiple hostnames: the canonical
+  //      custom domain, the default workers.dev fallback (still on
+  //      per wrangler.jsonc — kept so preview-alias deploys work),
+  //      and pr-<N>-... preview-alias deploys. Without an explicit
+  //      allowlist, an inadvertent cross-host scenario or a
+  //      preview-deploy login produces a real INVALID_ORIGIN.
+  //
+  // The wildcard `https://*-ratedwatch.nmoura.workers.dev` is matched
+  // by Better Auth's `matchesOriginPattern` (auth/trusted-origins.mjs)
+  // — patterns containing `*` are routed through wildcardMatch, so a
+  // single line covers every preview-alias deploy.
   const auth: Auth = betterAuth({
     // Secret used for cookie signing. Provided via Worker secret in
     // production; the test harness seeds a high-entropy value via
     // miniflare bindings (see vitest.config.ts).
     secret: env.BETTER_AUTH_SECRET,
+    // Canonical public URL. Anchors Better Auth's notion of "who I
+    // am" so OAuth callbacks, password-reset emails, etc. all use
+    // rated.watch regardless of how the request actually arrived.
+    baseURL: "https://rated.watch",
+    trustedOrigins: [
+      "https://rated.watch",
+      "https://ratedwatch.nmoura.workers.dev",
+      "https://*-ratedwatch.nmoura.workers.dev",
+    ],
     // Auth API is mounted under the versioned API path alongside the
     // rest of our app's v1 endpoints.
     basePath: "/api/v1/auth",
