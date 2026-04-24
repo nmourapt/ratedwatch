@@ -36,6 +36,35 @@ export const createReadingSchema = z.object({
 
 export type CreateReadingInput = z.infer<typeof createReadingSchema>;
 
+// Tap-reading flow (new manual UX, replaces the typed-deviation form).
+//
+// The user looks at their watch, waits for the second hand to cross
+// one of the four canonical dial positions (0 / 15 / 30 / 45, i.e.
+// 12 / 3 / 6 / 9 o'clock), and taps the matching button the instant
+// the hand lands on that mark. The server's own `Date.now()` at
+// request receipt is the reference time — the client timestamp is
+// deliberately NOT part of the wire contract so a client clock can't
+// be spoofed.
+//
+// Granularity is 15 s by design; this isn't meant to replace the
+// verified-reading (camera-based) flow for competitive rankings.
+export const createTapReadingSchema = z.object({
+  // The second-hand position the user saw at the moment of tap.
+  // Constrained to the four canonical marks so deviation math stays
+  // unambiguous (see the wrap logic in the route).
+  dial_position: z.union([z.literal(0), z.literal(15), z.literal(30), z.literal(45)], {
+    message: "dial_position must be one of 0, 15, 30, 45",
+  }),
+  is_baseline: z.boolean().default(false),
+  notes: z
+    .string()
+    .trim()
+    .max(NOTES_MAX, { message: `Notes must be ${NOTES_MAX} characters or fewer` })
+    .optional(),
+});
+
+export type CreateTapReadingInput = z.infer<typeof createTapReadingSchema>;
+
 // Wire shape returned by the readings API. Flattens the DB row's
 // 0/1 booleans to real booleans and leaves everything else as-is.
 export const readingResponseSchema = z.object({
@@ -53,14 +82,15 @@ export const readingResponseSchema = z.object({
 export type ReadingResponse = z.infer<typeof readingResponseSchema>;
 
 /**
- * Flatten a Zod error from `createReadingSchema` into a compact
- * `{ field: message }` record for inline form errors. Mirrors the
- * formatWatchErrors helper so the SPA can render failures the same
- * way everywhere.
+ * Flatten a Zod error from `createReadingSchema` or
+ * `createTapReadingSchema` into a compact `{ field: message }`
+ * record for inline form errors. Mirrors the formatWatchErrors
+ * helper so the SPA can render failures the same way everywhere.
+ *
+ * Typed as `z.ZodError` (unparameterised) so it works for both
+ * reading-schema variants without a generic on the call site.
  */
-export function formatReadingErrors(
-  error: z.ZodError<CreateReadingInput>,
-): Record<string, string> {
+export function formatReadingErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of error.issues) {
     const key = issue.path[0];
