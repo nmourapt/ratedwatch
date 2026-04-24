@@ -1,7 +1,18 @@
-// Authed SPA chrome. Renders the shared Header/Footer equivalent for the
-// app surface and an <Outlet /> for the current placeholder page. Slice 3
-// only wires the design language — real auth gating, nav links, and
-// screen content come in later slices.
+// Authed SPA chrome. Renders the SPA-side header/footer and an <Outlet />
+// for the routed page. Nav pulls in the public Leaderboard so signed-in
+// users don't have to leave the app surface to see rankings — the old
+// "← Site" link exited the SPA to the public landing page and felt like
+// a logout (the Better Auth cookie stayed set, but the public header
+// showed anonymous affordances so visitors perceived themselves as
+// signed out). That flow is fixed in two places:
+//
+//   1. Here: "← Site" was replaced with a plain "Leaderboard" link that
+//      keeps the same framing as the other SPA nav items.
+//   2. src/public/components/header.tsx: the public Header now reads
+//      the Better Auth session and swaps its "Sign in" affordance for
+//      "@username → /app/dashboard" when a session exists. So round-
+//      tripping from /app/* to the public site and back no longer
+//      strands the user.
 import { Link, Outlet } from "react-router";
 
 export function App() {
@@ -20,12 +31,12 @@ export function App() {
             <Link to="/app/dashboard" className="hover:text-ink">
               Dashboard
             </Link>
+            <a href="/leaderboard" className="hover:text-ink">
+              Leaderboard
+            </a>
             <Link to="/app/settings" className="hover:text-ink">
               Settings
             </Link>
-            <a href="/" className="hover:text-ink" aria-label="Back to public site">
-              ← Site
-            </a>
           </nav>
         </div>
       </header>

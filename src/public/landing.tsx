@@ -7,6 +7,7 @@
 // the Worker fetches the current top-5 verified watches via
 // queryLeaderboard and passes them in as a prop so /‎ stays a single
 // HTML response with no client fetching.
+import type { PublicSessionUser } from "@/public/auth/resolve-session";
 import type { RankedWatch } from "@/domain/leaderboard-query";
 import { Button } from "./components/button";
 import { Card } from "./components/card";
@@ -24,11 +25,14 @@ export interface LandingPageProps {
    *  during the cold-start phase when nobody has crossed the verified
    *  threshold yet. */
   topVerified?: RankedWatch[];
+  /** Resolved session user, or null for anonymous. Drives the
+   *  header's sign-in vs @username affordance. */
+  user?: PublicSessionUser | null;
 }
 
-export const LandingPage = ({ topVerified = [] }: LandingPageProps) => (
+export const LandingPage = ({ topVerified = [], user = null }: LandingPageProps) => (
   <Layout title={TITLE} description={DESCRIPTION} pathname="/">
-    <Header />
+    <Header user={user} />
     <main>
       <section class="cf-container cf-hero" aria-labelledby="hero-title">
         <h1 id="hero-title">Competitive accuracy tracking for watch enthusiasts.</h1>

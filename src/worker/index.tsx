@@ -15,6 +15,10 @@ import { buildSetCookie, parseCookie } from "@/public/lib/cookie";
 import { MovementNotFoundPage, MovementPage } from "@/public/movement/page";
 import { loadPublicProfile } from "@/public/user/load";
 import { UserNotFoundPage, UserPage } from "@/public/user/page";
+import {
+  resolvePublicSession,
+  type PublicSessionUser,
+} from "@/public/auth/resolve-session";
 import { loadPublicWatch } from "@/public/watch/load";
 import { WatchNotFoundPage, WatchPage } from "@/public/watch/page";
 import { getAuth, type AuthEnv } from "@/server/auth";
@@ -122,14 +126,42 @@ function resolveVerifiedFilter(req: Request): {
   return { verifiedOnly: cookieValue === "1", setCookie: null };
 }
 
+/**
+ * Cache-Control picker for session-aware public pages.
+ *
+ * Anonymous visitors get the old `public, s-maxage=300,
+ * stale-while-revalidate=86400` — CF edge caches the rendered HTML
+ * so repeat anonymous hits are served without reaching the Worker.
+ *
+ * Signed-in visitors get `private, max-age=0, must-revalidate` —
+ * the personalised `@username` in the header makes the HTML unique
+ * per session, and a shared public cache would poison responses
+ * for subsequent viewers (first signed-in view would be cached and
+ * served to everyone). A future Vary: Cookie + CF cache rule sharding
+ * pass could restore edge caching for signed-in users; not worth it
+ * until real traffic shows the win.
+ */
+function applyPublicCacheHeader(
+  c: { header: (name: string, value: string) => void },
+  user: PublicSessionUser | null,
+): void {
+  if (user) {
+    c.header("Cache-Control", "private, max-age=0, must-revalidate");
+    return;
+  }
+  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+}
+
 app.get("/", async (c) => {
   // Hero extension (slice #13): surface the top-5 verified watches so
   // first-time visitors see the social proof immediately. Falls back
   // to an empty-state card when nobody has crossed the threshold yet.
   const db = createDb(c.env);
+  const user = await resolvePublicSession(c.env, c.req.raw);
   const topVerified = await queryLeaderboard({ verified_only: true, limit: 5 }, db);
   await logEvent("page_view_home", {}, c.env);
-  return c.html(<LandingPage topVerified={topVerified} />);
+  applyPublicCacheHeader(c, user);
+  return c.html(<LandingPage topVerified={topVerified} user={user} />);
 });
 
 // Public HTML leaderboard. Owned by the Worker (see run_worker_first in
@@ -139,19 +171,25 @@ app.get("/", async (c) => {
 // explicitly so first-time viewers never see a stale ranking for long.
 app.get("/leaderboard", async (c) => {
   const db = createDb(c.env);
+  const user = await resolvePublicSession(c.env, c.req.raw);
   const { verifiedOnly, setCookie } = resolveVerifiedFilter(c.req.raw);
   const watches = await queryLeaderboard({ verified_only: verifiedOnly, limit: 50 }, db);
   await logEvent("page_view_leaderboard", { verifiedOnly }, c.env);
-  // Cookie-toggled responses are unique per preference, so drop the
-  // shared-cache directive when we're setting/clearing the cookie.
+  // Session-aware pages can't share a public cache entry (the header
+  // personalises). `applyPublicCacheHeader` picks private-no-cache
+  // for signed-in callers and the usual public SWR window otherwise.
+  // Filter-cookie toggles (setCookie) still take the no-store path
+  // because the Set-Cookie side-effect must not be shared either.
   if (setCookie) {
     c.header("Set-Cookie", setCookie);
     c.header("Cache-Control", "private, no-store");
     await logEvent("leaderboard_filter_changed", { verifiedOnly }, c.env);
   } else {
-    c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+    applyPublicCacheHeader(c, user);
   }
-  return c.html(<LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} />);
+  return c.html(
+    <LeaderboardPage watches={watches} verifiedOnly={verifiedOnly} user={user} />,
+  );
 });
 
 // Public per-movement leaderboard (slice #14). 404 for unknown or
@@ -160,10 +198,12 @@ app.get("/leaderboard", async (c) => {
 // mutations explicitly purge both.
 app.get("/m/:movementId", async (c) => {
   const db = createDb(c.env);
+  const user = await resolvePublicSession(c.env, c.req.raw);
   const taxonomy = createMovementTaxonomy(db);
   const movement = await taxonomy.getBySlug(c.req.param("movementId"));
   if (!movement || movement.status !== "approved") {
-    return c.html(<MovementNotFoundPage />, 404);
+    applyPublicCacheHeader(c, user);
+    return c.html(<MovementNotFoundPage user={user} />, 404);
   }
   const { verifiedOnly, setCookie } = resolveVerifiedFilter(c.req.raw);
   const watches = await queryLeaderboard(
@@ -175,10 +215,15 @@ app.get("/m/:movementId", async (c) => {
     c.header("Cache-Control", "private, no-store");
     await logEvent("leaderboard_filter_changed", { verifiedOnly }, c.env);
   } else {
-    c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+    applyPublicCacheHeader(c, user);
   }
   return c.html(
-    <MovementPage movement={movement} watches={watches} verifiedOnly={verifiedOnly} />,
+    <MovementPage
+      movement={movement}
+      watches={watches}
+      verifiedOnly={verifiedOnly}
+      user={user}
+    />,
   );
 });
 
@@ -188,16 +233,18 @@ app.get("/m/:movementId", async (c) => {
 // converge on one URL. Unknown usernames render a 404 page.
 app.get("/u/:username", async (c) => {
   const db = createDb(c.env);
+  const user = await resolvePublicSession(c.env, c.req.raw);
   const raw = c.req.param("username");
   const result = await loadPublicProfile(db, raw);
   if (result.status === "redirect") {
     return c.redirect(`/u/${result.canonical_username}`, 301);
   }
   if (result.status === "not_found") {
-    return c.html(<UserNotFoundPage username={raw} />, 404);
+    applyPublicCacheHeader(c, user);
+    return c.html(<UserNotFoundPage username={raw} user={user} />, 404);
   }
-  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
-  return c.html(<UserPage profile={result.profile} />);
+  applyPublicCacheHeader(c, user);
+  return c.html(<UserPage profile={result.profile} user={user} />);
 });
 
 // Public per-watch page (slice #15). 404s for unknown AND private
@@ -205,13 +252,15 @@ app.get("/u/:username", async (c) => {
 // response so the existence of private rows isn't leaked.
 app.get("/w/:watchId", async (c) => {
   const db = createDb(c.env);
+  const user = await resolvePublicSession(c.env, c.req.raw);
   const watchId = c.req.param("watchId");
   const result = await loadPublicWatch(db, watchId);
   if (result.status === "not_found") {
-    return c.html(<WatchNotFoundPage watchId={watchId} />, 404);
+    applyPublicCacheHeader(c, user);
+    return c.html(<WatchNotFoundPage watchId={watchId} user={user} />, 404);
   }
-  c.header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
-  return c.html(<WatchPage data={result.data} />);
+  applyPublicCacheHeader(c, user);
+  return c.html(<WatchPage data={result.data} user={user} />);
 });
 
 // Better Auth owns every method under /api/v1/auth/*. We pass the raw

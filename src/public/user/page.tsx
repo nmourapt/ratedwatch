@@ -11,13 +11,15 @@ import { formatDriftRate, formatWatchLabel } from "../leaderboard/format";
 import { Footer } from "../components/footer";
 import { Header } from "../components/header";
 import { Layout } from "../components/layout";
+import type { PublicSessionUser } from "@/public/auth/resolve-session";
 import type { ProfileData } from "./load";
 
 export interface UserPageProps {
   profile: ProfileData;
+  user?: PublicSessionUser | null;
 }
 
-export const UserPage = ({ profile }: UserPageProps) => {
+export const UserPage = ({ profile, user = null }: UserPageProps) => {
   const title = `@${profile.canonical_username} on rated.watch`;
   const description = `${profile.watches.length} ${profile.watches.length === 1 ? "watch" : "watches"} tracked — competitive accuracy for watch enthusiasts.`;
   return (
@@ -27,7 +29,7 @@ export const UserPage = ({ profile }: UserPageProps) => {
       pathname={`/u/${profile.canonical_username}`}
     >
       <UserPageStyles />
-      <Header />
+      <Header user={user} />
       <main>
         <section class="cf-container cf-hero" aria-labelledby="user-title">
           <h1 id="user-title">@{profile.canonical_username}</h1>
@@ -63,14 +65,20 @@ export const UserPage = ({ profile }: UserPageProps) => {
  * the header + footer don't disappear — keeps the UX coherent when the
  * user mistypes or follows a stale share link.
  */
-export const UserNotFoundPage = ({ username }: { username: string }) => (
+export const UserNotFoundPage = ({
+  username,
+  user = null,
+}: {
+  username: string;
+  user?: PublicSessionUser | null;
+}) => (
   <Layout
     title="Profile not found — rated.watch"
     description="No watch enthusiast here by that username."
     pathname={`/u/${username}`}
   >
     <UserPageStyles />
-    <Header />
+    <Header user={user} />
     <main>
       <section class="cf-container cf-hero" aria-labelledby="nf-title">
         <h1 id="nf-title">Profile not found</h1>
