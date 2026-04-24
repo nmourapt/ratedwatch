@@ -173,24 +173,40 @@ export function LeaderboardStyles() {
   const css = `
 .cf-lb-filters {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   margin-top: 16px;
   font-size: 0.875rem;
+  flex-wrap: wrap;
 }
+/* Filter toggle — pill segments (DESIGN.md section 4). Subtle inset
+ * edge at rest, promoted to a shadow-card tier when active so the
+ * selection reads at a glance without a loud accent box. */
 .cf-lb-filters a {
   color: var(--color-ink-muted);
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-inset-edge);
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
-.cf-lb-filters a:hover { color: var(--color-ink); background: var(--color-surface-inset); }
+.cf-lb-filters a:hover {
+  color: var(--color-ink);
+  background: var(--color-surface-inset);
+}
 .cf-lb-filter--active {
   color: var(--color-ink) !important;
-  border-color: var(--color-accent) !important;
-  background: var(--color-surface);
+  border-color: var(--color-ink) !important;
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
 }
 .cf-lb-filter__check {
-  color: var(--color-accent);
+  color: var(--color-ink);
   font-weight: 700;
 }
 
@@ -248,20 +264,28 @@ export function LeaderboardStyles() {
   white-space: nowrap;
 }
 
+/* Verified badge — DESIGN.md section 4 small-badge shape. Soft-tone
+ * pill using color-mix on the accent hue (no new colour introduced;
+ * palette v4 is intentionally achromatic). Border + fill at low
+ * opacity reads "accent-aligned" without competing with the primary
+ * black CTA. */
 .cf-lb-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 2px 10px;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  color: #FFFBF5;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.02em;
+  line-height: 1.3;
 }
 .cf-lb-badge--muted {
   background: transparent;
+  border-color: transparent;
   color: var(--color-ink-subtle);
 }
 .cf-lb-badge__check {

@@ -478,20 +478,26 @@ function WatchPageStyles() {
   white-space: nowrap;
 }
 
+/* Verified badge — matches the leaderboard page. Soft accent-tinted
+ * pill per DESIGN.md section 4; see src/public/leaderboard/table.tsx
+ * for the authoritative copy of this style. */
 .cf-lb-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 2px 10px;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  color: #FFFBF5;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.02em;
+  line-height: 1.3;
 }
 .cf-lb-badge--muted {
   background: transparent;
+  border-color: transparent;
   color: var(--color-ink-subtle);
 }
 .cf-lb-badge__check {
