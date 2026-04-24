@@ -19,12 +19,14 @@ describe("GET / — design system + home shell", () => {
     const body = await response.text();
 
     // Palette v3 (cool-neutral zinc): near-white page in light, full
-    // black in dark. Was warm-cream / warm-near-black pre-v3.
+    // Palette v4 (ElevenLabs-inspired warm-white). Pure white canvas
+    // in light, near-black canvas in dark. See DESIGN.md for the full
+    // rationale and the historical zinc → warm-white transition.
     expect(body).toMatch(
-      /<meta\s+name="theme-color"\s+content="#FAFAFA"\s+media="\(prefers-color-scheme:\s*light\)"\s*\/?>/,
+      /<meta\s+name="theme-color"\s+content="#FFFFFF"\s+media="\(prefers-color-scheme:\s*light\)"\s*\/?>/,
     );
     expect(body).toMatch(
-      /<meta\s+name="theme-color"\s+content="#09090B"\s+media="\(prefers-color-scheme:\s*dark\)"\s*\/?>/,
+      /<meta\s+name="theme-color"\s+content="#0A0A0A"\s+media="\(prefers-color-scheme:\s*dark\)"\s*\/?>/,
     );
   });
 
@@ -35,9 +37,9 @@ describe("GET / — design system + home shell", () => {
     // Accent, background, and text tokens must be present either inlined
     // or via a linked stylesheet. Asserting the canonical hex values
     // catches silent palette drops during refactors.
-    expect(body).toContain("#3F3F46"); // primary accent (zinc-700, CTA light)
-    expect(body).toContain("#FAFAFA"); // page bg light (zinc-50)
-    expect(body).toContain("#09090B"); // page bg dark (zinc-950)
+    expect(body).toContain("#000000"); // primary CTA accent (black pill)
+    expect(body).toContain("#FFFFFF"); // canvas light
+    expect(body).toContain("#0A0A0A"); // canvas dark (warm-neutral near-black)
   });
 
   it("renders the hero tagline", async () => {
