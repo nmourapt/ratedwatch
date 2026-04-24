@@ -19,15 +19,17 @@ import type { Reading, SessionStats } from "@/domain/drift-calc";
 import { Footer } from "../components/footer";
 import { Header } from "../components/header";
 import { Layout } from "../components/layout";
+import type { PublicSessionUser } from "@/public/auth/resolve-session";
 import { formatDriftRate, formatWatchLabel } from "../leaderboard/format";
 import { DeviationChart } from "./chart";
 import type { PublicWatch, PublicWatchPageData } from "./load";
 
 export interface WatchPageProps {
   data: PublicWatchPageData;
+  user?: PublicSessionUser | null;
 }
 
-export const WatchPage = ({ data }: WatchPageProps) => {
+export const WatchPage = ({ data, user = null }: WatchPageProps) => {
   const { watch, readings, session_stats } = data;
   const label = formatWatchLabel({
     name: watch.name,
@@ -50,7 +52,7 @@ export const WatchPage = ({ data }: WatchPageProps) => {
   return (
     <Layout title={title} description={description} pathname={`/w/${watch.watch_id}`}>
       <WatchPageStyles />
-      <Header />
+      <Header user={user} />
       <main>
         <section class="cf-container cf-hero" aria-labelledby="w-title">
           <h1 id="w-title">{watch.name}</h1>
@@ -125,14 +127,20 @@ export const WatchPage = ({ data }: WatchPageProps) => {
   );
 };
 
-export const WatchNotFoundPage = ({ watchId }: { watchId: string }) => (
+export const WatchNotFoundPage = ({
+  watchId,
+  user = null,
+}: {
+  watchId: string;
+  user?: PublicSessionUser | null;
+}) => (
   <Layout
     title="Watch not found — rated.watch"
     description="No public watch with that id."
     pathname={`/w/${watchId}`}
   >
     <WatchPageStyles />
-    <Header />
+    <Header user={user} />
     <main>
       <section class="cf-container cf-hero" aria-labelledby="nf-title">
         <h1 id="nf-title">Watch not found</h1>

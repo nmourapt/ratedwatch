@@ -11,6 +11,7 @@
 import { Footer } from "../components/footer";
 import { Header } from "../components/header";
 import { Layout } from "../components/layout";
+import type { PublicSessionUser } from "@/public/auth/resolve-session";
 import type { Movement } from "@/domain/movements/taxonomy";
 import type { RankedWatch } from "@/domain/leaderboard-query";
 import {
@@ -23,9 +24,15 @@ export interface MovementPageProps {
   movement: Movement;
   watches: RankedWatch[];
   verifiedOnly: boolean;
+  user?: PublicSessionUser | null;
 }
 
-export const MovementPage = ({ movement, watches, verifiedOnly }: MovementPageProps) => {
+export const MovementPage = ({
+  movement,
+  watches,
+  verifiedOnly,
+  user = null,
+}: MovementPageProps) => {
   const title = `Most accurate ${movement.canonical_name} watches — rated.watch`;
   const description = `Drift rate leaderboard for the ${movement.canonical_name} ${movement.type} movement.`;
   // Route the CTA through /out/chrono24/:movementId so the Worker can
@@ -37,7 +44,7 @@ export const MovementPage = ({ movement, watches, verifiedOnly }: MovementPagePr
     <Layout title={title} description={description} pathname={`/m/${movement.id}`}>
       <LeaderboardStyles />
       <MovementPageStyles />
-      <Header />
+      <Header user={user} />
       <main>
         <section class="cf-container cf-hero" aria-labelledby="mv-title">
           <p class="cf-mv-crumbs">
@@ -142,13 +149,15 @@ const NOT_FOUND_TITLE = "Movement not found — rated.watch";
 const NOT_FOUND_DESCRIPTION =
   "The movement you're looking for doesn't exist or isn't published yet.";
 
-export const MovementNotFoundPage = () => (
+export const MovementNotFoundPage = ({
+  user = null,
+}: { user?: PublicSessionUser | null } = {}) => (
   <Layout
     title={NOT_FOUND_TITLE}
     description={NOT_FOUND_DESCRIPTION}
     pathname="/m/unknown"
   >
-    <Header />
+    <Header user={user} />
     <main>
       <section class="cf-container cf-hero">
         <h1>Movement not found</h1>

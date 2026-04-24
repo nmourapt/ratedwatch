@@ -8,22 +8,28 @@
 import { Footer } from "../components/footer";
 import { Header } from "../components/header";
 import { Layout } from "../components/layout";
+import type { PublicSessionUser } from "@/public/auth/resolve-session";
 import type { RankedWatch } from "@/domain/leaderboard-query";
 import { LeaderboardStyles, LeaderboardTable, VerifiedFilterToggle } from "./table";
 
 export interface LeaderboardPageProps {
   watches: RankedWatch[];
   verifiedOnly: boolean;
+  user?: PublicSessionUser | null;
 }
 
 const TITLE = "Leaderboard — rated.watch";
 const DESCRIPTION =
   "Global accuracy leaderboard. Watches ranked by absolute drift rate, grouped by movement caliber.";
 
-export const LeaderboardPage = ({ watches, verifiedOnly }: LeaderboardPageProps) => (
+export const LeaderboardPage = ({
+  watches,
+  verifiedOnly,
+  user = null,
+}: LeaderboardPageProps) => (
   <Layout title={TITLE} description={DESCRIPTION} pathname="/leaderboard">
     <LeaderboardStyles />
-    <Header />
+    <Header user={user} />
     <main>
       <section class="cf-container cf-hero" aria-labelledby="lb-title">
         <h1 id="lb-title">Global leaderboard</h1>
