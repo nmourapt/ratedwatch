@@ -163,6 +163,9 @@ a:hover { color: var(--color-ink-muted); }
   border-top: 1px solid var(--color-line-subtle);
 }
 
+/* Card default — 16px radius, layered card shadow at sub-0.1 opacity
+ * (outline ring + 1px shadow + 2–4px soft lift). Padding bumps to 28px
+ * on md+ for the "Apple-like generosity" called out in DESIGN.md §5. */
 .cf-card {
   position: relative;
   background: var(--color-canvas);
@@ -170,6 +173,9 @@ a:hover { color: var(--color-ink-muted); }
   border-radius: var(--radius-card);
   padding: 24px;
   box-shadow: var(--shadow-card);
+}
+@media (min-width: 768px) {
+  .cf-card { padding: 28px; }
 }
 .cf-card__title {
   margin: 0 0 8px;

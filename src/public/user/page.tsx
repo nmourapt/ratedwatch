@@ -195,19 +195,25 @@ function UserPageStyles() {
   .cf-user-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* Profile watch card — canvas bg + layered shadow matches the
+ * SPA dashboard card. Hover lifts subtly (shadow + accent border). */
 .cf-user-card {
   position: relative;
   display: block;
-  background: var(--color-surface);
+  background: var(--color-canvas);
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
   padding: 24px;
   color: var(--color-ink);
-  transition: border-color 0.15s ease, background 0.15s ease;
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+@media (min-width: 768px) {
+  .cf-user-card { padding: 28px; }
 }
 .cf-user-card:hover {
   border-color: var(--color-accent);
-  background: var(--color-surface-inset);
+  box-shadow: var(--shadow-lift);
   color: var(--color-ink);
 }
 .cf-user-card__title {

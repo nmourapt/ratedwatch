@@ -249,7 +249,7 @@ export function WatchDetailPage() {
 
       <SessionStatsPanel stats={readings.session_stats} />
       {readings.session_stats && readings.session_stats.reading_count > 0 ? (
-        <div className="mb-6 rounded-lg border border-line bg-surface p-5">
+        <div className="mb-6 rounded-card border border-line bg-canvas p-6 shadow-card md:p-7">
           <VerifiedProgressRing
             verifiedCount={Math.round(
               readings.session_stats.reading_count *
@@ -271,7 +271,7 @@ export function WatchDetailPage() {
       <div className="mt-10 flex flex-wrap items-center gap-3">
         <Link
           to={`/app/watches/${watch.id}/edit`}
-          className="inline-flex items-center justify-center rounded-full border border-line bg-transparent px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-pill border border-line bg-canvas px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent"
         >
           Edit
         </Link>
@@ -279,7 +279,7 @@ export function WatchDetailPage() {
           type="button"
           onClick={handleDelete}
           disabled={deleting}
-          className="inline-flex items-center justify-center rounded-full border border-accent/40 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent transition-colors hover:border-accent hover:bg-accent/20 disabled:opacity-60"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-pill border border-accent/25 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent transition-colors hover:border-accent/40 hover:bg-accent/20 disabled:opacity-60"
         >
           {deleting ? "Deleting…" : "Delete"}
         </button>

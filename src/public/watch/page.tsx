@@ -358,31 +358,37 @@ function WatchPageStyles() {
   .cf-watch-grid { grid-template-columns: minmax(240px, 320px) 1fr; }
 }
 
+/* Photo + stats card pair — both use the layered card shadow so they
+ * sit at the same visual level. Photo card has a soft warm shadow
+ * hint via --shadow-card; stats card matches. */
 .cf-watch-photo {
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
   overflow: hidden;
-  background: var(--color-surface);
+  background: var(--color-canvas);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: var(--shadow-card);
 }
 .cf-watch-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cf-watch-photo--placeholder {
   color: var(--color-ink-subtle);
   font-size: 0.95rem;
+  background: var(--color-surface-inset);
 }
 
 .cf-watch-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 20px;
   margin: 0;
-  padding: 24px;
-  background: var(--color-surface);
+  padding: 28px;
+  background: var(--color-canvas);
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 @media (min-width: 768px) {
   .cf-watch-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -390,23 +396,27 @@ function WatchPageStyles() {
 .cf-watch-stats > div { margin: 0; }
 .cf-watch-stats dt {
   font-size: 0.7rem;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-ink-subtle);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-weight: 500;
 }
 .cf-watch-stats dd {
   margin: 0;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 1rem;
+  color: var(--color-ink);
 }
 
 .cf-deviation-chart {
   width: 100%;
   height: auto;
-  background: var(--color-surface);
+  background: var(--color-canvas);
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 .cf-deviation-chart__axes line {
   stroke: var(--color-line);
@@ -430,24 +440,40 @@ function WatchPageStyles() {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95rem;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 .cf-watch-history thead th {
   text-align: left;
-  padding: 12px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--color-line);
+  background: var(--color-canvas);
   font-weight: 500;
   color: var(--color-ink-muted);
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.cf-watch-history tbody tr {
+  transition: background-color 0.15s ease;
+}
+.cf-watch-history tbody tr:hover {
+  background: var(--color-surface-inset);
+}
 .cf-watch-history tbody td {
-  padding: 12px;
-  border-bottom: 1px solid var(--color-line-subtle);
+  padding: 14px 16px;
+  border-top: 1px solid var(--color-line-subtle);
   vertical-align: middle;
+}
+.cf-watch-history tbody tr:first-child td {
+  border-top: 0;
 }
 .cf-watch-history__num {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
 }
