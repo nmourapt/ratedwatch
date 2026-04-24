@@ -8,6 +8,7 @@ import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
 import { createMovementTaxonomy } from "@/domain/movements/taxonomy";
 import { logEvent } from "@/observability/events";
+import { withSentry } from "@/observability/sentry";
 import { LandingPage } from "@/public/landing";
 import { LeaderboardPage } from "@/public/leaderboard/page";
 import { buildSetCookie, parseCookie } from "@/public/lib/cookie";
@@ -227,4 +228,14 @@ app.route("/images/watches", watchImagePublicRoute);
 // an Analytics Engine event before the 302.
 app.route("/out", outRoute);
 
-export default app;
+// Wrap the Hono app so Sentry auto-captures unhandled exceptions.
+// With SENTRY_DSN set as a Worker secret, every throw in any handler
+// above shows up in Sentry with request/response context. Without the
+// secret, withSentry returns a passthrough so local dev and anonymous
+// previews still boot. The Worker runtime only sees the exported
+// `fetch` shape — no Hono-specific methods need to be preserved on
+// the default export.
+const sentryWrappedHandler: ExportedHandler<Bindings> = withSentry({
+  fetch: app.fetch.bind(app),
+});
+export default sentryWrappedHandler;

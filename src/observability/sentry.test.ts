@@ -1,12 +1,15 @@
-// Sentry stub — placeholder until `@sentry/cloudflare` is wired up and
-// the operator provisions `SENTRY_DSN`. The production interface must
-// stay shaped the same way (async captureException(err, ctx)) so the
-// swap is a one-file change.
+// Direct unit tests for the inactive-path behaviour of
+// captureException — when Sentry hasn't been initialised via
+// withSentry() (no SENTRY_DSN, no wrapper invocation), the function
+// still needs to be safe to call at any point and must swallow its
+// own errors. Integration coverage of the real Sentry path is
+// deliberately OUT of scope (requires a live DSN + network, which no
+// CI should need).
 
 import { describe, expect, it, vi } from "vitest";
-import { captureException } from "./sentry-stub";
+import { captureException } from "./sentry";
 
-describe("captureException (stub)", () => {
+describe("captureException (Sentry inactive — stub-mode fallback)", () => {
   it("logs the error to console.error with optional context", () => {
     const err = new Error("boom");
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
