@@ -147,20 +147,26 @@ Post-apply, verify by triggering any request against the Worker and
 waiting ~30 seconds; a `logs/YYYY-MM-DD/…ndjson.gz` object should
 appear in the `rated-watch-logs` R2 bucket.
 
-### Sentry (deferred)
+### Sentry
 
-Slice #19 ships a **stub** `captureException` in
-`src/observability/sentry-stub.ts` that console-logs with a
-`sentry-stub:` prefix. The real `@sentry/cloudflare` integration is
-blocked on the operator provisioning the `SENTRY_DSN` Worker secret:
+Live via `@sentry/cloudflare`. Two integration points:
 
-```bash
-wrangler secret put SENTRY_DSN
-```
-
-Once that secret is in place, a follow-up slice will swap the stub
-for the real SDK — the `captureException(err, ctx)` interface stays
-identical, so no callsite changes are needed.
+- `src/observability/sentry.ts` exports `withSentry(handler)` (used
+  to wrap the Worker's default export in `src/worker/index.tsx`) and
+  `captureException(err, ctx)` (callable at any callsite for
+  intentional reports).
+- `SENTRY_DSN` Worker secret drives init. Set once via
+  `wrangler secret put SENTRY_DSN`. When the secret is absent
+  (local dev, CI without the secret set) `withSentry` degrades to a
+  passthrough and `captureException` falls back to console.error
+  with a `sentry-stub:` log prefix — the unified interface stays
+  stable so callsites never branch.
+- Environment label `production`, `tracesSampleRate: 0.1`,
+  `sendDefaultPii: false`. Tune in `src/observability/sentry.ts`
+  if the free-tier event cap tightens.
+- Smoke-test the integration after any secret rotation by
+  temporarily adding `throw new Error("sentry smoke")` to a route,
+  hitting it, and confirming the event in the Sentry dashboard.
 
 ## Followups (tracked elsewhere)
 
