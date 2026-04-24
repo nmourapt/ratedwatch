@@ -194,33 +194,56 @@ export function LeaderboardStyles() {
   font-weight: 700;
 }
 
+/* Table is wrapped in a card-like chrome — layered shadow +
+ * rounded corners lift it off the canvas the same way the SPA
+ * shadow-card utility does. The thead border is the full --color-line
+ * (a deliberate step stronger than row dividers so the header reads
+ * as a different zone), while the row dividers use the ~5 % line token
+ * — airy and "felt more than seen", per DESIGN.md section 6. */
 .cf-lb-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95rem;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 .cf-lb-table thead th {
   text-align: left;
-  padding: 12px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--color-line);
+  background: var(--color-canvas);
   font-weight: 500;
   color: var(--color-ink-muted);
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .cf-lb-table tbody td {
-  padding: 12px;
-  border-bottom: 1px solid var(--color-line-subtle);
+  padding: 14px 16px;
+  border-top: 1px solid var(--color-line-subtle);
   vertical-align: middle;
+}
+.cf-lb-table tbody tr:first-child td {
+  border-top: 0;
+}
+.cf-lb-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+.cf-lb-table tbody tr:hover {
+  background: var(--color-surface-inset);
 }
 .cf-lb-col-rank {
   width: 3rem;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   color: var(--color-ink-muted);
 }
 .cf-lb-col-num {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
 }
