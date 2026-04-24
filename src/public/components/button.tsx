@@ -2,15 +2,21 @@
 // no onClick / no hydration. For authed app interactions use the SPA-side
 // button (to be added under src/app/ui/ later).
 //
-// Two variants in slice 3:
-//   - "primary": accent fill, white text. CTAs.
-//   - "ghost":   border + muted text. Secondary actions.
+// Three variants under palette v4 (ElevenLabs warm-white):
+//   - "primary": black pill (light) / off-white pill (dark). Primary CTA.
+//   - "ghost":   white pill with shadow-lift border. Secondary.
+//   - "warm":    warm stone pill with warm-tinted shadow. The signature
+//                ElevenLabs CTA. Use for the most prominent action on a
+//                page (hero "Browse leaderboards", "Shop on Chrono24").
 //
-// The `as` prop lets the same styling apply to <a>, so link-buttons on the
-// hero ("Browse leaderboards") can share the exact same classes.
+// Styling lives in src/public/components/layout.tsx under .cf-btn—* —
+// those class names are internal CSS selectors, not design tokens.
+//
+// The `as` prop lets the same styling apply to <a>, so link-buttons on
+// the hero share identical classes.
 import type { Child } from "hono/jsx";
 
-export type ButtonVariant = "primary" | "ghost";
+export type ButtonVariant = "primary" | "ghost" | "warm";
 
 type BaseProps = {
   variant?: ButtonVariant;
@@ -32,7 +38,9 @@ type LinkProps = BaseProps & {
 };
 
 function variantClass(v: ButtonVariant | undefined): string {
-  return v === "ghost" ? "cf-btn cf-btn--ghost" : "cf-btn cf-btn--primary";
+  if (v === "warm") return "cf-btn cf-btn--warm";
+  if (v === "ghost") return "cf-btn cf-btn--ghost";
+  return "cf-btn cf-btn--primary";
 }
 
 export const Button = (props: ButtonProps | LinkProps) => {
