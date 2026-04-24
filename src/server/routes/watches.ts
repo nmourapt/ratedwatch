@@ -63,6 +63,7 @@ function toResponse(watch: Watch, movementCanonicalName: string | null): WatchRe
     name: watch.name,
     brand: watch.brand,
     model: watch.model,
+    reference: watch.reference,
     movement_id: watch.movement_id,
     movement_canonical_name: movementCanonicalName,
     custom_movement_name: watch.custom_movement_name,
@@ -175,6 +176,7 @@ watchesRoute.get("/", async (c) => {
       "watches.name",
       "watches.brand",
       "watches.model",
+      "watches.reference",
       "watches.movement_id",
       "watches.custom_movement_name",
       "watches.notes",
@@ -267,6 +269,9 @@ watchesRoute.post("/", async (c) => {
       name: input.name,
       brand: input.brand ?? null,
       model: input.model ?? null,
+      // Empty-string → NULL so clearing the field on edit surfaces
+      // the same value the create path stores when it's omitted.
+      reference: input.reference ? input.reference : null,
       movement_id: input.movement_id,
       custom_movement_name: input.custom_movement_name ?? null,
       notes: input.notes ?? null,
@@ -341,6 +346,7 @@ watchesRoute.patch("/:id", async (c) => {
     name: string;
     brand: string | null;
     model: string | null;
+    reference: string | null;
     movement_id: string;
     custom_movement_name: string | null;
     notes: string | null;
@@ -349,6 +355,9 @@ watchesRoute.patch("/:id", async (c) => {
   if (input.name !== undefined) patch.name = input.name;
   if (input.brand !== undefined) patch.brand = input.brand === "" ? null : input.brand;
   if (input.model !== undefined) patch.model = input.model === "" ? null : input.model;
+  if (input.reference !== undefined) {
+    patch.reference = input.reference === "" ? null : input.reference;
+  }
   if (input.movement_id !== undefined) patch.movement_id = input.movement_id;
   if (input.custom_movement_name !== undefined) {
     patch.custom_movement_name =

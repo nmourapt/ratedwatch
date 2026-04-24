@@ -101,6 +101,12 @@ export interface WatchesTable {
   // `watches/{watchId}/image`). NULL when no image is set. See
   // migrations/0005_watch_images.sql.
   image_r2_key: string | null;
+  // Slice (issue #57): manufacturer reference number, e.g. "3570.50"
+  // for an Omega Speedmaster or "126610LN" for a Rolex Submariner.
+  // Nullable because plenty of watches (vintage, microbrands,
+  // one-offs) have no official reference. Max length enforced at the
+  // Zod layer — see migrations/0006_watch_reference.sql.
+  reference: string | null;
 }
 
 // Slice 12 (issue #13): readings. Columns mirror

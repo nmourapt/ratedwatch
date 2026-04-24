@@ -25,6 +25,7 @@ export function NewWatchPage() {
       name: values.name.trim(),
       brand: values.brand.trim() || undefined,
       model: values.model.trim() || undefined,
+      reference: values.reference.trim() || undefined,
       movement_id: values.movement.id,
       notes: values.notes.trim() || undefined,
       is_public: values.is_public,

@@ -15,6 +15,8 @@ export interface WatchFormValues {
   name: string;
   brand: string;
   model: string;
+  /** Slice (issue #57): manufacturer reference, e.g. "3570.50". */
+  reference: string;
   notes: string;
   is_public: boolean;
   movement: MovementOption | null;
@@ -24,6 +26,7 @@ export const EMPTY_WATCH_FORM: WatchFormValues = {
   name: "",
   brand: "",
   model: "",
+  reference: "",
   notes: "",
   is_public: true,
   movement: null,
@@ -143,6 +146,24 @@ export function WatchForm({
           ) : null}
         </label>
       </div>
+
+      <label className="flex flex-col gap-1 text-sm font-medium text-cf-text">
+        Reference (optional)
+        <input
+          type="text"
+          maxLength={50}
+          placeholder="e.g. 3570.50"
+          value={values.reference}
+          onChange={(event) => update("reference", event.target.value)}
+          aria-invalid={fieldErrors.reference ? true : undefined}
+          className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text placeholder:text-cf-text-subtle outline-none focus:border-cf-accent"
+        />
+        {fieldErrors.reference ? (
+          <span role="alert" className="text-sm text-cf-accent">
+            {fieldErrors.reference}
+          </span>
+        ) : null}
+      </label>
 
       <MovementTypeahead
         initialSelection={values.movement}

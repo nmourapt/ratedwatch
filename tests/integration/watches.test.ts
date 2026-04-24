@@ -166,6 +166,7 @@ interface WatchBody {
   name: string;
   brand: string | null;
   model: string | null;
+  reference: string | null;
   movement_id: string | null;
   movement_canonical_name: string | null;
   custom_movement_name: string | null;
@@ -263,6 +264,71 @@ describe("POST /api/v1/watches", () => {
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("unauthorized");
+  });
+
+  // Slice (issue #57): reference field round-trips through create +
+  // get + patch. Covers three shapes: populated, omitted-at-create
+  // (→ null), and cleared-via-patch (empty string → null).
+  it("persists `reference` through POST + GET + PATCH", async () => {
+    const { cookie } = await registerAndGetCookie();
+    const create = await createWatch(
+      {
+        name: "Speedy",
+        brand: "Omega",
+        model: "Speedmaster Pro",
+        reference: "3570.50",
+        movement_id: approvedMovementId,
+      },
+      cookie,
+    );
+    expect(create.status).toBe(201);
+    const created = (await create.json()) as WatchBody;
+    expect(created.reference).toBe("3570.50");
+
+    const read = await getWatch(created.id, cookie);
+    const readBody = (await read.json()) as WatchBody;
+    expect(readBody.reference).toBe("3570.50");
+
+    const patched = await patchWatch(created.id, { reference: "ST105.012" }, cookie);
+    expect(patched.status).toBe(200);
+    const after = (await patched.json()) as WatchBody;
+    expect(after.reference).toBe("ST105.012");
+
+    // Empty string clears the field (null round-trip).
+    const cleared = await patchWatch(created.id, { reference: "" }, cookie);
+    expect(cleared.status).toBe(200);
+    const clearedBody = (await cleared.json()) as WatchBody;
+    expect(clearedBody.reference).toBeNull();
+  });
+
+  it("omitted `reference` stores as null", async () => {
+    const { cookie } = await registerAndGetCookie();
+    const res = await createWatch(
+      { name: "Refless", movement_id: approvedMovementId },
+      cookie,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as WatchBody;
+    expect(body.reference).toBeNull();
+  });
+
+  it("rejects a reference longer than 50 chars (400)", async () => {
+    const { cookie } = await registerAndGetCookie();
+    const res = await createWatch(
+      {
+        name: "Too long",
+        reference: "X".repeat(51),
+        movement_id: approvedMovementId,
+      },
+      cookie,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      error: string;
+      fieldErrors: Record<string, string>;
+    };
+    expect(body.error).toBe("invalid_input");
+    expect(body.fieldErrors.reference).toMatch(/50/);
   });
 });
 

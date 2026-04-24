@@ -12,6 +12,8 @@ export interface Watch {
   name: string;
   brand: string | null;
   model: string | null;
+  // Slice (issue #57): manufacturer reference (e.g. "3570.50"). Nullable.
+  reference: string | null;
   movement_id: string | null;
   movement_canonical_name: string | null;
   custom_movement_name: string | null;
@@ -112,6 +114,8 @@ export interface CreateWatchBody {
   name: string;
   brand?: string;
   model?: string;
+  /** Manufacturer reference number, e.g. "3570.50". Empty string clears on PATCH. */
+  reference?: string;
   movement_id: string;
   custom_movement_name?: string;
   notes?: string;
