@@ -13,17 +13,68 @@
  * Fonts: Inter (weights 300/400/500/600) substitutes for Waldenburg
  * (commercial). Display headings should use font-weight:300 with
  * tracking-tight to match the "whisper-thin" display feel. Geist Mono
- * is pulled from Google Fonts too; falls back to system mono if the
- * fetch fails. The uppercase-bold WaldenburgFH variant from DESIGN.md
- * is substituted with Inter 600 + uppercase + 0.7px letter-spacing
- * (search for ".btn--uppercase" in component code).
+ * (400/500) covers the mono slot. Both are SELF-HOSTED at /fonts/*.woff2
+ * — Workers Assets serves them via Vite's public/ directory copy. No
+ * third-party DNS/TLS handshake to fonts.googleapis.com on first paint.
+ * The uppercase-bold WaldenburgFH variant from DESIGN.md is substituted
+ * with Inter 600 + uppercase + 0.7px letter-spacing (search for
+ * ".btn--uppercase" in component code).
  *
  * Dark-mode strategy: `prefers-color-scheme` media query at :root
  * (same as public pages), not a `.dark` class. When a theme toggle
  * ships, flip to a class-based strategy.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap");
+/* Self-hosted font faces. Files live at src/app/public/fonts/*.woff2;
+ * Vite's `public/` copy puts them in dist/fonts/ at build time so
+ * Workers Assets serves them at /fonts/<file>. font-display:swap keeps
+ * paint immediate while WOFF2s download — first paint uses the system
+ * fallback in the var() stack below, then Inter swaps in. Public SSR
+ * pages duplicate these @font-face declarations in
+ * src/public/components/layout.tsx because they don't load this CSS.
+ */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Inter-Light.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Inter-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Inter-Medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/Inter-SemiBold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Medium.woff2") format("woff2");
+}
 
 @import "tailwindcss";
 

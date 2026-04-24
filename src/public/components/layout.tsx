@@ -4,15 +4,17 @@
 // "no <script> tag" contract in tests/integration/home.test.ts.
 //
 // Fonts: Inter (weights 300/400/500/600) substitutes for the commercial
-// Waldenburg family called for in DESIGN.md. Loaded from Google Fonts
-// via <link> tags so both SSR pages and the SPA share the same source.
-// Geist Mono covers the mono slot. The licence-safe substitution is
-// documented in DESIGN.md in the repo root.
+// Waldenburg family called for in DESIGN.md. Both Inter and Geist Mono
+// (mono slot) are SELF-HOSTED at /fonts/*.woff2 via Workers Assets —
+// Vite copies src/app/public/fonts into dist/fonts/ at build time. No
+// third-party DNS/TLS handshake to fonts.googleapis.com on first paint.
+// The licence-safe substitution is documented in DESIGN.md.
 //
 // CSS variables use semantic names (`--color-canvas`, `--color-ink`,
 // `--color-line`, `--color-accent`, …) — no `cf-*` prefix. Values match
 // `@theme` in src/app/styles.css and the `tokens` object in tokens.ts.
 import type { Child } from "hono/jsx";
+import { raw } from "hono/html";
 import { tokens } from "./tokens";
 
 export type LayoutProps = {
@@ -34,7 +36,57 @@ function DesignTokensStyle() {
   const d = tokens.dark;
   // Hand-rolled CSS string — hono/jsx escapes <style> children
   // otherwise. Static text only; no user data flows in.
+  //
+  // @font-face declarations come first because public SSR pages do not
+  // load src/app/styles.css (that ships with the SPA bundle only). The
+  // SPA's @font-face block in styles.css is identical — keep them in
+  // sync when font weights or filenames change. Fonts are SELF-HOSTED
+  // at /fonts/*.woff2 via Workers Assets (Vite copies src/app/public/
+  // into dist/ at build time).
   const css = `
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Inter-Light.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Inter-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Inter-Medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/Inter-SemiBold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Medium.woff2") format("woff2");
+}
+
 :root {
   --color-canvas: ${l.canvas};
   --color-surface: ${l.surface};
@@ -320,7 +372,13 @@ a:hover { color: var(--color-ink-muted); }
   .cf-grid-2 { grid-template-columns: repeat(2, 1fr); gap: 24px; }
 }
 `;
-  return <style>{css}</style>;
+  // raw() prevents hono/jsx from HTML-escaping the embedded CSS.
+  // <style> is a "raw text" element per HTML spec, so entity refs
+  // (&quot; etc) inside its body are NOT decoded by the browser's
+  // CSS parser — escaped quotes would silently break url("...") and
+  // font-family: "Geist Mono" parsing. The css string is built from
+  // tokens.ts only (no user input), so raw() is safe.
+  return <style>{raw(css)}</style>;
 }
 
 export const Layout = ({ title, description, pathname, children }: LayoutProps) => {
@@ -357,13 +415,21 @@ export const Layout = ({ title, description, pathname, children }: LayoutProps) 
 
         <link rel="canonical" href={url} />
 
-        {/* Font loading — Inter for display+body, Geist Mono for code.
-            Preconnect to both Google Fonts domains to trim latency. */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+        {/* Font loading — Inter (300/400/500/600) for display+body and
+            Geist Mono (400/500) for code. Files are SELF-HOSTED at
+            /fonts/*.woff2 (Workers Assets, see src/app/public/fonts/).
+            We preload only the most-used weight (Inter Regular 400) so
+            body text paints without waiting for the @font-face cascade
+            to discover it. The other weights are fetched lazily as the
+            browser resolves @font-face matches in DesignTokensStyle.
+            crossorigin is required on font preloads — without it the
+            browser fires a second request and the preload is wasted. */}
         <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/fonts/Inter-Regular.woff2"
+          crossorigin="anonymous"
         />
 
         <DesignTokensStyle />
