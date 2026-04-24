@@ -36,15 +36,15 @@ function DesignTokensStyle() {
   // tag with static CSS text is fine since no user data flows in here.
   const css = `
 :root {
-  --cf-orange: ${l.orange};
-  --cf-orange-hover: ${l.orangeHover};
+  --cf-accent: ${l.accent};
+  --cf-accent-hover: ${l.accentHover};
   --cf-text: ${l.text};
   --cf-text-muted: ${l.textMuted};
   --cf-text-subtle: ${l.textSubtle};
-  --cf-bg-page: ${l.bgPage};
-  --cf-bg-100: ${l.bg100};
-  --cf-bg-200: ${l.bg200};
-  --cf-bg-300: ${l.bg300};
+  --cf-shell: ${l.shell};
+  --cf-bg: ${l.bg};
+  --cf-surface: ${l.surface};
+  --cf-surface-inset: ${l.surfaceInset};
   --cf-border: ${l.border};
   --cf-border-light: ${l.borderLight};
   --cf-font-sans: ${tokens.font.sans};
@@ -59,15 +59,15 @@ function DesignTokensStyle() {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --cf-orange: ${d.orange};
-    --cf-orange-hover: ${d.orangeHover};
+    --cf-accent: ${d.accent};
+    --cf-accent-hover: ${d.accentHover};
     --cf-text: ${d.text};
     --cf-text-muted: ${d.textMuted};
     --cf-text-subtle: ${d.textSubtle};
-    --cf-bg-page: ${d.bgPage};
-    --cf-bg-100: ${d.bg100};
-    --cf-bg-200: ${d.bg200};
-    --cf-bg-300: ${d.bg300};
+    --cf-shell: ${d.shell};
+    --cf-bg: ${d.bg};
+    --cf-surface: ${d.surface};
+    --cf-surface-inset: ${d.surfaceInset};
     --cf-border: ${d.border};
     --cf-border-light: ${d.borderLight};
     color-scheme: dark;
@@ -81,7 +81,7 @@ function DesignTokensStyle() {
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--cf-bg-100);
+  background: var(--cf-bg);
   color: var(--cf-text);
   font-family: var(--cf-font-sans);
   font-size: 16px;
@@ -93,14 +93,14 @@ html, body {
 }
 
 a {
-  color: var(--cf-orange);
+  color: var(--cf-accent);
   text-decoration: none;
   transition: color 0.15s ease;
 }
-a:hover { color: var(--cf-orange-hover); }
+a:hover { color: var(--cf-accent-hover); }
 
 :focus-visible {
-  outline: 2px solid var(--cf-orange);
+  outline: 2px solid var(--cf-accent);
   outline-offset: 2px;
   border-radius: var(--cf-radius-sm);
 }
@@ -136,7 +136,7 @@ a:hover { color: var(--cf-orange-hover); }
 
 .cf-card {
   position: relative;
-  background: var(--cf-bg-200);
+  background: var(--cf-surface);
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius-lg);
   padding: 24px;
@@ -165,7 +165,7 @@ a:hover { color: var(--cf-orange-hover); }
   position: absolute;
   width: 8px;
   height: 8px;
-  background: var(--cf-bg-100);
+  background: var(--cf-bg);
   border: 1px solid var(--cf-border);
   border-radius: 1.5px;
 }
@@ -192,24 +192,24 @@ a:hover { color: var(--cf-orange-hover); }
               border-color 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 .cf-btn--primary {
-  background: var(--cf-orange);
+  background: var(--cf-accent);
   color: #FFFBF5;
 }
-.cf-btn--primary:hover { background: var(--cf-orange-hover); color: #FFFBF5; }
+.cf-btn--primary:hover { background: var(--cf-accent-hover); color: #FFFBF5; }
 .cf-btn--ghost {
   background: transparent;
   color: var(--cf-text);
   border-color: var(--cf-border);
 }
 .cf-btn--ghost:hover {
-  background: var(--cf-bg-300);
+  background: var(--cf-surface-inset);
   color: var(--cf-text);
 }
 
 .cf-header {
   border-bottom: 1px solid var(--cf-border);
   padding: 16px 0;
-  background: var(--cf-bg-100);
+  background: var(--cf-bg);
 }
 .cf-header__inner {
   display: flex;
@@ -224,7 +224,7 @@ a:hover { color: var(--cf-orange-hover); }
   color: var(--cf-text);
   font-weight: 500;
 }
-.cf-logo__accent { color: var(--cf-orange); }
+.cf-logo__accent { color: var(--cf-accent); }
 
 .cf-nav {
   display: flex;
@@ -274,12 +274,12 @@ export const Layout = ({ title, description, pathname, children }: LayoutProps) 
             schemes. Tests assert both tags are present. */}
         <meta
           name="theme-color"
-          content={tokens.light.bg100}
+          content={tokens.light.bg}
           media="(prefers-color-scheme: light)"
         />
         <meta
           name="theme-color"
-          content={tokens.dark.bg100}
+          content={tokens.dark.bg}
           media="(prefers-color-scheme: dark)"
         />
 

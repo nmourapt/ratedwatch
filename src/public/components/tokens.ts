@@ -1,10 +1,12 @@
 // Design tokens — single source of truth for palette, radii,
 // typography, and motion used by both the public SSR pages and the SPA.
 //
-// Palette v3: cool-neutral zinc family, no warm accent. Token names
-// still reference "orange" for minimum repo churn — actual hex values
-// are zinc-family (mid-charcoal CTA light / near-white CTA dark).
-// Semantic rename (orange → accent) is a followup.
+// Palette v3: cool-neutral zinc family, no warm accent. Names are
+// semantic (`accent`, `bg`, `surface`, `surfaceInset`, `shell`) and
+// deliberately avoid hue-based labels — the actual hex values are
+// zinc-family (mid-charcoal CTA light / near-white CTA dark). A
+// historical rename from `orange`/`bg100-300`/`bgPage` to these
+// semantic names happened in one commit — see git blame on this file.
 //
 // The matching CSS custom properties are emitted by
 // <DesignTokensStyle /> in `layout.tsx` (public SSR) and by the
@@ -13,28 +15,28 @@
 
 export const tokens = {
   light: {
-    orange: "#3F3F46", // zinc-700, primary CTA
-    orangeHover: "#27272A", // zinc-800
+    accent: "#3F3F46", // zinc-700, primary CTA
+    accentHover: "#27272A", // zinc-800
     text: "#18181B", // zinc-900
     textMuted: "#71717A", // zinc-500
     textSubtle: "#A1A1AA", // zinc-400
-    bgPage: "#F4F4F5", // zinc-100, outer shell
-    bg100: "#FAFAFA", // zinc-50, main content
-    bg200: "#FFFFFF", // pure white, cards
-    bg300: "#F4F4F5", // zinc-100, inset
+    shell: "#F4F4F5", // zinc-100, outer shell
+    bg: "#FAFAFA", // zinc-50, main content
+    surface: "#FFFFFF", // pure white, cards
+    surfaceInset: "#F4F4F5", // zinc-100, inset
     border: "#E4E4E7", // zinc-200
     borderLight: "rgba(228, 228, 231, 0.5)",
   },
   dark: {
-    orange: "#E4E4E7", // zinc-200, CTA inverted
-    orangeHover: "#FAFAFA", // zinc-50
+    accent: "#E4E4E7", // zinc-200, CTA inverted
+    accentHover: "#FAFAFA", // zinc-50
     text: "#FAFAFA", // zinc-50
     textMuted: "#A1A1AA", // zinc-400
     textSubtle: "#71717A", // zinc-500
-    bgPage: "#000000", // full black outer shell
-    bg100: "#09090B", // zinc-950, page
-    bg200: "#18181B", // zinc-900, cards
-    bg300: "#27272A", // zinc-800, inset
+    shell: "#000000", // full black outer shell
+    bg: "#09090B", // zinc-950, page
+    surface: "#18181B", // zinc-900, cards
+    surfaceInset: "#27272A", // zinc-800, inset
     border: "#27272A", // zinc-800
     borderLight: "rgba(39, 39, 42, 0.5)",
   },

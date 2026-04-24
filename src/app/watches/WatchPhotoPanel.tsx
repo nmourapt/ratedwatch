@@ -142,7 +142,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
   return (
     <section
       aria-label="Watch photo"
-      className="mb-8 rounded-lg border border-cf-border bg-cf-bg-200 p-4"
+      className="mb-8 rounded-lg border border-cf-border bg-cf-surface p-4"
     >
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-cf-text-muted">
         Photo
@@ -170,7 +170,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
       {error ? (
         <p
           role="alert"
-          className="mb-3 rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-3 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
         >
           {error}
         </p>
@@ -183,7 +183,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
             type="button"
             onClick={handleUpload}
             disabled={busy !== null}
-            className="inline-flex items-center justify-center rounded-full bg-cf-orange px-5 py-2.5 text-sm font-medium text-black transition-colors hover:bg-cf-orange/90 disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-full bg-cf-accent px-5 py-2.5 text-sm font-medium text-black transition-colors hover:bg-cf-accent/90 disabled:opacity-60"
           >
             {busy === "upload" ? "Uploading…" : "Upload photo"}
           </button>
@@ -212,9 +212,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
           onDragLeave={() => setDragActive(false)}
           onDrop={onDrop}
           className={`flex flex-wrap items-center gap-3 rounded-md border-2 border-dashed p-4 transition-colors ${
-            dragActive
-              ? "border-cf-orange bg-cf-orange/10"
-              : "border-cf-border bg-cf-bg-100"
+            dragActive ? "border-cf-accent bg-cf-accent/10" : "border-cf-border bg-cf-bg"
           }`}
         >
           <input
@@ -228,7 +226,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={busy !== null}
-            className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-orange hover:text-cf-orange disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-accent hover:text-cf-accent disabled:opacity-60"
           >
             {imageKey ? "Replace photo" : "Choose photo"}
           </button>
@@ -240,7 +238,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
               type="button"
               onClick={handleDelete}
               disabled={busy !== null}
-              className="ml-auto inline-flex items-center justify-center rounded-full border border-cf-orange/40 bg-cf-orange/10 px-4 py-2 text-sm font-medium text-cf-orange transition-colors hover:border-cf-orange hover:bg-cf-orange/20 disabled:opacity-60"
+              className="ml-auto inline-flex items-center justify-center rounded-full border border-cf-accent/40 bg-cf-accent/10 px-4 py-2 text-sm font-medium text-cf-accent transition-colors hover:border-cf-accent hover:bg-cf-accent/20 disabled:opacity-60"
             >
               {busy === "delete" ? "Removing…" : "Remove photo"}
             </button>
@@ -257,7 +255,7 @@ function WatchSilhouette() {
   return (
     <div
       aria-hidden="true"
-      className="flex h-40 w-full max-w-xs items-center justify-center rounded-md border border-dashed border-cf-border bg-cf-bg-100 text-cf-text-subtle"
+      className="flex h-40 w-full max-w-xs items-center justify-center rounded-md border border-dashed border-cf-border bg-cf-bg text-cf-text-subtle"
     >
       <svg
         width="48"

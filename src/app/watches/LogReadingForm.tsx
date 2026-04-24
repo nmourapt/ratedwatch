@@ -96,14 +96,14 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
     <form
       onSubmit={handleSubmit}
       noValidate
-      className="mb-6 rounded-lg border border-cf-border bg-cf-bg-200 p-5"
+      className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5"
     >
       <h2 className="mb-4 text-sm font-medium text-cf-text">Log a reading</h2>
 
       {error ? (
         <p
           role="alert"
-          className="mb-4 rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-4 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
         >
           {error}
         </p>
@@ -129,10 +129,10 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
             disabled={isBaseline || submitting}
             placeholder="e.g. 2.5 or -1.3"
             aria-invalid={!!fieldErrors.deviation_seconds}
-            className="w-full rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-mono text-sm text-cf-text placeholder:text-cf-text-subtle focus:border-cf-orange focus:outline-none disabled:opacity-60"
+            className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-mono text-sm text-cf-text placeholder:text-cf-text-subtle focus:border-cf-accent focus:outline-none disabled:opacity-60"
           />
           {fieldErrors.deviation_seconds ? (
-            <span className="mt-1 block text-xs text-cf-orange">
+            <span className="mt-1 block text-xs text-cf-accent">
               {fieldErrors.deviation_seconds}
             </span>
           ) : null}
@@ -145,7 +145,7 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
             value={refInput}
             onChange={(e) => setRefInput(e.target.value)}
             disabled={submitting}
-            className="w-full rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-mono text-sm text-cf-text focus:border-cf-orange focus:outline-none disabled:opacity-60"
+            className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-mono text-sm text-cf-text focus:border-cf-accent focus:outline-none disabled:opacity-60"
           />
         </label>
       </div>
@@ -156,7 +156,7 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
           checked={isBaseline}
           onChange={(e) => setIsBaseline(e.target.checked)}
           disabled={submitting}
-          className="mt-0.5 h-4 w-4 rounded border-cf-border text-cf-orange focus:ring-cf-orange"
+          className="mt-0.5 h-4 w-4 rounded border-cf-border text-cf-accent focus:ring-cf-accent"
         />
         <span>
           <span className="text-cf-text">This is a baseline</span>
@@ -174,7 +174,7 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
           disabled={submitting}
           rows={2}
           maxLength={500}
-          className="w-full rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 text-sm text-cf-text placeholder:text-cf-text-subtle focus:border-cf-orange focus:outline-none disabled:opacity-60"
+          className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 text-sm text-cf-text placeholder:text-cf-text-subtle focus:border-cf-accent focus:outline-none disabled:opacity-60"
           placeholder="e.g. worn overnight face-up, 20ºC"
         />
       </label>
@@ -182,7 +182,7 @@ export function LogReadingForm({ watchId, onLogged }: Props) {
       <button
         type="submit"
         disabled={submitting}
-        className="inline-flex items-center justify-center rounded-full border border-cf-orange bg-cf-orange px-5 py-2.5 text-sm font-medium text-cf-bg-100 transition-colors hover:bg-cf-orange/90 disabled:opacity-60"
+        className="inline-flex items-center justify-center rounded-full border border-cf-accent bg-cf-accent px-5 py-2.5 text-sm font-medium text-cf-bg transition-colors hover:bg-cf-accent/90 disabled:opacity-60"
       >
         {submitting ? "Logging…" : "Log reading"}
       </button>

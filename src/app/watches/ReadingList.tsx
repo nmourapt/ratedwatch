@@ -65,13 +65,13 @@ export function ReadingList({ readings, perInterval, onDeleted }: Props) {
   }
 
   return (
-    <div className="mb-6 overflow-hidden rounded-lg border border-cf-border bg-cf-bg-200">
+    <div className="mb-6 overflow-hidden rounded-lg border border-cf-border bg-cf-surface">
       <div className="border-b border-cf-border px-5 py-3 text-sm font-medium text-cf-text">
         Reading log
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-cf-bg-100 text-left text-xs uppercase tracking-wide text-cf-text-subtle">
+          <thead className="bg-cf-bg text-left text-xs uppercase tracking-wide text-cf-text-subtle">
             <tr>
               <th className="px-4 py-2">Reference time</th>
               <th className="px-4 py-2">Deviation</th>
@@ -92,7 +92,7 @@ export function ReadingList({ readings, perInterval, onDeleted }: Props) {
                   <td className="px-4 py-3 font-mono text-xs text-cf-text">
                     {formatTime(r.reference_timestamp)}
                     {r.is_baseline ? (
-                      <span className="ml-2 rounded-full border border-cf-orange/40 bg-cf-orange/10 px-1.5 py-0.5 text-[10px] font-medium text-cf-orange">
+                      <span className="ml-2 rounded-full border border-cf-accent/40 bg-cf-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-cf-accent">
                         baseline
                       </span>
                     ) : null}
@@ -114,7 +114,7 @@ export function ReadingList({ readings, perInterval, onDeleted }: Props) {
                       type="button"
                       onClick={() => handleDelete(r.id)}
                       disabled={deletingId === r.id}
-                      className="text-xs text-cf-text-muted transition-colors hover:text-cf-orange disabled:opacity-60"
+                      className="text-xs text-cf-text-muted transition-colors hover:text-cf-accent disabled:opacity-60"
                     >
                       {deletingId === r.id ? "Deleting…" : "Delete"}
                     </button>

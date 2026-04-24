@@ -125,13 +125,13 @@ export function EditWatchPage() {
       <section className="mx-auto max-w-2xl">
         <p
           role="alert"
-          className="rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+          className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
         >
           {state.message}
         </p>
         <Link
           to="/app/dashboard"
-          className="mt-4 inline-block text-sm text-cf-orange hover:underline"
+          className="mt-4 inline-block text-sm text-cf-accent hover:underline"
         >
           ← Back to dashboard
         </Link>

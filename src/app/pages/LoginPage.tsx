@@ -40,7 +40,7 @@ export function LoginPage() {
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-orange"
+            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm font-medium text-cf-text">
@@ -52,13 +52,13 @@ export function LoginPage() {
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="rounded-md border border-cf-border bg-cf-bg-100 px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-orange"
+            className="rounded-md border border-cf-border bg-cf-bg px-3 py-2 font-sans text-base text-cf-text outline-none focus:border-cf-accent"
           />
         </label>
         {error ? (
           <p
             role="alert"
-            className="rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+            className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
           >
             {error}
           </p>
@@ -66,7 +66,7 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-2 inline-flex items-center justify-center rounded-full bg-cf-orange px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-orange-hover disabled:opacity-60"
+          className="mt-2 inline-flex items-center justify-center rounded-full bg-cf-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-accent-hover disabled:opacity-60"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
@@ -84,7 +84,7 @@ export function LoginPage() {
       <GoogleSignInButton label="Continue with Google" />
       <p className="mt-6 text-sm text-cf-text-muted">
         New here?{" "}
-        <Link to="/app/register" className="text-cf-orange hover:underline">
+        <Link to="/app/register" className="text-cf-accent hover:underline">
           Create an account
         </Link>
         .

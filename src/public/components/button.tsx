@@ -3,7 +3,7 @@
 // button (to be added under src/app/ui/ later).
 //
 // Two variants in slice 3:
-//   - "primary": orange fill, white text. CTAs.
+//   - "primary": accent fill, white text. CTAs.
 //   - "ghost":   border + muted text. Secondary actions.
 //
 // The `as` prop lets the same styling apply to <a>, so link-buttons on the

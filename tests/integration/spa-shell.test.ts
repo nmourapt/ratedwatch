@@ -62,8 +62,8 @@ describe("SPA shell — /app/*", () => {
     // Canonical palette hex values — asserted via the @theme tokens
     // registered in src/app/styles.css. If someone regresses the theme
     // block or drops the import, this fires.
-    // Palette v3 (cool-neutral zinc). Token names still reference
-    // "orange" but the hex values are zinc-family.
+    // Palette v3 (cool-neutral zinc). Token names are semantic
+    // (`cf-accent`, `cf-bg`, …); hex values are zinc-family.
     expect(css).toContain("#3f3f46"); // CTA accent (zinc-700, light)
     expect(css).toContain("#fafafa"); // page bg (zinc-50, light)
     expect(css).toContain("#09090b"); // page bg (zinc-950, dark)

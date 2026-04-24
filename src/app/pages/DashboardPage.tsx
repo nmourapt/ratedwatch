@@ -55,7 +55,7 @@ export function DashboardPage() {
           {user ? (
             <p className="text-cf-text">
               Logged in as{" "}
-              <span className="font-mono text-cf-orange">@{user.username}</span>.
+              <span className="font-mono text-cf-accent">@{user.username}</span>.
             </p>
           ) : (
             <p className="text-cf-text-muted">Loading profile…</p>
@@ -63,7 +63,7 @@ export function DashboardPage() {
         </div>
         <Link
           to="/app/watches/new"
-          className="inline-flex items-center justify-center rounded-full bg-cf-orange px-5 py-2.5 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-orange-hover"
+          className="inline-flex items-center justify-center rounded-full bg-cf-accent px-5 py-2.5 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-accent-hover"
         >
           Add watch
         </Link>
@@ -75,19 +75,19 @@ export function DashboardPage() {
         ) : state.kind === "error" ? (
           <p
             role="alert"
-            className="rounded-md border border-cf-orange/40 bg-cf-orange/10 px-3 py-2 text-sm text-cf-text"
+            className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
           >
             {state.message}
           </p>
         ) : state.watches.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-cf-border bg-cf-bg-200 px-6 py-10 text-center">
+          <div className="rounded-lg border border-dashed border-cf-border bg-cf-surface px-6 py-10 text-center">
             <p className="mb-3 text-cf-text">No watches yet.</p>
             <p className="mb-4 text-sm text-cf-text-muted">
               Add your first watch to start tracking accuracy against a reference.
             </p>
             <Link
               to="/app/watches/new"
-              className="inline-flex items-center justify-center rounded-full bg-cf-orange px-5 py-2.5 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-orange-hover"
+              className="inline-flex items-center justify-center rounded-full bg-cf-accent px-5 py-2.5 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-cf-accent-hover"
             >
               Add your first watch
             </Link>
@@ -103,12 +103,12 @@ export function DashboardPage() {
                 <li key={watch.id}>
                   <Link
                     to={`/app/watches/${watch.id}`}
-                    className="flex h-full flex-col gap-2 rounded-lg border border-cf-border bg-cf-bg-100 p-4 transition-colors hover:border-cf-orange"
+                    className="flex h-full flex-col gap-2 rounded-lg border border-cf-border bg-cf-bg p-4 transition-colors hover:border-cf-accent"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h2 className="text-lg font-medium text-cf-text">{watch.name}</h2>
                       {watch.is_public ? null : (
-                        <span className="rounded-full border border-cf-orange/40 bg-cf-orange/10 px-2 py-0.5 text-xs font-medium text-cf-orange">
+                        <span className="rounded-full border border-cf-accent/40 bg-cf-accent/10 px-2 py-0.5 text-xs font-medium text-cf-accent">
                           Private
                         </span>
                       )}
@@ -142,7 +142,7 @@ export function DashboardPage() {
       <button
         type="button"
         onClick={onLogout}
-        className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-orange hover:text-cf-orange"
+        className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-accent hover:text-cf-accent"
       >
         Sign out
       </button>

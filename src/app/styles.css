@@ -2,8 +2,8 @@
  * rated.watch SPA styles — palette v3 (cool-neutral zinc).
  *
  * Tailwind v4 is included via @tailwindcss/vite. The @theme block
- * registers the palette tokens so `bg-cf-bg-100`, `text-cf-text`,
- * `text-cf-orange`, etc. become first-class utilities. Public SSR
+ * registers the palette tokens so `bg-cf-bg`, `text-cf-text`,
+ * `text-cf-accent`, etc. become first-class utilities. Public SSR
  * pages declare the same variables inline in src/public/components/
  * layout.tsx (via tokens.ts) — keep the two in sync when tokens
  * change.
@@ -12,36 +12,37 @@
  * (same as public pages), not a `.dark` class. When a theme toggle
  * ships, flip to a class-based strategy.
  *
- * Naming note: the token names `cf-orange` / `cf-bg-100` are
- * intentionally preserved to avoid a repo-wide class rename. Their
- * semantic meaning is "accent" / "page background"; the actual
- * hex values below are zinc-family, no orange anywhere. A future
- * cleanup can rename the tokens to semantic names.
+ * Naming: tokens are semantic. `cf-accent` = primary CTA,
+ * `cf-bg`/`cf-surface`/`cf-surface-inset` form a three-step
+ * background stack (page → card → inset), `cf-shell` is the
+ * rarely-used outer-shell background behind main. The actual hex
+ * values are zinc-family — no warm accent anywhere.
  */
 
 @import "tailwindcss";
 
 @theme {
-  /* "Accent" (formerly orange) — the primary CTA color.
+  /* Accent — the primary CTA color.
    * Light: zinc-700. Dark: zinc-200 (inverted).
    * Mid-charcoal against near-white bg; inverse on dark bg.
    * No saturated brand color; the product relies on typographic
    * hierarchy + contrast, not hue, for emphasis. */
-  --color-cf-orange: #3f3f46;
-  --color-cf-orange-hover: #27272a;
+  --color-cf-accent: #3f3f46;
+  --color-cf-accent-hover: #27272a;
 
   /* Text — zinc-900 light, zinc-50 dark. */
   --color-cf-text: #18181b;
   --color-cf-text-muted: #71717a; /* zinc-500 */
   --color-cf-text-subtle: #a1a1aa; /* zinc-400 */
 
-  /* Page / card background. `bg-page` is the outer shell, `bg-100`
-   * the main content area, `bg-200` the lifted card, `bg-300` the
-   * inset (e.g. the stats panel on the watch detail page). */
-  --color-cf-bg-page: #f4f4f5; /* zinc-100 — outer */
-  --color-cf-bg-100: #fafafa; /* zinc-50  — page bg */
-  --color-cf-bg-200: #ffffff; /* pure white — cards */
-  --color-cf-bg-300: #f4f4f5; /* zinc-100 — inset */
+  /* Background stack. `shell` is the outer shell (rarely used),
+   * `bg` is the main content area, `surface` is the lifted card,
+   * `surface-inset` is the inset (e.g. the stats panel on the
+   * watch detail page). */
+  --color-cf-shell: #f4f4f5; /* zinc-100 — outer */
+  --color-cf-bg: #fafafa; /* zinc-50  — page bg */
+  --color-cf-surface: #ffffff; /* pure white — cards */
+  --color-cf-surface-inset: #f4f4f5; /* zinc-100 — inset */
 
   --color-cf-border: #e4e4e7; /* zinc-200 */
 
@@ -56,17 +57,17 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-cf-orange: #e4e4e7; /* zinc-200 — CTA inverted */
-    --color-cf-orange-hover: #fafafa; /* zinc-50 on hover */
+    --color-cf-accent: #e4e4e7; /* zinc-200 — CTA inverted */
+    --color-cf-accent-hover: #fafafa; /* zinc-50 on hover */
 
     --color-cf-text: #fafafa; /* zinc-50 */
     --color-cf-text-muted: #a1a1aa; /* zinc-400 */
     --color-cf-text-subtle: #71717a; /* zinc-500 */
 
-    --color-cf-bg-page: #000000; /* full black outer shell */
-    --color-cf-bg-100: #09090b; /* zinc-950 — page */
-    --color-cf-bg-200: #18181b; /* zinc-900 — cards */
-    --color-cf-bg-300: #27272a; /* zinc-800 — inset */
+    --color-cf-shell: #000000; /* full black outer shell */
+    --color-cf-bg: #09090b; /* zinc-950 — page */
+    --color-cf-surface: #18181b; /* zinc-900 — cards */
+    --color-cf-surface-inset: #27272a; /* zinc-800 — inset */
 
     --color-cf-border: #27272a; /* zinc-800 */
 
@@ -80,7 +81,7 @@
 
 html,
 body {
-  background: var(--color-cf-bg-100);
+  background: var(--color-cf-bg);
   color: var(--color-cf-text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
