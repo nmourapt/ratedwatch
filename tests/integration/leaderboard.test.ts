@@ -455,6 +455,30 @@ describe("GET /leaderboard — public HTML", () => {
     expect(cacheControl).toMatch(/stale-while-revalidate=86400/);
   });
 
+  // Followup (cache-vary-cookie): public SSR pages must emit
+  // `Vary: Cookie` so browser caches correctly differentiate the
+  // anon variant from the signed-in variant after sign-out. A
+  // future CF edge cache-rule can key off this header too.
+  it("emits Vary: Cookie on the anon no-toggle path", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard"),
+    );
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
+  });
+
+  it("emits Vary: Cookie on the Set-Cookie filter-toggle path", async () => {
+    const res = await exports.default.fetch(
+      new Request("https://ratedwatch.test/leaderboard?verified=1"),
+    );
+    expect(res.status).toBe(200);
+    // Cache-Control stays `private, no-store` on the toggle path —
+    // the Set-Cookie side-effect must never be shared — but the
+    // Vary: Cookie header is still emitted so browser caches
+    // differentiate the signed-out replay.
+    expect(res.headers.get("cache-control") ?? "").toMatch(/private,\s*no-store/);
+    expect(res.headers.get("vary") ?? "").toMatch(/Cookie/i);
+  });
+
   it("footer mentions the eligibility rule (7 days, 3 readings)", async () => {
     const res = await exports.default.fetch(
       new Request("https://ratedwatch.test/leaderboard"),

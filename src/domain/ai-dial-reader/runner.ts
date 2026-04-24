@@ -7,9 +7,9 @@
 // Semantics:
 //
 //   * Production path: `resolveAiRunner(env)` returns a function that
-//     delegates to `env.AI.run(DIAL_MODEL, { messages }, { gateway })`
-//     and extracts the assistant's text reply from the chat-completion
-//     response. Every call is routed through the AI Gateway named by
+//     delegates to `env.AI.run(DIAL_MODEL, { messages, image }, { gateway })`
+//     and extracts the assistant's text reply from the model's response.
+//     Every call is routed through the AI Gateway named by
 //     `AI_GATEWAY_ID` — that's the single pane for request logs, rate
 //     limiting, and (future) cache / fallback policies.
 //
@@ -27,20 +27,34 @@
 // The `AiRunner` contract returns a `{ response: string }` — the
 // extracted assistant text — regardless of which underlying model
 // the runner chose. That keeps the reader layer (reader.ts) free of
-// model-specific response shapes; if we ever swap Kimi for another
-// chat model, only this file changes.
+// model-specific response shapes; if we ever swap models, only this
+// file changes.
 
 /**
- * Dial-reader model. Kimi K2.6 is a frontier-scale vision + reasoning
- * chat model on Workers AI (Day-0 release 2026-04-20). Chosen over
- * the previous llama-3.2-11b-vision-instruct for its much stronger
- * visual reasoning, which matters for reading a watch's thin second
- * hand against a busy dial background.
+ * Dial-reader model. Llama 3.2 11B Vision Instruct is Meta's
+ * vision-capable instruction-tuned model on Workers AI, with a
+ * documented and proven `image: number[]` input shape.
  *
- * Pricing: $0.95 / M input tokens. A dial read is ~1 image + ~200
- * prompt tokens ≈ well under $0.001 per reading.
+ * History: we previously used `@cf/moonshotai/kimi-k2.6` with an
+ * OpenAI-compat `image_url` content part. Despite Kimi K2.6 being
+ * advertised as vision-capable and the binding accepting that schema,
+ * production AI Gateway logs showed the image was NOT being embedded
+ * (291 input tokens for a request that should have been 1000+) and
+ * the model replied NO_DIAL because it was processing text only. The
+ * upstream Workers AI inference path for K2.6 is not (yet) wiring
+ * vision through. We swap to Llama 3.2 vision which has a working
+ * documented vision pipeline.
+ *
+ * Pricing: $0.049 / M input tokens, $0.68 / M output tokens. Cheaper
+ * than Kimi K2.6 ($0.95 / M input). Slightly weaker reasoning, but
+ * the dial-reading prompt is concrete enough that this is a worthy
+ * trade for a working pipeline.
+ *
+ * Operator note: first call to this model on a fresh account requires
+ * sending `{ prompt: "agree" }` once to accept the Meta license. See
+ * https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/.
  */
-export const DIAL_MODEL = "@cf/moonshotai/kimi-k2.6";
+export const DIAL_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
 
 /**
  * AI Gateway slug. Every `env.AI.run(...)` in this codebase routes
@@ -55,25 +69,24 @@ export const AI_GATEWAY_ID = "ratedwatch";
 
 export interface AiRunInputs {
   /**
-   * JPEG bytes. Encoded as a base64 data URL and embedded in the
-   * user message's `image_url` field before dispatching to Kimi.
-   * A `Uint8Array` is the canonical shape at the reader boundary;
-   * the runner converts.
+   * JPEG bytes. Sent to the model as a top-level `image: number[]`
+   * field — the documented shape for Llama 3.2 vision via the
+   * Workers AI binding.
    */
   image: Uint8Array;
   /**
-   * The prompt text. The runner wraps this in a Kimi chat-messages
-   * envelope (system + user with image attached). The reader builds
-   * a single prompt string and leaves the conversational structure
-   * to the runner.
+   * The prompt text. The runner wraps this in a chat-messages
+   * envelope (system + user with plain-string content). The reader
+   * builds a single prompt string and leaves the conversational
+   * structure to the runner.
    */
   prompt: string;
 }
 
 export interface AiRunResponse {
   /**
-   * The assistant's text reply, extracted from Kimi's
-   * `choices[0].message.content`. `undefined` if the upstream
+   * The assistant's text reply, extracted from Llama vision's
+   * top-level `response` field. `undefined` if the upstream
    * response is malformed — the reader defensively treats that as
    * an unparseable read.
    */
@@ -102,80 +115,52 @@ export function __setTestAiRunner(fn: AiRunner | null): void {
   testRunner = fn;
 }
 
-// --- Kimi chat-completion shape ------------------------------------
+// --- Llama 3.2 vision request shape --------------------------------
+//
+// Llama 3.2 vision via the Workers AI binding accepts:
+//
+//   {
+//     messages: [{ role, content: string }, ...],
+//     image: number[]         // raw JPEG bytes as plain numbers
+//   }
+//
+// The image MUST be a `number[]` (not a Uint8Array). The binding's
+// JSON encoder serialises Uint8Array as `{}` and silently drops the
+// payload — that path is what produced the original NO_DIAL bug
+// when we tried `image_url` content parts on Kimi K2.6.
 
-// We model only the bits we read. Kimi accepts the OpenAI-compatible
-// chat-completion schema: `{ messages: [{ role, content }] }` where
-// a user message's `content` can be a string OR an array of parts
-// (text + image_url). We always use the parts form so the image is
-// attached to the user turn.
-
-interface KimiTextPart {
-  type: "text";
-  text: string;
-}
-
-interface KimiImageUrlPart {
-  type: "image_url";
-  image_url: { url: string };
-}
-
-type KimiContentPart = KimiTextPart | KimiImageUrlPart;
-
-interface KimiMessage {
+interface LlamaVisionMessage {
   role: "system" | "user" | "assistant";
-  content: string | KimiContentPart[];
+  content: string;
 }
 
-interface KimiRequest {
-  messages: KimiMessage[];
+interface LlamaVisionRequest {
+  messages: LlamaVisionMessage[];
+  image: number[];
 }
 
-interface KimiChoice {
-  message?: { content?: string };
-}
-
-interface KimiResponse {
-  choices?: KimiChoice[];
-}
-
-/** Base64-encode a byte array. `btoa` expects a binary string. */
-function toBase64(bytes: Uint8Array): string {
-  // Build the binary string in chunks to avoid stack-size errors on
-  // very large images (btoa over `String.fromCharCode(...bytes)` can
-  // blow up for >100kB inputs). 8kB chunks are safely within the
-  // arg-list limit on every runtime we care about.
-  const CHUNK = 0x2000;
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    const slice = bytes.subarray(i, i + CHUNK);
-    binary += String.fromCharCode(...slice);
-  }
-  return btoa(binary);
+interface LlamaVisionResponse {
+  response?: string;
 }
 
 const SYSTEM_PROMPT =
   "You are a watch-dial reader. You answer with a single token and nothing else.";
 
 /**
- * Build the Kimi chat request for a dial read. The image is encoded
- * as a `data:image/jpeg;base64,...` URL on the `image_url` part —
- * that's the format Kimi accepts via the Workers AI binding.
+ * Build the Llama vision request for a dial read. The image is sent
+ * as a top-level `number[]` of raw JPEG bytes — that's the shape the
+ * Workers AI binding expects for `@cf/meta/llama-3.2-11b-vision-instruct`.
  */
-function buildKimiRequest(inputs: AiRunInputs): KimiRequest {
-  const b64 = toBase64(inputs.image);
-  const imageUrl = `data:image/jpeg;base64,${b64}`;
+function buildLlamaRequest(inputs: AiRunInputs): LlamaVisionRequest {
   return {
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: inputs.prompt },
-          { type: "image_url", image_url: { url: imageUrl } },
-        ],
-      },
+      { role: "user", content: inputs.prompt },
     ],
+    // `Array.from(Uint8Array)` produces a plain `number[]`. Don't
+    // be tempted to use `[...inputs.image]` — that's also `number[]`
+    // but it's marginally slower and harder to grep for.
+    image: Array.from(inputs.image),
   };
 }
 
@@ -188,22 +173,23 @@ function buildKimiRequest(inputs: AiRunInputs): KimiRequest {
 export function resolveAiRunner(env: AiRunnerEnv): AiRunner {
   if (testRunner) return testRunner;
   return async (inputs) => {
-    const req = buildKimiRequest(inputs);
+    const req = buildLlamaRequest(inputs);
     // The Ai binding's type signature is a cross-product over every
     // model's input/output shape — TypeScript can't narrow without
-    // knowing the model key. Cast here; Kimi K2.6 accepts a
-    // chat-completion request and returns an OpenAI-shaped response.
+    // knowing the model key. Cast here; Llama 3.2 vision accepts
+    // `{ messages, image }` and returns `{ response }`.
     const raw = (await (
       env.AI as unknown as {
         run: (
           model: string,
-          inputs: KimiRequest,
+          inputs: LlamaVisionRequest,
           options: { gateway: { id: string } },
-        ) => Promise<KimiResponse>;
+        ) => Promise<LlamaVisionResponse>;
       }
-    ).run(DIAL_MODEL, req, { gateway: { id: AI_GATEWAY_ID } })) as KimiResponse;
+    ).run(DIAL_MODEL, req, {
+      gateway: { id: AI_GATEWAY_ID },
+    })) as LlamaVisionResponse;
 
-    const content = raw.choices?.[0]?.message?.content;
-    return typeof content === "string" ? { response: content } : {};
+    return typeof raw.response === "string" ? { response: raw.response } : {};
   };
 }
