@@ -72,4 +72,48 @@ describe("GET / — design system + home shell", () => {
     const body = await response.text();
     expect(body).toMatch(/prefers-color-scheme\s*:\s*dark/i);
   });
+
+  // Followup (cache-vary-cookie): public SSR pages must emit
+  // `Vary: Cookie` so browser caches correctly differentiate anon
+  // vs authed variants after sign-out.
+  it("emits Vary: Cookie and the anon s-maxage Cache-Control (no cookie)", async () => {
+    const response = await exports.default.fetch(new Request("https://ratedwatch.test/"));
+    expect(response.headers.get("vary") ?? "").toMatch(/Cookie/i);
+    expect(response.headers.get("cache-control") ?? "").toMatch(/s-maxage=300/);
+  });
+
+  it("emits Vary: Cookie and the private signed-in Cache-Control when authenticated", async () => {
+    // Register + sign in to acquire a Better Auth session cookie, then
+    // hit the home page as that signed-in user. The public-pages
+    // session resolver reads the same cookie via getSession.
+    const email = `home-vary-${crypto.randomUUID()}@ratedwatch.test`;
+    const password = "correct-horse-42";
+    await exports.default.fetch(
+      new Request("https://ratedwatch.test/api/v1/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "home-vary", email, password }),
+      }),
+    );
+    const login = await exports.default.fetch(
+      new Request("https://ratedwatch.test/api/v1/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      }),
+    );
+    expect(login.status).toBe(200);
+    const rawCookie = login.headers.get("set-cookie") ?? "";
+    const cookie = rawCookie.split(";")[0] ?? "";
+    expect(cookie).toBeTruthy();
+
+    const response = await exports.default.fetch(
+      new Request("https://ratedwatch.test/", { headers: { cookie } }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("vary") ?? "").toMatch(/Cookie/i);
+    expect(response.headers.get("cache-control") ?? "").toMatch(
+      /private,\s*max-age=0,\s*must-revalidate/,
+    );
+  });
 });
