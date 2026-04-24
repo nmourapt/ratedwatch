@@ -50,8 +50,16 @@ export const MovementPage = ({ movement, watches, verifiedOnly }: MovementPagePr
             <span class="cf-mv-type">{movement.type}</span>
           </p>
           <div class="cf-mv-cta">
+            {/*
+             * Warm-stone pill — DESIGN.md signature CTA. Applied here
+             * because Chrono24 is the commercial payoff of the
+             * per-movement page; the warm treatment gives it the
+             * "featured action" emphasis the landing hero also uses.
+             * One warm CTA per page stays the rule — all other
+             * buttons on /m/:id (verified-filter toggle, row links)
+             * remain ghost / inline. */}
             <a
-              class="cf-btn cf-btn--primary cf-mv-chrono24"
+              class="cf-btn cf-btn--warm cf-mv-chrono24"
               href={chrono24Url}
               target="_blank"
               rel="sponsored nofollow noopener noreferrer"

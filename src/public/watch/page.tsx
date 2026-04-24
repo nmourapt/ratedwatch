@@ -106,8 +106,12 @@ export const WatchPage = ({ data }: WatchPageProps) => {
         </section>
 
         <section class="cf-container cf-section">
+          {/* Warm-stone pill — DESIGN.md signature CTA, same treatment
+              used on the landing hero and the per-movement page.
+              The Chrono24 link is the commercial payoff of the public
+              watch page. */}
           <a
-            class="cf-btn cf-btn--primary"
+            class="cf-btn cf-btn--warm"
             href={chrono24Href}
             rel="sponsored nofollow noopener"
             target="_blank"

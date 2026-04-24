@@ -1,6 +1,6 @@
 // Slice #17 (issue #18). Camera-capture + upload UI for verified
 // readings. Lives on the watch detail page, above the manual
-// LogReadingForm. Owner-gated at the page level; this component
+// TapReadingForm. Owner-gated at the page level; this component
 // assumes it will only ever render for the watch's owner.
 //
 // UX flow:
