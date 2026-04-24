@@ -3,8 +3,13 @@ terraform {
 
   required_providers {
     cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = ">= 5.8.0, < 6.0.0"
+      source = "cloudflare/cloudflare"
+      # 5.19.0-beta.5 is the first release that ships the
+      # `cloudflare_ai_gateway` resource (see
+      # infra/terraform/ai-gateway.tf). Terraform range constraints
+      # skip pre-releases, so the version is pinned exactly until a
+      # stable 5.19.x is cut — bump this line when that lands.
+      version = "5.19.0-beta.5"
     }
   }
 
