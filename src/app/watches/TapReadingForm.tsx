@@ -1,7 +1,7 @@
-// Tap-the-dial manual reading flow. Replaces the typed-deviation
-// form (LogReadingForm.tsx — kept in the tree for now, marked
-// deprecated) with a UX that mirrors how an enthusiast actually
-// measures drift against a reference clock:
+// Tap-the-dial manual reading flow. Supersedes the typed-deviation
+// form that shipped with slice #12 (deleted once this UX went live).
+// The new shape mirrors how an enthusiast actually measures drift
+// against a reference clock:
 //
 //   1. The user looks at their watch.
 //   2. They wait for the second hand to cross one of the four
