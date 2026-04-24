@@ -111,14 +111,27 @@ test("register → add watch → verified-reading flow renders and surfaces flag
   await expect(submitBtn).toBeVisible();
   await expect(panel.getByText(/this is a baseline/i)).toBeVisible();
 
-  // ---- 5. Submit → flag-off error copy --------------------------
-  // The preview Worker uses the production `ai_reading_v2` flag,
-  // which defaults off for a freshly-registered user. The backend
-  // returns 503 { error: "verified_readings_disabled" } and the SPA
-  // maps that to the copy below.
+  // ---- 5. Submit → backend surfaces an outcome ------------------
+  // The preview Worker shares the production `ai_reading_v2` flag.
+  // Depending on whether the flag is currently rolled out, either:
+  //
+  //   (a) flag off  → 503 "verified readings aren't enabled"
+  //   (b) flag on   → 200/422 from Workers AI against the 1x1 PNG
+  //       fixture, which the model can't read as a dial → SPA maps
+  //       the ai_unparseable / ai_refused / ai_implausible error
+  //       codes to "AI returned an unexpected response" / "couldn't
+  //       read the dial" / "reading looked off".
+  //
+  // The test deliberately accepts either path — the UX wire-up is
+  // correct in both states, and the smoke is about "the submit
+  // round-trip surfaces a human-readable outcome", not about the
+  // exact flag state. If we ever need to assert flag-specific
+  // behaviour, switch this to an integration test with a mocked
+  // Workers AI binding rather than an E2E against real AI.
   await submitBtn.click();
   const errorBanner = panel.getByRole("alert");
-  await expect(errorBanner).toContainText(/verified readings aren't enabled/i, {
-    timeout: 10_000,
-  });
+  await expect(errorBanner).toContainText(
+    /verified readings aren't enabled|ai returned an unexpected response|couldn't read the dial|reading looked off/i,
+    { timeout: 15_000 },
+  );
 });
