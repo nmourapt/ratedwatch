@@ -8,7 +8,7 @@ export function NotFoundPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-[1200px] flex-col items-start justify-center gap-4 bg-canvas px-6 font-sans text-ink">
       <p className="font-mono text-sm text-ink-subtle">404</p>
-      <h1 className="text-4xl font-medium tracking-tight">
+      <h1 className="font-display text-4xl font-light tracking-tight">
         This page doesn't exist yet.
       </h1>
       <p className="max-w-[56ch] text-ink-muted">
@@ -17,7 +17,7 @@ export function NotFoundPage() {
       </p>
       <Link
         to="/app/dashboard"
-        className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-medium text-[#fffbf5] transition-colors hover:bg-accent-hover"
+        className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-pill bg-accent px-6 py-3 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
       >
         Back to dashboard →
       </Link>

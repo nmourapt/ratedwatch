@@ -307,7 +307,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
           type="button"
           onClick={handleBaseline}
           disabled={isSubmitting}
-          className="inline-flex items-center justify-center rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-xs font-medium text-accent transition-colors hover:border-accent hover:bg-accent/20 disabled:opacity-60"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-pill border border-accent/25 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent transition-colors hover:border-accent/40 hover:bg-accent/20 disabled:opacity-60"
         >
           {status.kind === "submitting" && status.position === "baseline"
             ? "Saving baseline…"
@@ -316,7 +316,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
         <button
           type="button"
           onClick={() => setShowNotes((s) => !s)}
-          className="text-xs text-ink-muted hover:text-ink"
+          className="text-xs text-ink-muted transition-colors hover:text-ink"
           aria-expanded={showNotes}
         >
           {showNotes ? "Hide notes" : "Add notes"}
