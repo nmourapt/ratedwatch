@@ -28,6 +28,7 @@ import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
 import { outRoute } from "@/server/routes/out";
 import { readingsByIdRoute, readingsByWatchRoute } from "@/server/routes/readings";
+import { seoRoute } from "@/server/routes/seo";
 import { watchesRoute } from "@/server/routes/watches";
 
 // The Worker's full env extends the narrower AuthEnv used by getAuth.
@@ -279,6 +280,12 @@ app.get("/w/:watchId", async (c) => {
   applyPublicCacheHeader(c, user);
   return c.html(<WatchPage data={result.data} user={user} />);
 });
+
+// SEO plumbing — /robots.txt + /sitemap.xml. Owned by the Worker so
+// crawlers see the real responses (not the SPA fallback HTML). The
+// sub-app declares both bare-path routes; mounting at "/" makes them
+// reachable at their advertised URLs.
+app.route("/", seoRoute);
 
 // Better Auth owns every method under /api/v1/auth/*. We pass the raw
 // Request straight through — Better Auth reads method, URL, headers,
