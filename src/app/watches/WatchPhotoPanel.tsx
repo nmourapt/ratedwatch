@@ -142,9 +142,9 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
   return (
     <section
       aria-label="Watch photo"
-      className="mb-8 rounded-lg border border-cf-border bg-cf-surface p-4"
+      className="mb-8 rounded-lg border border-line bg-surface p-4"
     >
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-cf-text-muted">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-muted">
         Photo
       </h2>
 
@@ -154,13 +154,13 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
           <img
             src={previewUrl}
             alt="New photo preview"
-            className="max-h-80 rounded-md border border-cf-border object-contain"
+            className="max-h-80 rounded-md border border-line object-contain"
           />
         ) : imageSrc ? (
           <img
             src={imageSrc}
             alt="Watch photo"
-            className="max-h-80 rounded-md border border-cf-border object-contain"
+            className="max-h-80 rounded-md border border-line object-contain"
           />
         ) : (
           <WatchSilhouette />
@@ -170,7 +170,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
       {error ? (
         <p
           role="alert"
-          className="mb-3 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-3 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
         >
           {error}
         </p>
@@ -183,7 +183,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
             type="button"
             onClick={handleUpload}
             disabled={busy !== null}
-            className="inline-flex items-center justify-center rounded-full bg-cf-accent px-5 py-2.5 text-sm font-medium text-black transition-colors hover:bg-cf-accent/90 disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-black transition-colors hover:bg-accent/90 disabled:opacity-60"
           >
             {busy === "upload" ? "Uploading…" : "Upload photo"}
           </button>
@@ -191,11 +191,11 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
             type="button"
             onClick={handleCancel}
             disabled={busy !== null}
-            className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-text-muted disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-full border border-line bg-transparent px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink-muted disabled:opacity-60"
           >
             Cancel
           </button>
-          <span className="font-mono text-xs text-cf-text-subtle">
+          <span className="font-mono text-xs text-ink-subtle">
             {pending.name} · {(pending.size / 1024).toFixed(0)} KB
           </span>
         </div>
@@ -212,7 +212,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
           onDragLeave={() => setDragActive(false)}
           onDrop={onDrop}
           className={`flex flex-wrap items-center gap-3 rounded-md border-2 border-dashed p-4 transition-colors ${
-            dragActive ? "border-cf-accent bg-cf-accent/10" : "border-cf-border bg-cf-bg"
+            dragActive ? "border-accent bg-accent/10" : "border-line bg-canvas"
           }`}
         >
           <input
@@ -226,11 +226,11 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={busy !== null}
-            className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-accent hover:text-cf-accent disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-full border border-line bg-transparent px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
           >
             {imageKey ? "Replace photo" : "Choose photo"}
           </button>
-          <span className="text-sm text-cf-text-muted">
+          <span className="text-sm text-ink-muted">
             or drag &amp; drop · JPEG, PNG, WebP, HEIC · up to 5 MB
           </span>
           {imageKey ? (
@@ -238,7 +238,7 @@ export function WatchPhotoPanel({ watchId, imageKey, onChanged }: Props) {
               type="button"
               onClick={handleDelete}
               disabled={busy !== null}
-              className="ml-auto inline-flex items-center justify-center rounded-full border border-cf-accent/40 bg-cf-accent/10 px-4 py-2 text-sm font-medium text-cf-accent transition-colors hover:border-cf-accent hover:bg-cf-accent/20 disabled:opacity-60"
+              className="ml-auto inline-flex items-center justify-center rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:border-accent hover:bg-accent/20 disabled:opacity-60"
             >
               {busy === "delete" ? "Removing…" : "Remove photo"}
             </button>
@@ -255,7 +255,7 @@ function WatchSilhouette() {
   return (
     <div
       aria-hidden="true"
-      className="flex h-40 w-full max-w-xs items-center justify-center rounded-md border border-dashed border-cf-border bg-cf-bg text-cf-text-subtle"
+      className="flex h-40 w-full max-w-xs items-center justify-center rounded-md border border-dashed border-line bg-canvas text-ink-subtle"
     >
       <svg
         width="48"

@@ -184,10 +184,10 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
   return (
     <section
       aria-label="Verified reading"
-      className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5"
+      className="mb-6 rounded-lg border border-line bg-surface p-5"
     >
-      <h2 className="mb-1 text-sm font-medium text-cf-text">Log a verified reading</h2>
-      <p className="mb-4 text-xs text-cf-text-muted">
+      <h2 className="mb-1 text-sm font-medium text-ink">Log a verified reading</h2>
+      <p className="mb-4 text-xs text-ink-muted">
         Take a photo of the dial and we&apos;ll read it against the server clock at the
         moment we receive your upload. No timestamp from your device is trusted — the
         reference time is &ldquo;now&rdquo; on the server.
@@ -213,11 +213,11 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           <button
             type="button"
             onClick={openFilePicker}
-            className="inline-flex w-full items-center justify-center rounded-full border border-cf-accent bg-cf-accent px-5 py-3 text-sm font-medium text-cf-bg transition-colors hover:bg-cf-accent/90 sm:w-auto"
+            className="inline-flex w-full items-center justify-center rounded-full border border-accent bg-accent px-5 py-3 text-sm font-medium text-canvas transition-colors hover:bg-accent/90 sm:w-auto"
           >
             Take photo
           </button>
-          <p className="text-xs text-cf-text-subtle">
+          <p className="text-xs text-ink-subtle">
             On desktop this opens a file picker — for the reading to count, use a fresh
             photo, not an old one from your library.
           </p>
@@ -228,14 +228,14 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
         <img
           src={preview}
           alt="Captured dial"
-          className="mb-4 max-h-80 rounded-md border border-cf-border object-contain"
+          className="mb-4 max-h-80 rounded-md border border-line object-contain"
         />
       ) : null}
 
       {state.kind === "error" ? (
         <p
           role="alert"
-          className="mb-4 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-4 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
         >
           {state.message}
         </p>
@@ -248,11 +248,11 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
               type="checkbox"
               checked={isBaseline}
               onChange={(e) => setIsBaseline(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-cf-border text-cf-accent focus:ring-cf-accent"
+              className="mt-0.5 h-4 w-4 rounded border-line text-accent focus:ring-accent"
             />
             <span>
-              <span className="text-cf-text">This is a baseline</span>
-              <span className="ml-1 text-cf-text-muted">
+              <span className="text-ink">This is a baseline</span>
+              <span className="ml-1 text-ink-muted">
                 — I just set the watch to the exact time
               </span>
             </span>
@@ -262,14 +262,14 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
             <button
               type="button"
               onClick={handleSubmit}
-              className="inline-flex items-center justify-center rounded-full border border-cf-accent bg-cf-accent px-5 py-2.5 text-sm font-medium text-cf-bg transition-colors hover:bg-cf-accent/90"
+              className="inline-flex items-center justify-center rounded-full border border-accent bg-accent px-5 py-2.5 text-sm font-medium text-canvas transition-colors hover:bg-accent/90"
             >
               Submit verified reading
             </button>
             <button
               type="button"
               onClick={handleCancelOrReset}
-              className="inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-5 py-2.5 text-sm font-medium text-cf-text transition-colors hover:border-cf-text-muted"
+              className="inline-flex items-center justify-center rounded-full border border-line bg-transparent px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink-muted"
             >
               Choose a different photo
             </button>
@@ -278,10 +278,10 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
       ) : null}
 
       {showSubmitting ? (
-        <p className="flex items-center gap-2 text-sm text-cf-text-muted">
+        <p className="flex items-center gap-2 text-sm text-ink-muted">
           <span
             aria-hidden="true"
-            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-cf-accent border-t-transparent"
+            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-accent border-t-transparent"
           />
           Reading the dial…
         </p>
@@ -290,15 +290,15 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
       {showSuccess ? (
         <div
           role="status"
-          className="rounded-md border border-cf-accent/30 bg-cf-bg px-4 py-3"
+          className="rounded-md border border-accent/30 bg-canvas px-4 py-3"
         >
-          <p className="text-sm text-cf-text">
+          <p className="text-sm text-ink">
             Saved. Dial read at{" "}
-            <span className="font-mono text-cf-accent">
+            <span className="font-mono text-accent">
               {formatDialTime(state.reading)}
             </span>
             , deviation{" "}
-            <span className="font-mono text-cf-accent">
+            <span className="font-mono text-accent">
               {formatDeviation(state.reading.deviation_seconds)}
             </span>
             .
@@ -306,7 +306,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           <button
             type="button"
             onClick={handleCancelOrReset}
-            className="mt-3 inline-flex items-center justify-center rounded-full border border-cf-border bg-transparent px-4 py-2 text-sm font-medium text-cf-text transition-colors hover:border-cf-accent hover:text-cf-accent"
+            className="mt-3 inline-flex items-center justify-center rounded-full border border-line bg-transparent px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent"
           >
             Save another
           </button>

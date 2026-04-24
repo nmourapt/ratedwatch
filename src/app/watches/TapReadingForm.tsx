@@ -179,24 +179,24 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
   const clockLabel = formatLocalClock(nowMs);
 
   return (
-    <section className="mb-6 rounded-lg border border-cf-border bg-cf-surface p-5">
+    <section className="mb-6 rounded-lg border border-line bg-surface p-5">
       <div className="mb-3 flex items-baseline justify-between gap-4">
-        <h2 className="text-sm font-medium text-cf-text">Tap to log a reading</h2>
+        <h2 className="text-sm font-medium text-ink">Tap to log a reading</h2>
         <time
-          className="font-mono text-sm tabular-nums text-cf-text"
+          className="font-mono text-sm tabular-nums text-ink"
           aria-label={`Current reference time ${clockLabel}`}
         >
           {clockLabel}
         </time>
       </div>
-      <p className="mb-5 text-xs text-cf-text-muted">
+      <p className="mb-5 text-xs text-ink-muted">
         Tap the matching position as your second hand passes over it.
       </p>
 
       {status.kind === "error" ? (
         <p
           role="alert"
-          className="mb-4 rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+          className="mb-4 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
         >
           {status.message}
         </p>
@@ -205,16 +205,16 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
         <p
           role="status"
           aria-live="polite"
-          className="mb-4 rounded-md border border-cf-accent/30 bg-cf-bg px-3 py-2 text-sm text-cf-text"
+          className="mb-4 rounded-md border border-accent/30 bg-canvas px-3 py-2 text-sm text-ink"
         >
           Recorded{" "}
           {status.position === "baseline" ? (
-            <span className="font-mono text-cf-accent">baseline</span>
+            <span className="font-mono text-accent">baseline</span>
           ) : (
             <>
-              tap at <span className="font-mono text-cf-accent">{status.position}</span>
+              tap at <span className="font-mono text-accent">{status.position}</span>
               {" → "}
-              <span className="font-mono text-cf-accent">
+              <span className="font-mono text-accent">
                 {formatDeviation(status.deviation)}
               </span>
             </>
@@ -248,7 +248,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
             cx="50"
             cy="50"
             r="47"
-            className="fill-cf-bg stroke-cf-border"
+            className="fill-canvas stroke-line"
             strokeWidth="0.6"
           />
           {/* 12 tick marks — long at 12/3/6/9 (cardinals), short
@@ -264,7 +264,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
                 x2="50"
                 y2={cardinal ? 11 : 10}
                 transform={`rotate(${angle} 50 50)`}
-                className="stroke-cf-border"
+                className="stroke-line"
                 strokeWidth={cardinal ? 1.2 : 0.6}
                 strokeLinecap="round"
               />
@@ -283,7 +283,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
               onClick={() => handleTap(position)}
               disabled={isSubmitting}
               aria-label={`Tap when second hand is at ${oclock} o'clock (${position} seconds)`}
-              className="absolute flex items-center justify-center rounded-full border border-cf-border bg-cf-surface font-mono text-xl font-medium tabular-nums text-cf-text shadow-sm transition-colors hover:border-cf-accent hover:bg-cf-accent/10 hover:text-cf-accent focus:border-cf-accent focus:outline-none focus:ring-2 focus:ring-cf-accent focus:ring-offset-2 focus:ring-offset-cf-surface disabled:cursor-not-allowed disabled:opacity-60"
+              className="absolute flex items-center justify-center rounded-full border border-line bg-surface font-mono text-xl font-medium tabular-nums text-ink shadow-sm transition-colors hover:border-accent hover:bg-accent/10 hover:text-accent focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 width: `${BUTTON_SIZE_PX}px`,
                 height: `${BUTTON_SIZE_PX}px`,
@@ -293,7 +293,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
               }}
             >
               {submittingThis ? (
-                <span className="text-xs text-cf-accent">…</span>
+                <span className="text-xs text-accent">…</span>
               ) : (
                 <span aria-hidden="true">{position}</span>
               )}
@@ -307,7 +307,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
           type="button"
           onClick={handleBaseline}
           disabled={isSubmitting}
-          className="inline-flex items-center justify-center rounded-full border border-cf-accent/40 bg-cf-accent/10 px-4 py-2 text-xs font-medium text-cf-accent transition-colors hover:border-cf-accent hover:bg-cf-accent/20 disabled:opacity-60"
+          className="inline-flex items-center justify-center rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-xs font-medium text-accent transition-colors hover:border-accent hover:bg-accent/20 disabled:opacity-60"
         >
           {status.kind === "submitting" && status.position === "baseline"
             ? "Saving baseline…"
@@ -316,7 +316,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
         <button
           type="button"
           onClick={() => setShowNotes((s) => !s)}
-          className="text-xs text-cf-text-muted hover:text-cf-text"
+          className="text-xs text-ink-muted hover:text-ink"
           aria-expanded={showNotes}
         >
           {showNotes ? "Hide notes" : "Add notes"}
@@ -333,7 +333,7 @@ export function TapReadingForm({ watchId, onLogged }: Props) {
             rows={2}
             maxLength={500}
             placeholder="e.g. worn overnight face-up, 20ºC"
-            className="w-full rounded-md border border-cf-border bg-cf-bg px-3 py-2 text-sm text-cf-text placeholder:text-cf-text-subtle focus:border-cf-accent focus:outline-none disabled:opacity-60"
+            className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none disabled:opacity-60"
           />
         </label>
       ) : null}

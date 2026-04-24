@@ -39,6 +39,7 @@ export const tokens = {
 
     // Interactive accent
     accent: "#000000", // Black primary CTA
+    accentHover: "#1A1A1A", // Near-black hover lift
     accentFg: "#FFFFFF", // CTA text on black
   },
   dark: {
@@ -61,6 +62,7 @@ export const tokens = {
     lineSubtle: "rgba(255, 255, 255, 0.05)",
 
     accent: "#F5F5F5", // Warm off-white pill
+    accentHover: "#FFFFFF", // Brighter on hover
     accentFg: "#0A0A0A", // Near-black CTA text
   },
   font: {

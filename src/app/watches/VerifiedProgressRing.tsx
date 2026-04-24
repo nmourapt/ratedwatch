@@ -85,7 +85,7 @@ export function VerifiedProgressRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          className="stroke-cf-border"
+          className="stroke-line"
           strokeWidth={strokeWidth}
         />
         {/* Progress — rotated -90° so the arc starts at 12 o'clock. */}
@@ -94,7 +94,7 @@ export function VerifiedProgressRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          className={earned ? "stroke-cf-accent" : "stroke-cf-accent/80"}
+          className={earned ? "stroke-accent" : "stroke-accent/80"}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={`${dashLength} ${dashGap}`}
@@ -108,13 +108,13 @@ export function VerifiedProgressRing({
             y="50%"
             textAnchor="middle"
             dominantBaseline="central"
-            className="fill-cf-text font-mono text-sm"
+            className="fill-ink font-mono text-sm"
           >
             {displayPct}%
           </text>
         ) : null}
       </svg>
-      {hideCaption ? null : <p className="text-xs text-cf-text-muted">{caption}</p>}
+      {hideCaption ? null : <p className="text-xs text-ink-muted">{caption}</p>}
     </div>
   );
 }

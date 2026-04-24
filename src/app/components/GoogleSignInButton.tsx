@@ -9,8 +9,8 @@
 // use by the email-password primary action (see LoginPage /
 // RegisterPage). Google's brand guidelines allow either a white or
 // coloured surface so long as the mark stays in its brand colours.
-// We keep the background warm (cf-bg) and use the official Google
-// SVG in its multi-colour form; the surrounding text is cf-text.
+// We keep the background warm (canvas) and use the official Google
+// SVG in its multi-colour form; the surrounding text is ink.
 
 import { useState } from "react";
 import { signInWithGoogle } from "../auth/api";
@@ -51,8 +51,8 @@ export function GoogleSignInButton({
         aria-label={label}
         className={
           "inline-flex items-center justify-center gap-3 rounded-full border " +
-          "border-cf-border bg-cf-bg px-6 py-3 text-sm font-medium " +
-          "text-cf-text transition-colors hover:border-cf-accent hover:text-cf-text " +
+          "border-line bg-canvas px-6 py-3 text-sm font-medium " +
+          "text-ink transition-colors hover:border-accent hover:text-ink " +
           "disabled:opacity-60 " +
           className
         }
@@ -87,7 +87,7 @@ export function GoogleSignInButton({
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-cf-accent/40 bg-cf-accent/10 px-3 py-2 text-sm text-cf-text"
+          className="rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-ink"
         >
           {error}
         </p>

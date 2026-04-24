@@ -178,19 +178,19 @@ export function LeaderboardStyles() {
   font-size: 0.875rem;
 }
 .cf-lb-filters a {
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   padding: 6px 12px;
-  border: 1px solid var(--cf-border);
+  border: 1px solid var(--line);
   border-radius: var(--cf-radius-full);
 }
-.cf-lb-filters a:hover { color: var(--cf-text); background: var(--cf-surface-inset); }
+.cf-lb-filters a:hover { color: var(--ink); background: var(--surface-inset); }
 .cf-lb-filter--active {
-  color: var(--cf-text) !important;
-  border-color: var(--cf-accent) !important;
-  background: var(--cf-surface);
+  color: var(--ink) !important;
+  border-color: var(--accent) !important;
+  background: var(--surface);
 }
 .cf-lb-filter__check {
-  color: var(--cf-accent);
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -202,22 +202,22 @@ export function LeaderboardStyles() {
 .cf-lb-table thead th {
   text-align: left;
   padding: 12px;
-  border-bottom: 1px solid var(--cf-border);
+  border-bottom: 1px solid var(--line);
   font-weight: 500;
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   font-size: 0.85rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .cf-lb-table tbody td {
   padding: 12px;
-  border-bottom: 1px solid var(--cf-border-light);
+  border-bottom: 1px solid var(--line-light);
   vertical-align: middle;
 }
 .cf-lb-col-rank {
   width: 3rem;
   font-family: var(--cf-font-mono);
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
 }
 .cf-lb-col-num {
   font-family: var(--cf-font-mono);
@@ -231,7 +231,7 @@ export function LeaderboardStyles() {
   gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
-  background: var(--cf-accent);
+  background: var(--accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;
@@ -239,7 +239,7 @@ export function LeaderboardStyles() {
 }
 .cf-lb-badge--muted {
   background: transparent;
-  color: var(--cf-text-subtle);
+  color: var(--ink-subtle);
 }
 .cf-lb-badge__check {
   font-weight: 700;
@@ -251,14 +251,14 @@ export function LeaderboardStyles() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--cf-accent);
+  background: var(--accent);
   vertical-align: middle;
   margin: 0 4px;
 }
 
 .cf-lb-footnote {
   padding: 24px 24px 48px;
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   font-size: 0.9rem;
 }
 .cf-lb-footnote p { max-width: 70ch; margin: 0; }

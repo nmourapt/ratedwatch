@@ -172,13 +172,13 @@ function WatchCard({ watch }: { watch: import("./load").ProfileWatchCard }) {
 function UserPageStyles() {
   const css = `
 .cf-user-meta {
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   font-size: 1rem;
   margin: 0;
 }
 .cf-user-meta code {
   font-family: var(--cf-font-mono);
-  background: var(--cf-surface);
+  background: var(--surface);
   padding: 1px 6px;
   border-radius: var(--cf-radius-sm);
 }
@@ -198,17 +198,17 @@ function UserPageStyles() {
 .cf-user-card {
   position: relative;
   display: block;
-  background: var(--cf-surface);
-  border: 1px solid var(--cf-border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--cf-radius-lg);
   padding: 24px;
-  color: var(--cf-text);
+  color: var(--ink);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .cf-user-card:hover {
-  border-color: var(--cf-accent);
-  background: var(--cf-surface-inset);
-  color: var(--cf-text);
+  border-color: var(--accent);
+  background: var(--surface-inset);
+  color: var(--ink);
 }
 .cf-user-card__title {
   font-size: 1.125rem;
@@ -217,12 +217,12 @@ function UserPageStyles() {
   margin: 0 0 4px;
 }
 .cf-user-card__movement {
-  color: var(--cf-text-muted);
+  color: var(--ink-muted);
   font-size: 0.9rem;
   margin-bottom: 16px;
 }
 .cf-user-card__movement a { color: inherit; }
-.cf-user-card__movement a:hover { color: var(--cf-accent); }
+.cf-user-card__movement a:hover { color: var(--accent); }
 
 .cf-user-card__stats {
   display: grid;
@@ -235,7 +235,7 @@ function UserPageStyles() {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--cf-text-subtle);
+  color: var(--ink-subtle);
   margin-bottom: 4px;
 }
 .cf-user-card__stats dd {
@@ -250,7 +250,7 @@ function UserPageStyles() {
   gap: 4px;
   padding: 3px 10px;
   border-radius: var(--cf-radius-full);
-  background: var(--cf-accent);
+  background: var(--accent);
   color: #FFFBF5;
   font-size: 0.75rem;
   font-weight: 500;
@@ -258,7 +258,7 @@ function UserPageStyles() {
 }
 .cf-lb-badge--muted {
   background: transparent;
-  color: var(--cf-text-subtle);
+  color: var(--ink-subtle);
 }
 .cf-lb-badge__check {
   font-weight: 700;
