@@ -52,7 +52,7 @@ export const LandingPage = ({ topVerified = [] }: LandingPageProps) => (
       <section class="cf-container cf-section" aria-labelledby="top-verified-title">
         <h2
           id="top-verified-title"
-          style="margin:0 0 24px;font-size:1.25rem;font-weight:500;letter-spacing:-0.02em;color:var(--color-ink-muted)"
+          style="margin:0 0 24px;font-family:var(--font-display);font-size:1.5rem;font-weight:300;letter-spacing:-0.02em;color:var(--color-ink)"
         >
           Top verified watches
         </h2>

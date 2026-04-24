@@ -337,11 +337,17 @@ function WatchPageStyles() {
   margin-right: 6px;
 }
 
+/* Display h2 on the public watch page — Inter 300 per DESIGN.md
+ * section 3 (Waldenburg-weight-300 substitution). Size bumps to 1.5rem
+ * so the lightness reads at a glance — weight 300 at <1.25rem looks
+ * anemic. */
 .cf-watch-h2 {
-  font-size: 1.25rem;
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 300;
   letter-spacing: -0.01em;
   margin: 0 0 16px;
+  color: var(--color-ink);
 }
 
 .cf-watch-empty {

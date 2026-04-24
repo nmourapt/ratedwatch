@@ -38,7 +38,7 @@ export function NewWatchPage() {
 
   return (
     <section className="mx-auto max-w-2xl">
-      <h1 className="mb-2 text-4xl font-medium tracking-tight text-ink">
+      <h1 className="mb-2 font-display text-4xl font-light tracking-tight text-ink">
         Add a watch
       </h1>
       <p className="mb-6 text-ink-muted">
@@ -51,10 +51,7 @@ export function NewWatchPage() {
         submittingLabel="Adding…"
         onSubmit={handleSubmit}
         secondaryAction={
-          <Link
-            to="/app/dashboard"
-            className="text-sm text-ink-muted hover:text-ink"
-          >
+          <Link to="/app/dashboard" className="text-sm text-ink-muted hover:text-ink">
             Cancel
           </Link>
         }

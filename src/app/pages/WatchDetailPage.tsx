@@ -167,7 +167,7 @@ export function WatchDetailPage() {
     <section className="mx-auto max-w-3xl">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-4xl font-medium tracking-tight text-ink">
+          <h1 className="mb-1 font-display text-4xl font-light tracking-tight text-ink">
             {watch.name}
           </h1>
           <p className="text-ink-muted">
