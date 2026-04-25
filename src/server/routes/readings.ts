@@ -386,6 +386,16 @@ readingsByWatchRoute.post("/tap", async (c) => {
  * raw AI response for debugging.
  */
 readingsByWatchRoute.post("/verified", async (c) => {
+  // Capture the wall-clock at handler entry, BEFORE any await. This
+  // is the fallback reference timestamp the verifier uses when EXIF
+  // is missing and the bounds anchor when EXIF is present. Capturing
+  // here — rather than inside `verifyReading` after `formData()` has
+  // resolved — sidesteps the upload-latency phantom drift that
+  // motivated this slice: a 2 MB photo on cellular bakes 2-8 s of
+  // body-parse delay into a `Date.now()` placed any later in the
+  // handler.
+  const serverArrivalMs = Date.now();
+
   const user = c.get("user");
   const watchId = getWatchIdParam(c);
   if (!watchId) return c.json({ error: "not_found" }, 404);
@@ -444,6 +454,7 @@ readingsByWatchRoute.post("/verified", async (c) => {
     userId: user.id,
     imageBuffer,
     isBaseline,
+    serverArrivalMs,
     env: c.env,
   });
 
