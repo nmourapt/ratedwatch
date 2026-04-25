@@ -14,6 +14,7 @@ import { env } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { afterEach, beforeAll, describe, it, expect, vi } from "vitest";
 import { __setTestAiRunner, type AiRunner } from "@/domain/ai-dial-reader/runner";
+import { __setTestExifReader } from "@/domain/reading-verifier/exif";
 
 // ---- Fixture ------------------------------------------------------
 
@@ -39,6 +40,7 @@ beforeAll(async () => {
 
 afterEach(() => {
   __setTestAiRunner(null);
+  __setTestExifReader(null);
   vi.useRealTimers();
 });
 
@@ -346,5 +348,32 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
     // short-circuits before the handler runs.
     const res = await postVerifiedReading("whatever", undefined);
     expect(res.status).toBe(401);
+  });
+
+  it("rejects EXIF outside the bounds window with 422 exif_clock_skew", async () => {
+    // End-to-end check that the EXIF clock-skew gate fires through
+    // the HTTP layer. We freeze the server clock so the bound
+    // calculation is deterministic, then install an EXIF reader that
+    // returns a timestamp 10 minutes in the past — well outside the
+    // 5-minute past tolerance.
+    const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
+    const { id: watchId } = await createWatch(
+      { name: "EXIFOOB", movement_id: movementId },
+      user.cookie,
+    );
+
+    const refTime = Date.UTC(2024, 0, 15, 14, 32, 5);
+    vi.useFakeTimers();
+    vi.setSystemTime(refTime);
+    __setTestExifReader(async () => refTime - 10 * 60 * 1000);
+    // AI fake is irrelevant — the EXIF gate fires before the AI call.
+    installFakeAi("0:0");
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string; raw_response?: string };
+    expect(body.error).toBe("exif_clock_skew");
+    expect(body.raw_response).toMatch(/too old/i);
   });
 });

@@ -29,6 +29,16 @@ describe("mapVerifiedReadingError", () => {
     );
   });
 
+  it("maps exif_clock_skew (422) to a fix-your-phone-clock hint", () => {
+    // EXIF timestamp outside the -5min/+1min window. The most likely
+    // cause is the user's phone clock being wrong (manual override,
+    // travel without auto-time, or a long-suspended device). The
+    // copy nudges them to fix the clock and retake the photo.
+    const mapped = mapVerifiedReadingError(422, "exif_clock_skew");
+    expect(mapped.code).toBe("exif_clock_skew");
+    expect(mapped.message).toMatch(/clock/i);
+  });
+
   it("maps verified_readings_disabled (503) to an account-not-enabled copy", () => {
     const mapped = mapVerifiedReadingError(503, "verified_readings_disabled");
     expect(mapped.message).toMatch(/verified readings aren't enabled/i);

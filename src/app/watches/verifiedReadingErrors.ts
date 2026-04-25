@@ -10,6 +10,9 @@
 //   * 422 + error: "ai_refused"          → AI wouldn't read the dial
 //   * 422 + error: "ai_unparseable"      → AI response wasn't JSON we expected
 //   * 422 + error: "ai_implausible"      → AI read a dial time too far off
+//   * 422 + error: "exif_clock_skew"     → EXIF timestamp outside the
+//                                          -5min/+1min window vs server
+//                                          (phone clock is wrong)
 //   * 503 + error: "verified_readings_disabled" → feature flag off for this user
 //   * 400 + error: "image_required"      → form didn't include the file (client bug)
 //   * 413 + error: "image_too_large"     → image > 10 MB
@@ -22,6 +25,7 @@ export type VerifiedReadingErrorCode =
   | "ai_refused"
   | "ai_unparseable"
   | "ai_implausible"
+  | "exif_clock_skew"
   | "verified_readings_disabled"
   | "image_required"
   | "image_too_large"
@@ -65,6 +69,13 @@ export function mapVerifiedReadingError(
       return {
         code: "ai_implausible",
         message: "The reading looked off (bad lighting or dirty glass?) — try again",
+      };
+    }
+    if (serverCode === "exif_clock_skew") {
+      return {
+        code: "exif_clock_skew",
+        message:
+          "Your phone's clock seems to be off — please check your phone's date & time, then retake the photo",
       };
     }
   }
