@@ -10,17 +10,17 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
 
 ## Ubiquitous language
 
-| Term                          | Meaning                                                                                                                                            |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Reading**                   | A record of the watch's displayed time vs an authoritative reference time at a specific moment.                                                    |
-| **Deviation**                 | Signed seconds the watch is ahead (+) or behind (−) of the reference, at a single reading.                                                         |
-| **Drift rate**                | Change in deviation per day, computed between two readings. Unit: seconds per day (s/d).                                                           |
-| **Baseline reading**          | A reading with `is_baseline = true`, marking the start of a new tracking session (watch just set to the exact time; deviation is 0).               |
-| **Session**                   | The sequence of readings from the most recent baseline to the latest reading for a given watch.                                                    |
-| **Manual reading**            | A reading whose deviation was typed by the user. Not trusted for competitive rankings.                                                             |
-| **Verified reading**          | A reading whose deviation was computed from an in-app camera capture, with the server timestamp at receipt as the reference time. Spoof-resistant. |
-| **Verified watch**            | A watch whose current session has at least 25 % verified readings. Displays a verified badge on leaderboards.                                      |
-| **Movement** (or **caliber**) | The mechanical/quartz/electronic time-keeping mechanism inside a watch. First-class domain object. Leaderboards are grouped by movement.           |
+| Term                          | Meaning                                                                                                                                                                                                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reading**                   | A record of the watch's displayed time vs an authoritative reference time at a specific moment.                                                                                                                                                                                              |
+| **Deviation**                 | Signed seconds the watch is ahead (+) or behind (−) of the reference, at a single reading.                                                                                                                                                                                                   |
+| **Drift rate**                | Change in deviation per day, computed between two readings. Unit: seconds per day (s/d).                                                                                                                                                                                                     |
+| **Baseline reading**          | A reading with `is_baseline = true`, marking the start of a new tracking session (watch just set to the exact time; deviation is 0).                                                                                                                                                         |
+| **Session**                   | The sequence of readings from the most recent baseline to the latest reading for a given watch.                                                                                                                                                                                              |
+| **Manual reading**            | A reading whose deviation was typed by the user. Not trusted for competitive rankings.                                                                                                                                                                                                       |
+| **Verified reading**          | A reading whose deviation was computed from an in-app camera capture. Reference time is the photo's EXIF `DateTimeOriginal` when present (bounded against server arrival, ±5 min / +1 min); falls back to server arrival time when EXIF is absent. See the trust note in "Things NOT to do". |
+| **Verified watch**            | A watch whose current session has at least 25 % verified readings. Displays a verified badge on leaderboards.                                                                                                                                                                                |
+| **Movement** (or **caliber**) | The mechanical/quartz/electronic time-keeping mechanism inside a watch. First-class domain object. Leaderboards are grouped by movement.                                                                                                                                                     |
 
 ## Stack + conventions
 
@@ -54,7 +54,7 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
 - **No Next.js, Remix, TanStack Start, or other SSR frameworks** — the Hono JSX + Vite SPA split is the architecture.
 - **No Prisma, Sequelize, or heavy ORMs.** Kysely only.
 - **No rolling our own crypto.** Better Auth handles all auth primitives; never touch PBKDF2 / JWT hand-crafted code like the archived watchdrift prototype did.
-- **No trusting client-supplied EXIF / client timestamps** for verified readings. Server receipt time is the source of truth.
+- **EXIF DateTimeOriginal is accepted as the reference timestamp** for verified readings, bounded by ±5 min / +1 min against server arrival time. Reading the bytes server-side is fine; the client never sends a literal timestamp claim. When EXIF is missing the verifier falls back to server arrival time (captured at handler entry, **before** body upload, to minimize phantom drift). The trust trade-off is that an attacker with control over their phone's clock can fake deviations within the bounds window — that's accepted for now; spoof-resistance (e.g. camera-attestation tokens) is a future iteration.
 - **No placeholder strings in committed config** (e.g. `YOUR_WORKER_URL.workers.dev` — that's an archived-watchdrift crime).
 
 ## CI / quality gates
