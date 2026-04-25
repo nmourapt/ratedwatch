@@ -24,6 +24,16 @@ export type EventKind =
   | "verified_reading_attempted"
   | "verified_reading_succeeded"
   | "verified_reading_failed"
+  // EXIF-reference telemetry. The verified-reading pipeline now uses
+  // EXIF DateTimeOriginal as the reference timestamp (see
+  // src/domain/reading-verifier/verifier.ts). These three events let
+  // us monitor the rollout: how often EXIF is present (`_exif_ok`),
+  // missing (`_exif_missing`), or out-of-bounds (`_exif_clock_skew`,
+  // which causes a 422). Watching `_exif_clock_skew` is the early
+  // signal for users with bad phone clocks vs spoof attempts.
+  | "verified_reading_exif_ok"
+  | "verified_reading_exif_missing"
+  | "verified_reading_exif_clock_skew"
   | "movement_suggested"
   | "chrono24_click"
   | "leaderboard_filter_changed"

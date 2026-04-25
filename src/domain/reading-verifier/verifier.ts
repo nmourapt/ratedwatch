@@ -1,10 +1,24 @@
 // Reading verifier — orchestrates the verified-reading pipeline.
 //
-// Pipeline (matches slice #16 / issue #17 spec):
+// Pipeline (matches slice #16 / issue #17 spec, with the EXIF
+// reference-timestamp change layered on top):
 //
-//   1. Capture server-side reference timestamp (`Date.now()`). This
-//      is the canonical source of truth — client / EXIF timestamps
-//      are NEVER trusted for competitive scoring.
+//   1. Reference timestamp resolution.
+//      We try to read EXIF DateTimeOriginal (the moment the shutter
+//      fired) from the image bytes. When present and within the
+//      bounds window vs server arrival time, that's the reference.
+//      When missing, we fall back to server arrival time (captured
+//      at handler entry, BEFORE the formData await — see the route).
+//      When present but outside bounds, the request is rejected.
+//
+//      Why we changed: the previous implementation captured
+//      `Date.now()` AFTER awaiting the multipart body. On cellular
+//      with a 2 MB photo that's 2-8 s of phantom drift baked into
+//      every reading. EXIF DateTimeOriginal is the moment the
+//      shutter fired and is upload-latency-immune. The trust
+//      trade-off (an attacker with control over their phone clock
+//      can fake deviations within the bounds window) is documented
+//      in AGENTS.md.
 //   2. Run the image through the AI dial reader. The reader returns
 //      the minute + second hand positions (0-59 each) — only the
 //      hour is inferred from the reference clock.
@@ -34,20 +48,36 @@
 import { createDb } from "@/db";
 import { readDialTime, type DialReaderError } from "@/domain/ai-dial-reader/reader";
 import type { Reading } from "@/domain/drift-calc";
+import { logEvent, type EventLoggerEnv } from "@/observability/events";
+import { extractCaptureTimestampMs } from "./exif";
 
 export interface VerifyReadingInput {
   watchId: string;
   userId: string;
   imageBuffer: ArrayBuffer;
   isBaseline: boolean;
+  /**
+   * The wall-clock millisecond timestamp captured at route handler
+   * entry, BEFORE awaiting the multipart body. Used as the fallback
+   * reference when EXIF is missing, and as the bounds anchor when
+   * EXIF is present. Capturing this in the route — not here —
+   * sidesteps the upload-latency phantom drift bug (#TBD): a
+   * `Date.now()` inside this function would have included the
+   * formData parse time on cellular.
+   */
+  serverArrivalMs: number;
   env: {
     AI: Ai;
     DB: D1Database;
     IMAGES: R2Bucket;
-  };
+  } & EventLoggerEnv;
 }
 
-export type VerifyReadingErrorCode = "ai_refused" | "ai_unparseable" | "ai_implausible";
+export type VerifyReadingErrorCode =
+  | "ai_refused"
+  | "ai_unparseable"
+  | "ai_implausible"
+  | "exif_clock_skew";
 
 export type VerifyReadingResult =
   | {
@@ -86,6 +116,27 @@ export interface VerifiedReadingRow {
 // never triggers.
 const SECONDS_PER_HOUR = 3600;
 const HALF_HOUR_SECONDS = 1800;
+
+// EXIF clock-skew bounds.
+//
+// We accept EXIF DateTimeOriginal as the reference timestamp when it
+// is within `[server - 5 min, server + 1 min]`. The asymmetric window
+// reflects how phones drift in practice:
+//
+//   * The 5-minute past tolerance covers the realistic upload-delay
+//     band (cellular, retries, queued uploads on poor connectivity)
+//     plus a small phone-clock-behind-server allowance.
+//   * The 1-minute future tolerance covers small clock skew from
+//     phones whose NTP-synced clock is marginally ahead of the
+//     server. We don't allow much because EXIF "in the future"
+//     beyond a minute is almost always a sign of a misset clock or
+//     a deliberate spoof attempt.
+//
+// The bounds are inclusive on accept side: `delta == -5min` and
+// `delta == +1min` both pass. A delta of `-5min - 1ms` or
+// `+1min + 1ms` is rejected.
+const EXIF_MAX_AGE_MS = 5 * 60 * 1000;
+const EXIF_MAX_FUTURE_MS = 1 * 60 * 1000;
 
 /**
  * Exported for tests. Computes the signed drift in seconds between
@@ -138,12 +189,45 @@ export function computeVerifiedDeviation(
 export async function verifyReading(
   input: VerifyReadingInput,
 ): Promise<VerifyReadingResult> {
-  const { watchId, userId, imageBuffer, isBaseline, env } = input;
+  const { watchId, userId, imageBuffer, isBaseline, serverArrivalMs, env } = input;
 
-  // 1. Server-side reference timestamp. Captured BEFORE any I/O so
-  //    all the rest of the pipeline (AI call, DB insert) adds drift
-  //    that the user cannot influence.
-  const referenceTimestamp = Date.now();
+  // 1. Resolve the reference timestamp. EXIF preferred (upload-latency
+  //    immune), bounded against server clock; server arrival is the
+  //    fallback when EXIF is missing.
+  const exifMs = await extractCaptureTimestampMs(imageBuffer);
+  let referenceTimestamp: number;
+  if (exifMs === null) {
+    referenceTimestamp = serverArrivalMs;
+    await logEvent("verified_reading_exif_missing", { userId, watchId }, env);
+  } else {
+    const delta = exifMs - serverArrivalMs;
+    if (delta < -EXIF_MAX_AGE_MS) {
+      await logEvent(
+        "verified_reading_exif_clock_skew",
+        { userId, watchId, delta_ms: delta },
+        env,
+      );
+      return {
+        ok: false,
+        error: "exif_clock_skew",
+        raw_response: `EXIF too old: ${delta}ms`,
+      };
+    }
+    if (delta > EXIF_MAX_FUTURE_MS) {
+      await logEvent(
+        "verified_reading_exif_clock_skew",
+        { userId, watchId, delta_ms: delta },
+        env,
+      );
+      return {
+        ok: false,
+        error: "exif_clock_skew",
+        raw_response: `EXIF in future: +${delta}ms`,
+      };
+    }
+    referenceTimestamp = exifMs;
+    await logEvent("verified_reading_exif_ok", { userId, watchId, delta_ms: delta }, env);
+  }
 
   // 2. AI dial read.
   const image = new Uint8Array(imageBuffer);
