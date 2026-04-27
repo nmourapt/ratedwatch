@@ -493,6 +493,28 @@ describe("POST /api/v1/watches/:id/readings/verified — CV dial-reader backend 
     expect(body.ux_hint).toMatch(/log manually/i);
   });
 
+  it("rejects unsupported_dial reason directly with 422 + dial_reader_unsupported_dial", async () => {
+    // Slice #78's container surfaces the literal reason string
+    // "unsupported_dial" (rather than "sub_dial_detected") when its
+    // hand-classifier returns None. Pin the mapping here so a
+    // future rewrite of mapDialReaderRejection can't quietly
+    // demote chronograph rejections to "no_dial_found" and let
+    // misleading verified-reading badges through.
+    const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
+    const { id: watchId } = await createWatch(
+      { name: "CVUnsLit", movement_id: movementId },
+      user.cookie,
+    );
+    installFakeDialReaderRejection("unsupported_dial");
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error_code: string; ux_hint: string };
+    expect(body.error_code).toBe("dial_reader_unsupported_dial");
+    expect(body.ux_hint).toMatch(/log manually/i);
+  });
+
   it("rejects low_confidence with 422 + structured body", async () => {
     const user = await registerAndGetCookie();
     await setVerifiedFlagForUser(user.userId);
