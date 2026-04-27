@@ -38,7 +38,10 @@ export function SettingsPage() {
     event.preventDefault();
     setFieldError(null);
 
-    // Client-side validation against the shared Zod schema.
+    // Client-side validation against the shared Zod schema. The
+    // username field is now optional in the schema (slice #80 added
+    // a separate consent_corpus toggle), but THIS form always sends
+    // a username, so we narrow back via a non-null fallback below.
     const parsed = updateMeSchema.safeParse({ username });
     if (!parsed.success) {
       const errors = formatUpdateMeErrors(parsed.error);
@@ -46,9 +49,10 @@ export function SettingsPage() {
       setStatus({ kind: "idle" });
       return;
     }
+    const validatedUsername = parsed.data.username ?? username.trim();
 
     setStatus({ kind: "submitting" });
-    const result = await updateMe({ username: parsed.data.username });
+    const result = await updateMe({ username: validatedUsername });
     if (!result.ok) {
       const fieldMsg = result.error.fieldErrors?.username;
       if (fieldMsg) {
@@ -63,7 +67,7 @@ export function SettingsPage() {
     // Show the server-confirmed username (trimmed to match server
     // behaviour) and refresh the session so the dashboard reflects
     // the change on next navigation.
-    setUsername(result.user.username ?? parsed.data.username);
+    setUsername(result.user.username ?? validatedUsername);
     setStatus({ kind: "success", message: "Username updated" });
     void refresh();
   }

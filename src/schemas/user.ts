@@ -6,6 +6,12 @@
 //
 // Error messages are written as human-readable strings rather than
 // the default Zod codes so they can be surfaced in the UI verbatim.
+//
+// Slice #80 (PRD #73 User Stories #13-#16) added the corpus-consent
+// toggle. Both fields are optional in the schema — a PATCH carrying
+// only `username` or only `consent_corpus` is valid; the route only
+// updates whichever fields the caller sent. The empty-object case
+// (`{}`) is rejected at the route layer.
 
 import { z } from "zod";
 
@@ -23,7 +29,9 @@ export const updateMeSchema = z.object({
     })
     .regex(NO_EDGE_DOT_DASH, {
       message: "No leading/trailing dot or dash",
-    }),
+    })
+    .optional(),
+  consent_corpus: z.boolean({ message: "consent_corpus must be a boolean" }).optional(),
 });
 
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;

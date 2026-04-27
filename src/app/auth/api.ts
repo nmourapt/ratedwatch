@@ -8,6 +8,13 @@ export interface MeResponse {
   id: string;
   email: string;
   username: string | null;
+  /**
+   * Per-user opt-in for sharing rejected/low-confidence dial-reader
+   * photos into the training corpus. Slice #80 of PRD #73; default
+   * false. The settings page lets the user flip this through
+   * `updateMe({ consent_corpus })`.
+   */
+  consent_corpus?: boolean;
 }
 
 export interface AuthError {
@@ -135,8 +142,14 @@ export interface UpdateMeError {
   fieldErrors?: Record<string, string>;
 }
 
+/**
+ * PATCH /me. Either or both fields can be present; the server
+ * accepts {username}, {consent_corpus}, or {username, consent_corpus}
+ * but rejects the empty body.
+ */
 export async function updateMe(body: {
-  username: string;
+  username?: string;
+  consent_corpus?: boolean;
 }): Promise<{ ok: true; user: MeResponse } | { ok: false; error: UpdateMeError }> {
   const response = await fetch("/api/v1/me", {
     method: "PATCH",
