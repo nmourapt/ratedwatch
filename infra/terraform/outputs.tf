@@ -24,6 +24,11 @@ output "r2_logs_bucket_name" {
   value       = cloudflare_r2_bucket.logs.name
 }
 
+output "r2_corpus_bucket_name" {
+  description = "R2 bucket name for training corpus (wrangler `r2_buckets[].bucket_name`). Slice #81 of PRD #73."
+  value       = cloudflare_r2_bucket.corpus.name
+}
+
 output "kv_flags_namespace_id" {
   description = "KV namespace ID for feature flags (wrangler `kv_namespaces[].id`)."
   value       = cloudflare_workers_kv_namespace.flags.id

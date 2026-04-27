@@ -39,6 +39,9 @@ export function SettingsPage() {
     setFieldError(null);
 
     // Client-side validation against the shared Zod schema.
+    // Slice #81 made `username` optional on the schema (the schema
+    // also gained an optional `consent_corpus` field), so we narrow
+    // before forwarding — this form only mutates the username.
     const parsed = updateMeSchema.safeParse({ username });
     if (!parsed.success) {
       const errors = formatUpdateMeErrors(parsed.error);
@@ -46,9 +49,17 @@ export function SettingsPage() {
       setStatus({ kind: "idle" });
       return;
     }
+    if (parsed.data.username === undefined) {
+      // Defensive — the form always submits a username; this branch
+      // is unreachable but satisfies the discriminated-union check.
+      setFieldError("Username is required");
+      setStatus({ kind: "idle" });
+      return;
+    }
+    const submittedUsername = parsed.data.username;
 
     setStatus({ kind: "submitting" });
-    const result = await updateMe({ username: parsed.data.username });
+    const result = await updateMe({ username: submittedUsername });
     if (!result.ok) {
       const fieldMsg = result.error.fieldErrors?.username;
       if (fieldMsg) {
@@ -63,7 +74,7 @@ export function SettingsPage() {
     // Show the server-confirmed username (trimmed to match server
     // behaviour) and refresh the session so the dashboard reflects
     // the change on next navigation.
-    setUsername(result.user.username ?? parsed.data.username);
+    setUsername(result.user.username ?? submittedUsername);
     setStatus({ kind: "success", message: "Username updated" });
     void refresh();
   }

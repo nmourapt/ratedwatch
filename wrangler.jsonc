@@ -70,6 +70,16 @@
     {
       "binding": "LOGS",
       "bucket_name": "rated-watch-logs"
+    },
+    // Training corpus — slice #81 of PRD #73. Receives photo +
+    // anonymized JSON sidecar pairs when a verified-reading
+    // attempt rejects or succeeds with low-margin confidence,
+    // conditional on the user's `consent_corpus` toggle. The
+    // bucket is operator-private; no Worker route serves bytes
+    // back. The TF resource lives in infra/terraform/r2.tf.
+    {
+      "binding": "R2_CORPUS",
+      "bucket_name": "rated-watch-corpus"
     }
   ],
   "kv_namespaces": [
