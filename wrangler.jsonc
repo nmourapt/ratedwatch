@@ -162,49 +162,63 @@
     }
   ],
 
-  // Workers Rate Limiting binding — slice #82 of PRD #73.
+  // Workers Rate Limiting binding — slice #82 of PRD #73 user story
+  // #25 ("50 verified-reading attempts per 24-hour rolling window
+  // per user").
   //
   // The verified-reading capture flow (POST /readings/verified) and
   // its manual fallback (POST /readings/manual_with_photo) share a
-  // single 50-attempts-per-24h-per-user quota. Both endpoints upload
-  // a 10 MB photo to R2 and (for /verified) round-trip the CV
-  // container; the cap exists to bound the cost of a runaway client
-  // / abusive user, not to throttle normal use.
+  // single quota. Both endpoints upload a 10 MB photo to R2 and (for
+  // /verified) round-trip the CV container; the cap exists to bound
+  // the cost of a runaway client / abusive user, not to throttle
+  // normal use.
   //
-  // Why `unsafe.bindings` and not the GA `ratelimits` top-level form?
-  // The GA form caps `simple.period` at 10 or 60 seconds (see
-  // https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/),
-  // which is too short for our 24h product cap. The legacy
-  // `unsafe.bindings` form supports `period: 86400` and the GA
-  // changelog explicitly states that "existing deployments using the
-  // unsafe binding will continue to function" — so this is the
-  // path that satisfies the slice's product requirement today. If
-  // Cloudflare later loosens the GA period constraint, swap this to
-  // the GA `ratelimits` shape in a follow-up PR; the runtime API
-  // (`env.VERIFIED_READING_LIMITER.limit({ key })`) is identical.
+  // Why two layers (binding + D1 row-count)?
+  // ----------------------------------------
+  // The GA `ratelimits` binding's `simple.period` is fixed at 10 or
+  // 60 seconds — it cannot express a 24h window. We resolve this
+  // with two cooperating gates inside `src/domain/rate-limit/`:
   //
-  // The Worker-side wrapper lives at src/domain/rate-limit/, not
-  // inline in the route, so both endpoints share one gate and tests
-  // can install a fake limiter via `__setTestRateLimiter` (mirroring
-  // the existing `__setTestDialReader` / `__setTestAiRunner`
-  // patterns). miniflare does not simulate ratelimit bindings under
-  // vitest-pool-workers, so a module-level fake is the only viable
-  // integration-test strategy.
+  //   1. **Per-minute burst guard** — this binding. A burst of >50
+  //      photo uploads in a single minute by one user is anomalous
+  //      and the binding catches it cheaply at the edge, before any
+  //      DB lookup. The local-to-Cloudflare-location semantics of
+  //      the GA binding are fine for this purpose: an abusive client
+  //      hammering one POP gets blocked there.
   //
-  // Operator action: the namespace_id below is opaque and unique
-  // within this Cloudflare account. No `wrangler ratelimit ...`
-  // provisioning command is required — the binding auto-provisions
-  // on first deploy. See the operator note in PR #82's body.
-  "unsafe": {
-    "bindings": [
-      {
-        "type": "ratelimit",
-        "name": "VERIFIED_READING_LIMITER",
-        "namespace_id": "ratedwatch-verified-reading-1",
-        "simple": { "limit": 50, "period": 86400 }
-      }
-    ]
-  }
+  //   2. **Per-24h product cap** — a D1 row-count over the readings
+  //      table indexed on `(user_id, photo_r2_key, created_at)`
+  //      from migration 0007. This is the one that matches the
+  //      product spec exactly and is what end users see at the 51st
+  //      attempt of the day.
+  //
+  // Both gates emit the same structured 429 body so the SPA's slice
+  // #80 UX renders consistently regardless of which gate fired.
+  //
+  // Operator action: no `wrangler ratelimit` provisioning command
+  // exists; the binding auto-provisions on first deploy. The
+  // namespace_id is an opaque identifier unique within this account.
+  // See the operator note in PR #82's body.
+  //
+  // Test integration: miniflare under vitest-pool-workers DOES
+  // simulate this binding (good — the ratelimits validator accepts
+  // period 60), but counter state across test files is fragile.
+  // Tests inject a deterministic fake via `__setTestRateLimiter`
+  // (mirroring the existing `__setTestDialReader` /
+  // `__setTestAiRunner` patterns) so the per-minute behaviour is
+  // hermetic.
+  "ratelimits": [
+    {
+      "name": "VERIFIED_READING_LIMITER",
+      // Account-unique opaque integer identifier. The string form
+      // is intentional per the GA spec.
+      "namespace_id": "1001",
+      // 50 / 60s — burst guard layer. The 24h product cap is
+      // enforced separately in src/domain/rate-limit/, see the
+      // module-level comment for rationale.
+      "simple": { "limit": 50, "period": 60 }
+    }
+  ]
 
   // ---------------------------------------------------------------
   // Runtime secrets (NOT stored here — set via `wrangler secret put`)
