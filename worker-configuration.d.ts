@@ -10,6 +10,7 @@ declare namespace Cloudflare {
 		FLAGS: KVNamespace;
 		IMAGES: R2Bucket;
 		LOGS: R2Bucket;
+		R2_CORPUS: R2Bucket;
 		DB: D1Database;
 		ANALYTICS: AnalyticsEngineDataset;
 		AI: Ai;
