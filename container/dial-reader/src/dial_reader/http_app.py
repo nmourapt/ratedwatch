@@ -57,21 +57,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from dial_reader import sentry_init
-from dial_reader.dial_locator import locate
-from dial_reader.hand_geometry import classify_hands, detect_hand_contours
-from dial_reader.image_decoder import (
-    MalformedImageError,
-    UnsupportedFormatError,
-    decode,
-)
+from dial_reader.dial_reader import read_dial
 
 # Bumped when the response shape or behaviour changes in a way
 # operators need to see. Slice #74 was `v0.0.1-scaffolding`,
-# slice #76 was `v0.1.0-decode`, slice #77 was `v0.2.0-dial-locator`;
-# this slice plugs hand-geometry classification on top so that
-# 3-hand-vs-other (chronograph / GMT / 2-hand) is detected and
-# surfaced as `unsupported_dial`.
-_VERSION: Final[str] = "v0.3.0-hand-classification"
+# slice #76 was `v0.1.0-decode`, slice #77 was `v0.2.0-dial-locator`,
+# slice #78 was `v0.3.0-hand-classification`; this slice (`#79`)
+# plugs in real angle math, time translation, and composite
+# confidence scoring → first end-to-end CV-correct dial reader.
+_VERSION: Final[str] = "v1.0.0"
 
 # Initialise Sentry once at module load. The init is idempotent and
 # becomes a no-op when SENTRY_DSN is unset, so this is safe in tests
@@ -138,20 +132,6 @@ def _log_request(payload: dict[str, Any]) -> None:
     _request_logger.info(payload)
 
 
-# Hardcoded zeros for fields the CV pipeline hasn't implemented
-# yet. Slice #78 fills `displayed_time`, `hand_angles_deg`, and
-# `confidence` with real values. Keeping these as named constants
-# at module scope makes them trivially auditable in a code review.
-_HARDCODED_DISPLAYED_TIME: Final[dict[str, int]] = {"h": 12, "m": 0, "s": 0}
-_HARDCODED_HAND_ANGLES_DEG: Final[dict[str, float]] = {
-    "hour": 0.0,
-    "minute": 0.0,
-    "second": 0.0,
-}
-_HARDCODED_CONFIDENCE: Final[float] = 0.0
-_HARDCODED_PROCESSING_MS: Final[int] = 0
-
-
 app = FastAPI(
     title="rated.watch dial-reader",
     version=_VERSION,
@@ -175,19 +155,18 @@ def healthz() -> dict[str, str]:
 
 
 @app.post("/v1/read-dial")
-async def read_dial(request: Request) -> JSONResponse:
+async def read_dial_endpoint(request: Request) -> JSONResponse:
     """Read the time displayed by a watch in the request body.
 
     The body is the raw image bytes (any of JPEG, PNG, WebP, HEIC).
     Format detection is done on the bytes themselves — we never
     trust the `Content-Type` header.
 
-    Slice #77 (dial locator): after a successful decode, runs
-    `dial_locator.locate()` to find the dial circle. If no plausible
-    dial is found we return a structured `no_dial_found` rejection;
-    if found, the success shape is returned with the real
-    `dial_detection` geometry. Hand-geometry, real time, and real
-    confidence land in subsequent slices.
+    Slice #79 (this slice) plugs in the full CV pipeline via
+    `dial_reader.read_dial`: decode → locate → segment → classify
+    → angles → translate → score. The handler is now a thin
+    translation layer between `DialReadResult` and the JSON wire
+    format; all CV decisions live in `dial_reader.read_dial`.
 
     Slice #83 (observability): every code path emits a single
     structured JSON log line via `_log_request` so Workers Logs
@@ -207,14 +186,11 @@ async def read_dial(request: Request) -> JSONResponse:
     image_bytes = await request.body()
     image_size = len(image_bytes)
 
-    try:
-        img = decode(image_bytes)
-    except UnsupportedFormatError as e:
-        # Recognised-but-rejected format. The Worker-side adapter
-        # turns this into a `DialReadResult` of kind `rejection`,
-        # which the verifier surfaces as a polite "this format
-        # isn't supported yet" message.
-        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+    result = read_dial(image_bytes)
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+
+    # ---- Branch on the discriminated union --------------------
+    if result.kind == "unsupported_format":
         _log_request(
             {
                 "event": "read_dial",
@@ -233,15 +209,12 @@ async def read_dial(request: Request) -> JSONResponse:
                 "ok": False,
                 "rejection": {
                     "reason": "unsupported_format",
-                    "details": str(e),
+                    "details": result.rejection_details or "",
                 },
             },
         )
-    except MalformedImageError as e:
-        # Bytes are corrupt or empty. A retry with the same bytes
-        # cannot succeed, so we surface this as a 400 rather than
-        # a structured rejection.
-        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+
+    if result.kind == "malformed_image":
         _log_request(
             {
                 "event": "read_dial",
@@ -258,86 +231,43 @@ async def read_dial(request: Request) -> JSONResponse:
             content={
                 "version": _VERSION,
                 "error": "malformed_image",
-                "details": str(e),
+                "details": result.rejection_details or "",
             },
         )
 
-    # Image decoded into an RGB ndarray. Run the dial locator.
-    circle = locate(img)
-    if circle is None:
-        # No plausible dial circle. Surface as a structured
-        # rejection so the SPA can show "we couldn't find a watch
-        # dial in this photo — make sure the dial is centered and
-        # well-lit" with only a "Retake" button (no manual
-        # fallback — the user needs to retry).
-        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
-        _log_request(
-            {
-                "event": "read_dial",
-                "reading_id": reading_id,
-                "dial_reader_version": _VERSION,
-                "processing_ms": elapsed_ms,
-                "image_bytes": image_size,
-                "outcome": "rejection",
-                "rejection_reason": "no_dial_found",
-            }
-        )
+    if result.kind == "rejection":
+        log_payload: dict[str, Any] = {
+            "event": "read_dial",
+            "reading_id": reading_id,
+            "dial_reader_version": _VERSION,
+            "processing_ms": elapsed_ms,
+            "image_bytes": image_size,
+            "outcome": "rejection",
+            "rejection_reason": result.rejection_reason,
+        }
+        if result.dial_detection is not None:
+            log_payload["dial_radius_px"] = result.dial_detection.radius_px
+        if result.confidence:
+            log_payload["confidence"] = result.confidence
+        _log_request(log_payload)
         return JSONResponse(
             status_code=200,
             content={
                 "version": _VERSION,
                 "ok": False,
                 "rejection": {
-                    "reason": "no_dial_found",
-                    "details": (
-                        "No watch dial detected. Frame the dial centered "
-                        "and well-lit, then try again."
-                    ),
+                    "reason": result.rejection_reason or "rejection",
+                    "details": result.rejection_details or "",
                 },
             },
         )
 
-    # Dial located → run hand detection + classification. Slice
-    # #78 surfaces "≠ 3 hands found" as `unsupported_dial` so the
-    # SPA can show the manual-fallback dialog. The success branch
-    # keeps the hardcoded h/m/s + confidence — slice #79 plugs in
-    # real angle math and confidence scoring lands in #80.
-    contours = detect_hand_contours(img, circle)
-    hands = classify_hands(contours)
-    if hands is None:
-        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
-        _log_request(
-            {
-                "event": "read_dial",
-                "reading_id": reading_id,
-                "dial_reader_version": _VERSION,
-                "processing_ms": elapsed_ms,
-                "image_bytes": image_size,
-                "outcome": "rejection",
-                "rejection_reason": "unsupported_dial",
-                "hand_candidates": len(contours),
-                "dial_radius_px": circle.radius_px,
-            }
-        )
-        return JSONResponse(
-            status_code=200,
-            content={
-                "version": _VERSION,
-                "ok": False,
-                "rejection": {
-                    "reason": "unsupported_dial",
-                    "details": (
-                        f"Detected {len(contours)} hand candidates; expected 3. "
-                        "This watch type isn't supported by verified-reading yet."
-                    ),
-                },
-            },
-        )
+    # ---- Success ------------------------------------------------
+    assert result.kind == "success", f"unexpected kind {result.kind}"
+    assert result.displayed_time is not None
+    assert result.dial_detection is not None
+    assert result.hand_angles is not None
 
-    # Hands detected and classified. Return the success shape with
-    # the real detection geometry; `displayed_time`, `confidence`,
-    # and `hand_angles_deg` stay hardcoded until #79 / #80.
-    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
     _log_request(
         {
             "event": "read_dial",
@@ -346,27 +276,33 @@ async def read_dial(request: Request) -> JSONResponse:
             "processing_ms": elapsed_ms,
             "image_bytes": image_size,
             "outcome": "success",
-            "confidence": _HARDCODED_CONFIDENCE,
-            # Slice #77 added real geometry — surface the located
-            # radius on the log line so the operator can spot-check
-            # detection-size distribution from Workers Logs without
-            # re-querying the response body.
-            "dial_radius_px": circle.radius_px,
-            "hand_candidates": len(contours),
+            "confidence": result.confidence,
+            "dial_radius_px": result.dial_detection.radius_px,
         }
     )
     success_body: dict[str, Any] = {
         "version": _VERSION,
         "ok": True,
         "result": {
-            "displayed_time": _HARDCODED_DISPLAYED_TIME,
-            "confidence": _HARDCODED_CONFIDENCE,
-            "dial_detection": {
-                "center_xy": [circle.center_xy[0], circle.center_xy[1]],
-                "radius_px": circle.radius_px,
+            "displayed_time": {
+                "h": result.displayed_time.h,
+                "m": result.displayed_time.m,
+                "s": result.displayed_time.s,
             },
-            "hand_angles_deg": _HARDCODED_HAND_ANGLES_DEG,
-            "processing_ms": _HARDCODED_PROCESSING_MS,
+            "confidence": result.confidence,
+            "dial_detection": {
+                "center_xy": [
+                    result.dial_detection.center_xy[0],
+                    result.dial_detection.center_xy[1],
+                ],
+                "radius_px": result.dial_detection.radius_px,
+            },
+            "hand_angles_deg": {
+                "hour": result.hand_angles.hour_deg,
+                "minute": result.hand_angles.minute_deg,
+                "second": result.hand_angles.second_deg,
+            },
+            "processing_ms": elapsed_ms,
         },
     }
     return JSONResponse(status_code=200, content=success_body)
