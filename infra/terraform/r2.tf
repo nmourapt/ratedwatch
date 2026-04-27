@@ -52,3 +52,30 @@ resource "cloudflare_r2_bucket" "logs" {
   name       = "rated-watch-logs"
   location   = upper(var.location_hint)
 }
+
+# Training-corpus bucket — slice #81 of PRD #73.
+#
+# Receives photos + anonymized JSON sidecars whenever a verified-
+# reading attempt either rejects or succeeds with low-margin
+# confidence (< 0.85), provided the user opted in via
+# `consent_corpus = 1`. The bucket is operator-private; nothing on
+# the public surface ever serves bytes back from here.
+#
+# Object layout:
+#   corpus/{YYYY-MM-DD}/{reading_id}/photo.{ext}
+#   corpus/{YYYY-MM-DD}/{reading_id}/sidecar.json
+#
+# No user_id, no watch_id, no PII timestamps in keys or sidecars —
+# the corpus module's `maybeIngest` enforces this by not accepting
+# user/watch identifiers. Retroactive deletion (consent toggle
+# 1→0) is handled by the Worker enumerating that user's reading
+# IDs and deleting `corpus/*/{readingId}/*` from this bucket.
+#
+# No lifecycle policy: training corpus value compounds over time
+# and a few GB of historical photos is cheaper than re-collecting
+# them.
+resource "cloudflare_r2_bucket" "corpus" {
+  account_id = var.account_id
+  name       = "rated-watch-corpus"
+  location   = upper(var.location_hint)
+}

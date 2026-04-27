@@ -18,21 +18,40 @@ import { z } from "zod";
 const USERNAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
 const NO_EDGE_DOT_DASH = /^[^.-].*[^.-]$|^[^.-]$/;
 
-export const updateMeSchema = z.object({
-  username: z
-    .string({ message: "Username is required" })
-    .trim()
-    .min(2, { message: "Username must be 2–30 characters" })
-    .max(30, { message: "Username must be 2–30 characters" })
-    .regex(USERNAME_REGEX, {
-      message: "Only letters, numbers, `_`, `.`, `-`",
-    })
-    .regex(NO_EDGE_DOT_DASH, {
-      message: "No leading/trailing dot or dash",
-    })
-    .optional(),
-  consent_corpus: z.boolean({ message: "consent_corpus must be a boolean" }).optional(),
-});
+// PATCH /api/v1/me accepts a partial profile update — the caller may
+// change `username`, `consent_corpus`, or both in a single request.
+// Both fields are optional individually, but a refinement at the
+// bottom of the schema enforces that at least ONE field is present
+// (an empty PATCH body is rejected with 400 invalid_input). This
+// mirrors the original `{ username }`-only contract: a request with
+// nothing to do is a programmer error and we want a clear 400 over
+// a silent no-op success.
+//
+// Slice #80 introduced the consent_corpus boolean for the settings
+// toggle (PRD #73 User Stories #13-#16). Slice #81 adds the
+// retroactive-corpus-deletion side-effect on a 1→0 transition; the
+// schema's job here is the same in both — accept the boolean,
+// reject anything else.
+export const updateMeSchema = z
+  .object({
+    username: z
+      .string({ message: "Username is required" })
+      .trim()
+      .min(2, { message: "Username must be 2–30 characters" })
+      .max(30, { message: "Username must be 2–30 characters" })
+      .regex(USERNAME_REGEX, {
+        message: "Only letters, numbers, `_`, `.`, `-`",
+      })
+      .regex(NO_EDGE_DOT_DASH, {
+        message: "No leading/trailing dot or dash",
+      })
+      .optional(),
+    consent_corpus: z.boolean({ message: "consent_corpus must be a boolean" }).optional(),
+  })
+  .refine((data) => data.username !== undefined || data.consent_corpus !== undefined, {
+    message: "At least one of username or consent_corpus must be provided",
+    path: ["username"],
+  });
 
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;
 

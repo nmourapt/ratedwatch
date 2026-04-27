@@ -135,6 +135,17 @@ export type VerifyReadingResult =
       ok: false;
       error: VerifyReadingErrorCode;
       raw_response?: string;
+      // Slice #81 (PRD #73): CV metadata surfaced on the failure
+      // branch so the route can pass it to `corpus.maybeIngest`
+      // without re-running the dial reader. All three are NULL on
+      // the AI path / EXIF skew branch (where the dial reader
+      // never ran or has no equivalent signal); on the CV path
+      // they are populated whenever the container responded
+      // (low-confidence rejection, structured rejection with a
+      // confidence echo, …). For pure transport errors confidence
+      // and version are NULL because the container never returned.
+      dial_reader_confidence?: number | null;
+      dial_reader_version?: string | null;
     };
 
 // The inserted readings row, shaped like the `readings` API response
@@ -304,7 +315,18 @@ export async function verifyReading(
     : await runAiBackend(image, env, referenceTimestamp);
 
   if (!backendRead.ok) {
-    return backendRead;
+    // Hoist the BackendRead failure straight onto the
+    // VerifyReadingResult shape. Both shapes share the optional
+    // `confidence` / `version` fields (slice #81) so the route
+    // can hand the metadata to `corpus.maybeIngest` without
+    // re-running the dial reader.
+    return {
+      ok: false,
+      error: backendRead.error,
+      raw_response: backendRead.raw_response,
+      dial_reader_confidence: backendRead.confidence ?? null,
+      dial_reader_version: backendRead.version ?? null,
+    };
   }
 
   // 4. Compute deviation from dial MM:SS vs reference MM:SS. Both
@@ -435,7 +457,18 @@ type BackendRead =
       version: string | null;
       rawResponse: string;
     }
-  | { ok: false; error: VerifyReadingErrorCode; raw_response?: string };
+  | {
+      ok: false;
+      error: VerifyReadingErrorCode;
+      raw_response?: string;
+      // Slice #81 (PRD #73): propagate the CV-pipeline metadata
+      // even on the failure branch so the route can pass it to
+      // `corpus.maybeIngest`. Both fields are NULL on the AI path
+      // / pure transport error / EXIF skew (the container either
+      // didn't run or has no equivalent signal).
+      confidence?: number | null;
+      version?: string | null;
+    };
 
 async function runAiBackend(
   image: Uint8Array,
@@ -536,6 +569,12 @@ async function runDialReaderBackend(
       ok: false,
       error: "dial_reader_low_confidence",
       raw_response: `confidence=${body.result.confidence}`,
+      // Slice #81: surface the actual confidence + version so the
+      // route's corpus-ingest call gets the same metadata as a
+      // success path would. The corpus is most informative on
+      // exactly these borderline reads.
+      confidence: body.result.confidence,
+      version: body.version,
     };
   }
   return {

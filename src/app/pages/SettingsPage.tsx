@@ -54,10 +54,11 @@ export function SettingsPage() {
     event.preventDefault();
     setFieldError(null);
 
-    // Client-side validation against the shared Zod schema. The
-    // username field is now optional in the schema (slice #80 added
-    // a separate consent_corpus toggle), but THIS form always sends
-    // a username, so we narrow back via a non-null fallback below.
+    // Client-side validation against the shared Zod schema. Slice
+    // #80 / #81 made both `username` and `consent_corpus` optional
+    // on the schema (with a refinement that requires at least one);
+    // this form only mutates the username so we narrow back to the
+    // required-string contract before forwarding.
     const parsed = updateMeSchema.safeParse({ username });
     if (!parsed.success) {
       const errors = formatUpdateMeErrors(parsed.error);
@@ -65,10 +66,17 @@ export function SettingsPage() {
       setStatus({ kind: "idle" });
       return;
     }
-    const validatedUsername = parsed.data.username ?? username.trim();
+    if (parsed.data.username === undefined) {
+      // Defensive — the form always submits a username; this branch
+      // is unreachable but satisfies the discriminated-union check.
+      setFieldError("Username is required");
+      setStatus({ kind: "idle" });
+      return;
+    }
+    const submittedUsername = parsed.data.username;
 
     setStatus({ kind: "submitting" });
-    const result = await updateMe({ username: validatedUsername });
+    const result = await updateMe({ username: submittedUsername });
     if (!result.ok) {
       const fieldMsg = result.error.fieldErrors?.username;
       if (fieldMsg) {
@@ -83,7 +91,7 @@ export function SettingsPage() {
     // Show the server-confirmed username (trimmed to match server
     // behaviour) and refresh the session so the dashboard reflects
     // the change on next navigation.
-    setUsername(result.user.username ?? validatedUsername);
+    setUsername(result.user.username ?? submittedUsername);
     setStatus({ kind: "success", message: "Username updated" });
     void refresh();
   }

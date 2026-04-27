@@ -24,6 +24,7 @@
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import type { DB } from "@/db";
+import { maybeIngest } from "@/domain/corpus";
 import type { DialReaderEnv } from "@/domain/dial-reader";
 import {
   computeSessionStats,
@@ -55,6 +56,12 @@ type Bindings = AuthEnv &
     DB: D1Database;
     AI: Ai;
     IMAGES: R2Bucket;
+    // Slice #81 (PRD #73): training-corpus bucket. The
+    // verified-reading route writes here via
+    // `corpus.maybeIngest`. Optional in the type so legacy tests
+    // / callers without the binding still compile; production
+    // wrangler.jsonc always has it.
+    R2_CORPUS?: R2Bucket;
     FLAGS: KVNamespace;
     // Analytics Engine (slice #19). Optional because logEvent
     // defaults to a silent no-op when unbound.
@@ -456,6 +463,8 @@ readingsByWatchRoute.post("/verified", async (c) => {
     typeof isBaselineRaw === "string" && isBaselineRaw.toLowerCase() === "true";
 
   const imageBuffer = await image.arrayBuffer();
+  const imageContentType =
+    image.type && image.type.length > 0 ? image.type : "image/jpeg";
 
   const result = await verifyReading({
     watchId,
@@ -466,6 +475,57 @@ readingsByWatchRoute.post("/verified", async (c) => {
     useDialReader,
     env: c.env,
   });
+
+  // Slice #81 (PRD #73): corpus collection. Look up the caller's
+  // `consent_corpus` flag once and queue a fire-and-forget ingest
+  // attempt that runs only when the gate (consent + low-margin
+  // confidence OR rejection) is satisfied. Wrapping the entire
+  // sub-pipeline in `waitUntil` so neither the DB lookup nor the
+  // R2 writes block the user-facing response. The gate logic
+  // itself lives in `corpus.maybeIngest` — this layer only feeds
+  // the right inputs in.
+  if (c.env.R2_CORPUS) {
+    const corpusEnv = { R2_CORPUS: c.env.R2_CORPUS };
+    const photoBytes = new Uint8Array(imageBuffer);
+    const verified = result.ok ? result.reading.verified : false;
+    const confidence = result.ok
+      ? result.reading.dial_reader_confidence
+      : (result.dial_reader_confidence ?? null);
+    const dialReaderVersion = result.ok
+      ? result.reading.dial_reader_version
+      : (result.dial_reader_version ?? null);
+    const rejectionReason = result.ok ? null : result.error;
+    const readingId = result.ok ? result.reading.id : crypto.randomUUID();
+
+    const work = (async () => {
+      try {
+        const db = createDb(c.env);
+        const userRow = await db
+          .selectFrom("user")
+          .select("consent_corpus")
+          .where("id", "=", user.id)
+          .executeTakeFirst();
+        const consentCorpus = (userRow?.consent_corpus ?? 0) === 1;
+        await maybeIngest({
+          readingId,
+          photoBytes,
+          imageContentType,
+          consentCorpus,
+          verified,
+          confidence,
+          rejectionReason,
+          dialReaderVersion,
+          env: corpusEnv,
+        });
+      } catch (err) {
+        // Swallow — corpus collection is opportunistic and must
+        // never affect the user-facing response. Logged so an
+        // operator tail can spot systemic failures.
+        console.warn("verified-reading: corpus ingest queue failed:", err);
+      }
+    })();
+    c.executionCtx.waitUntil(work);
+  }
 
   if (!result.ok) {
     await logEvent(

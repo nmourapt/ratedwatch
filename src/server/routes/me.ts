@@ -9,10 +9,16 @@
 //     Default off, unset means "no change". Per PRD User Stories
 //     #13-#16, it's privacy-preserving by default.
 //
-// Both fields are optional; the schema accepts either alone, both,
-// or neither (the empty-object case is rejected with `no_changes`
-// to surface client bugs early). Each present field is updated
-// independently — the route never clobbers an unset field.
+// Both fields are optional individually; the schema's refinement
+// rejects an empty body so a 400 invalid_input fires instead of a
+// silent no-op success. Each present field is updated independently
+// — the route never clobbers an unset field.
+//
+// Slice #81 (PRD #73 User Story #15): when `consent_corpus`
+// transitions 1→0, we kick off a best-effort retroactive deletion
+// of every corpus object derived from any of the user's readings.
+// Wrapped in `executionCtx.waitUntil` so the HTTP response is not
+// blocked on a potentially long R2 list+delete walk.
 //
 // Returns `{ id, email, username, consent_corpus }` on 200 for an
 // authenticated request, or 401 JSON on an unauthenticated one.
@@ -22,12 +28,17 @@
 
 import { Hono } from "hono";
 import { createDb } from "@/db";
+import { deleteUserCorpusObjects } from "@/domain/corpus";
 import { updateMeSchema, formatUpdateMeErrors } from "@/schemas/user";
 import { getAuth, type AuthEnv } from "@/server/auth";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
 
 type Bindings = AuthEnv & {
   DB: D1Database;
+  // Slice #81: training-corpus bucket. Optional in the type so
+  // legacy / minimally-bound test environments still compile;
+  // production wrangler.jsonc always has it.
+  R2_CORPUS?: R2Bucket;
   [key: string]: unknown;
 };
 
@@ -47,13 +58,13 @@ meRoute.use("*", requireAuth);
 async function fetchUserExtras(
   db: ReturnType<typeof createDb>,
   userId: string,
-): Promise<{ consent_corpus: number } | null> {
+): Promise<{ username: string | null; consent_corpus: number } | null> {
   const row = await db
     .selectFrom("user")
-    .select(["consent_corpus"])
+    .select(["username", "consent_corpus"])
     .where("id", "=", userId)
     .executeTakeFirst();
-  return (row as { consent_corpus: number } | undefined) ?? null;
+  return (row as { username: string | null; consent_corpus: number } | undefined) ?? null;
 }
 
 meRoute.get("/", async (c) => {
@@ -67,7 +78,7 @@ meRoute.get("/", async (c) => {
   const payload = {
     id: user.id,
     email: user.email,
-    username: (user as { username?: string }).username ?? null,
+    username: extras?.username ?? (user as { username?: string }).username ?? null,
     consent_corpus: extras ? extras.consent_corpus === 1 : false,
   };
   return c.json(payload);
@@ -78,7 +89,9 @@ meRoute.patch("/", async (c) => {
 
   // 1. Parse + validate the body against the shared Zod schema. We
   // return a compact { fieldErrors } shape so the SPA can render
-  // each error inline beneath the corresponding input.
+  // each error inline beneath the corresponding input. The schema's
+  // refinement catches the empty-body case (no fields present),
+  // surfacing it as invalid_input rather than a silent no-op.
   let json: unknown;
   try {
     json = await c.req.json();
@@ -97,24 +110,11 @@ meRoute.patch("/", async (c) => {
   }
   const { username, consent_corpus } = parsed.data;
 
-  // Empty-object PATCH is a client bug — surface it as invalid_input
-  // rather than a silent 200 with no changes.
-  if (username === undefined && consent_corpus === undefined) {
-    return c.json(
-      {
-        error: "invalid_input",
-        fieldErrors: { _: "At least one of username, consent_corpus is required" },
-      },
-      400,
-    );
-  }
-
   const db = createDb(c.env);
 
-  // 2. Username uniqueness check (only if a username change is in
-  //    play). The `user.username` column was created with
-  //    `COLLATE NOCASE`, so an `=` comparison already matches
-  //    case-insensitively.
+  // 2. Username branch: case-insensitive uniqueness check, excluding
+  // the caller. The `user.username` column was created with `COLLATE
+  // NOCASE`, so an `=` comparison already matches case-insensitively.
   if (username !== undefined) {
     const clash = await db
       .selectFrom("user")
@@ -127,10 +127,26 @@ meRoute.patch("/", async (c) => {
     }
   }
 
-  // 3. Update only the fields the caller actually sent. Kysely's
-  //    `.set()` accepts a partial object, so building it
-  //    conditionally keeps the SQL UPDATE minimal and avoids
-  //    clobbering unset columns.
+  // 3. consent_corpus branch: detect a 1→0 transition BEFORE the
+  // UPDATE so we can hand the right action to the retroactive-
+  // deletion helper. We read the current value from D1 (rather
+  // than trusting the Better Auth user object on `c.get("user")`,
+  // which may carry a stale snapshot if the value was changed
+  // since the session started).
+  let priorConsent: number | null = null;
+  if (consent_corpus !== undefined) {
+    const row = await db
+      .selectFrom("user")
+      .select("consent_corpus")
+      .where("id", "=", user.id)
+      .executeTakeFirst();
+    priorConsent = row?.consent_corpus ?? 0;
+  }
+
+  // 4. Apply the update. Build the SET clause dynamically so a
+  // username-only or consent-only PATCH doesn't accidentally clobber
+  // the other column. Always bump `updatedAt` so the auth layer
+  // picks up the change.
   const nowIso = new Date().toISOString();
   const updates: { username?: string; consent_corpus?: number; updatedAt: string } = {
     updatedAt: nowIso,
@@ -144,14 +160,27 @@ meRoute.patch("/", async (c) => {
   }
   await db.updateTable("user").set(updates).where("id", "=", user.id).execute();
 
-  // 4. Return the refreshed full profile. Read consent_corpus back
-  //    from the DB rather than echoing the input so the response is
-  //    always the canonical persisted value.
+  // 5. Retroactive corpus cleanup on a 1→0 transition. Fire-and-
+  // forget — the response below should not wait on the (potentially
+  // many-page) R2 list+delete walk. The helper is best-effort and
+  // never throws.
+  if (consent_corpus === false && priorConsent === 1 && c.env.R2_CORPUS !== undefined) {
+    const corpusEnv = { R2_CORPUS: c.env.R2_CORPUS };
+    c.executionCtx.waitUntil(
+      deleteUserCorpusObjects({ userId: user.id, db, env: corpusEnv }),
+    );
+  }
+
+  // 6. Refresh + return. Read consent_corpus and username back from
+  // the DB so the response always reflects the canonical persisted
+  // value (covers a consent-only PATCH where the body didn't
+  // include a username, and vice versa).
   const refreshed = await fetchUserExtras(db, user.id);
   return c.json({
     id: user.id,
     email: user.email,
-    username: username ?? (user as { username?: string }).username ?? null,
+    username:
+      refreshed?.username ?? username ?? (user as { username?: string }).username ?? null,
     consent_corpus: refreshed ? refreshed.consent_corpus === 1 : false,
   });
 });
