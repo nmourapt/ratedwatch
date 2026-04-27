@@ -1,0 +1,37 @@
+{
+  "smoke-01.jpg": {
+    "hh": 3,
+    "mm": 14,
+    "ss": 22,
+    "watch_make": "synthetic",
+    "watch_model": "smoke-01"
+  },
+  "smoke-02.jpg": {
+    "hh": 8,
+    "mm": 56,
+    "ss": 6,
+    "watch_make": "synthetic",
+    "watch_model": "smoke-02"
+  },
+  "smoke-03.jpg": {
+    "hh": 10,
+    "mm": 30,
+    "ss": 45,
+    "watch_make": "synthetic",
+    "watch_model": "smoke-03"
+  },
+  "smoke-04.jpg": {
+    "hh": 12,
+    "mm": 0,
+    "ss": 0,
+    "watch_make": "synthetic",
+    "watch_model": "smoke-04"
+  },
+  "smoke-05.jpg": {
+    "hh": 6,
+    "mm": 42,
+    "ss": 18,
+    "watch_make": "synthetic",
+    "watch_model": "smoke-05"
+  }
+}

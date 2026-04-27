@@ -56,17 +56,23 @@ export interface DialReadSuccessBody {
 
 /**
  * Known rejection reasons. The list grows as later slices add real
- * CV outcomes (`no_dial_detected`, `low_confidence`, etc.). The
+ * CV outcomes (`low_confidence`, `unsupported_dial`, etc.). The
  * `(string & {})` tail keeps the type assignable from arbitrary
  * strings (so a forward-compatible reason from the container
  * doesn't break callers) while preserving IDE autocompletion for
  * the known set.
  *
- * Slice #76 introduces `unsupported_format`, returned when the
- * container's image_decoder rejects bytes whose format isn't on
- * the rated.watch supported list (GIF, BMP, TIFF, AVIF, …).
+ * - Slice #76 introduces `unsupported_format`, returned when the
+ *   container's image_decoder rejects bytes whose format isn't on
+ *   the rated.watch supported list (GIF, BMP, TIFF, AVIF, …).
+ * - Slice #77 introduces `no_dial_found`, returned when the
+ *   container's dial_locator can't find a plausible dial circle
+ *   (uniform color, blurry frame, dial too off-center, etc.).
  */
-export type DialReadRejectionReason = "unsupported_format" | (string & {});
+export type DialReadRejectionReason =
+  | "unsupported_format"
+  | "no_dial_found"
+  | (string & {});
 
 /**
  * Discriminated union returned by `readDial`. The verifier branches
