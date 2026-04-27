@@ -10,4 +10,5 @@ export {
   type DialReadSuccessBody,
   type DialReader,
   type DialReaderEnv,
+  type ReadDialContext,
 } from "./adapter";
