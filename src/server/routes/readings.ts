@@ -31,13 +31,16 @@ import {
   type SessionStats,
 } from "@/domain/drift-calc";
 import { isEnabled } from "@/domain/feature-flags";
+import { resolveReferenceTimestamp } from "@/domain/reading-verifier/reference-timestamp";
 import {
+  computeVerifiedDeviation,
   verifyReading,
   type VerifyReadingErrorCode,
 } from "@/domain/reading-verifier/verifier";
 import { assertWatchOwnership } from "@/domain/watches/ownership";
 import { logEvent } from "@/observability/events";
 import {
+  createManualWithPhotoSchema,
   createReadingSchema,
   createTapReadingSchema,
   formatReadingErrors,
@@ -490,6 +493,190 @@ readingsByWatchRoute.post("/verified", async (c) => {
     { userId: user.id, watchId, is_baseline: result.reading.is_baseline },
     c.env,
   );
+  return c.json(body, 201);
+});
+
+/**
+ * POST /manual_with_photo — fallback flow for slice #80 (PRD #73
+ * User Story #10).
+ *
+ * The SPA calls this when the dial-reader rejected the photo and
+ * the user clicked "Enter manually". The user types HH:MM:SS, and
+ * the SPA re-uploads the SAME photo it already captured alongside
+ * the typed time. We persist a manual reading row (verified=0,
+ * dial_reader_confidence=NULL, dial_reader_version=NULL) plus the
+ * photo at the same R2 path the verified-reading flow uses
+ * (`readings/{id}/photo.{ext}`), so the operator can later audit
+ * "what did this watch's dial actually look like?" against the
+ * user's typed deviation.
+ *
+ * Multipart body:
+ *   * `image` (file, required, max 10 MB)
+ *   * `hh`, `mm`, `ss` (string-encoded integers, required)
+ *   * `is_baseline` (string "true"/"false", optional, default false)
+ *   * `notes` (string, optional)
+ *
+ * Reference timestamp resolution mirrors the verified-reading flow
+ * exactly — EXIF DateTimeOriginal preferred (bounded), server
+ * arrival fallback when EXIF is missing — so a manual_with_photo
+ * row is comparable on the timeline to a verified one.
+ *
+ * TODO(#82): rate limit the same way as the verified-reading path
+ * (50 attempts/24h) once slice #82 lands. The endpoint intentionally
+ * does NOT enforce a limit yet — slice #80 is just the route+UX.
+ */
+readingsByWatchRoute.post("/manual_with_photo", async (c) => {
+  // Same upload-latency-immune capture as /verified — see that route's
+  // comment for the rationale.
+  const serverArrivalMs = Date.now();
+  const user = c.get("user");
+  const watchId = getWatchIdParam(c);
+  if (!watchId) return c.json({ error: "not_found" }, 404);
+
+  const db = createDb(c.env);
+  const ownership = await assertWatchOwnership(db, watchId, user.id);
+  if (ownership.status === "not_found") {
+    return c.json({ error: "not_found" }, 404);
+  }
+  if (ownership.status === "forbidden") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  let form: FormData;
+  try {
+    form = await c.req.formData();
+  } catch {
+    return c.json({ error: "invalid_multipart" }, 400);
+  }
+
+  const image = form.get("image");
+  if (!(image instanceof File) || image.size === 0) {
+    return c.json({ error: "image_required" }, 400);
+  }
+  if (image.size > MAX_IMAGE_BYTES) {
+    return c.json({ error: "image_too_large", max_bytes: MAX_IMAGE_BYTES }, 413);
+  }
+
+  // Multipart fields arrive as strings; coerce to numbers before
+  // Zod validation so the schema's `int` constraint catches non-
+  // integer input rather than the type check rejecting raw strings.
+  const hh = Number(form.get("hh"));
+  const mm = Number(form.get("mm"));
+  const ss = Number(form.get("ss"));
+  const isBaselineRaw = form.get("is_baseline");
+  const isBaseline =
+    typeof isBaselineRaw === "string" && isBaselineRaw.toLowerCase() === "true";
+  const notesRaw = form.get("notes");
+  const notes = typeof notesRaw === "string" ? notesRaw : undefined;
+
+  const parsed = createManualWithPhotoSchema.safeParse({
+    hh,
+    mm,
+    ss,
+    is_baseline: isBaseline,
+    ...(notes !== undefined ? { notes } : {}),
+  });
+  if (!parsed.success) {
+    return c.json(
+      { error: "invalid_input", fieldErrors: formatReadingErrors(parsed.error) },
+      422,
+    );
+  }
+  const input = parsed.data;
+
+  // Resolve reference timestamp the same way the verifier does.
+  const imageBuffer = await image.arrayBuffer();
+  const refResult = await resolveReferenceTimestamp(imageBuffer, serverArrivalMs);
+  if (!refResult.ok) {
+    return c.json(
+      { error: "exif_clock_skew", raw_response: `delta=${refResult.deltaMs}ms` },
+      422,
+    );
+  }
+  const referenceTimestamp = refResult.referenceTimestamp;
+
+  // Compute deviation MM:SS-only against the reference clock,
+  // wrapped into [-1800, +1800]. Uses the same helper as the
+  // verifier so a manual_with_photo and a verified row are
+  // commensurable on the timeline.
+  let deviation = computeVerifiedDeviation(
+    { minutes: input.mm, seconds: input.ss },
+    referenceTimestamp,
+  );
+  if (input.is_baseline) {
+    deviation = 0;
+  }
+
+  const id = crypto.randomUUID();
+  await db
+    .insertInto("readings")
+    .values({
+      id,
+      watch_id: watchId,
+      user_id: user.id,
+      reference_timestamp: referenceTimestamp,
+      deviation_seconds: deviation,
+      is_baseline: input.is_baseline ? 1 : 0,
+      // verified=0 by default. Manual_with_photo is NOT verified —
+      // the typed time is still user-authored. We just keep the
+      // photo for evidence.
+      notes: input.notes ?? null,
+    })
+    .execute();
+
+  // Best-effort photo upload at the same R2 path the verified flow
+  // uses. A failure here doesn't roll back the row — see the same
+  // pattern in verifier.ts.
+  const photoKey = `readings/${id}/photo.jpg`;
+  let storedPhotoKey: string | null = null;
+  try {
+    await c.env.IMAGES.put(photoKey, imageBuffer, {
+      httpMetadata: { contentType: image.type || "image/jpeg" },
+    });
+    storedPhotoKey = photoKey;
+    await db
+      .updateTable("readings")
+      .set({ photo_r2_key: photoKey })
+      .where("id", "=", id)
+      .execute();
+  } catch (err) {
+    console.warn(
+      `manual_with_photo: R2 upload failed for reading ${id}, continuing:`,
+      err,
+    );
+  }
+
+  const created = (await db
+    .selectFrom("readings")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirstOrThrow()) as DbReadingRow & {
+    photo_r2_key: string | null;
+  };
+
+  // Reuse the existing toResponse mapper so the wire shape matches
+  // the rest of the readings surface — clients can render this row
+  // through the same React component as a tap or manual reading.
+  const body = toResponse(created);
+  // Ensure the response surfaces storedPhotoKey even when the
+  // SELECT raced the UPDATE (it shouldn't, but defensive).
+  void storedPhotoKey;
+
+  // Cache purge — same set of public URLs depends on this row.
+  const username = await lookupUsername(db, user.id);
+  await purgeLeaderboardUrls({
+    requestUrl: new URL(c.req.url),
+    movementId: ownership.watch.movement_id,
+    username,
+    watchId,
+  });
+
+  await logEvent(
+    "manual_with_photo_submitted",
+    { userId: user.id, watchId, is_baseline: input.is_baseline },
+    c.env,
+  );
+
   return c.json(body, 201);
 });
 

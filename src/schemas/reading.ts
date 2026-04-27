@@ -65,6 +65,46 @@ export const createTapReadingSchema = z.object({
 
 export type CreateTapReadingInput = z.infer<typeof createTapReadingSchema>;
 
+// Slice #80 (PRD #73 User Story #10) — manual-with-photo readings.
+//
+// The flow: the SPA captured a photo, the dial-reader rejected it
+// (unsupported_dial / low_confidence), the user clicked "Enter
+// manually" and typed in HH:MM:SS. The endpoint persists a normal
+// manual reading row (verified=0) but keeps the photo in R2 alongside
+// it, so we have evidence even though the deviation came from the
+// keyboard.
+//
+// HH/MM/SS are integers in the canonical 24h ranges. The route
+// turns them into a wall-clock dial time of "today at HH:MM:SS in
+// the reference clock's timezone" and computes deviation against
+// the same EXIF-or-server-arrival reference timestamp used by the
+// verified-reading flow (see verifier.ts).
+export const createManualWithPhotoSchema = z.object({
+  hh: z
+    .number({ message: "hh is required" })
+    .int({ message: "hh must be an integer" })
+    .min(0, { message: "hh must be 0–23" })
+    .max(23, { message: "hh must be 0–23" }),
+  mm: z
+    .number({ message: "mm is required" })
+    .int({ message: "mm must be an integer" })
+    .min(0, { message: "mm must be 0–59" })
+    .max(59, { message: "mm must be 0–59" }),
+  ss: z
+    .number({ message: "ss is required" })
+    .int({ message: "ss must be an integer" })
+    .min(0, { message: "ss must be 0–59" })
+    .max(59, { message: "ss must be 0–59" }),
+  is_baseline: z.boolean().default(false),
+  notes: z
+    .string()
+    .trim()
+    .max(NOTES_MAX, { message: `Notes must be ${NOTES_MAX} characters or fewer` })
+    .optional(),
+});
+
+export type CreateManualWithPhotoInput = z.infer<typeof createManualWithPhotoSchema>;
+
 // Wire shape returned by the readings API. Flattens the DB row's
 // 0/1 booleans to real booleans and leaves everything else as-is.
 export const readingResponseSchema = z.object({
