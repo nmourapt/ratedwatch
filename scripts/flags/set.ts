@@ -8,10 +8,10 @@
  *
  * Examples:
  *
- *   npm run flags:set -- ai_reading_v2 '{"mode":"always"}'
- *   npm run flags:set -- ai_reading_v2 '{"mode":"never"}'
- *   npm run flags:set -- ai_reading_v2 '{"mode":"users","users":["u-1","u-2"]}'
- *   npm run flags:set -- ai_reading_v2 '{"mode":"rollout","rolloutPct":25}'
+ *   npm run flags:set -- verified_reading_cv '{"mode":"always"}'
+ *   npm run flags:set -- verified_reading_cv '{"mode":"never"}'
+ *   npm run flags:set -- verified_reading_cv '{"mode":"users","users":["u-1","u-2"]}'
+ *   npm run flags:set -- verified_reading_cv '{"mode":"rollout","rolloutPct":25}'
  *
  * The rule JSON is validated with the same Zod schema the Worker uses
  * to read it back (src/domain/feature-flags/parse.ts), so a malformed
@@ -36,7 +36,7 @@ function usage(): never {
   // eslint-disable-next-line no-console
   console.error(
     "usage: npm run flags:set -- <flag-name> '<rule-json>'\n" +
-      'example: npm run flags:set -- ai_reading_v2 \'{"mode":"always"}\'',
+      'example: npm run flags:set -- verified_reading_cv \'{"mode":"always"}\'',
   );
   process.exit(2);
 }

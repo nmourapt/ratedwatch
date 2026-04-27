@@ -31,7 +31,7 @@ import {
   type Reading,
   type SessionStats,
 } from "@/domain/drift-calc";
-import { isEnabled } from "@/domain/feature-flags";
+import { isEnabled, type FeatureFlagsEnv } from "@/domain/feature-flags";
 import { resolveReferenceTimestamp } from "@/domain/reading-verifier/reference-timestamp";
 import {
   checkVerifiedReadingLimit,
@@ -61,7 +61,6 @@ type Bindings = AuthEnv &
   DialReaderEnv &
   RateLimitEnv & {
     DB: D1Database;
-    AI: Ai;
     IMAGES: R2Bucket;
     // Slice #81 (PRD #73): training-corpus bucket. The
     // verified-reading route writes here via
@@ -77,8 +76,49 @@ type Bindings = AuthEnv &
   };
 
 // Feature flag gating the verified-reading endpoint. Default-off in
-// prod; the operator enables it per-user via `npm run flags:set`.
-const FLAG_AI_READING_V2 = "ai_reading_v2";
+// prod; the operator enables it per-user (or globally) via
+// `npm run flags:set`. The flag was renamed in slice #11 of PRD #73
+// from the earlier `ai_reading_v2` (a name from the AI-runner era)
+// to `verified_reading_cv` because there is no AI involved any more.
+//
+// `verified_reading_cv = mode:never` means the verified-reading
+// endpoint is disabled — the route returns 503 and clients fall
+// back to the manual-entry flow. `mode:always` (or `mode:users` /
+// `mode:rollout` matching the caller) enables the CV pipeline.
+const FLAG_VERIFIED_READING_CV = "verified_reading_cv";
+// Legacy KV key kept as a backward-compat fallback during the
+// rollover window. After ~30 days of stable operation a follow-up
+// PR removes the fallback and the operator deletes the stale key.
+// See the PR body for slice #11 (PRD #73) for the cutover runbook.
+const FLAG_VERIFIED_READING_CV_LEGACY = "ai_reading_v2";
+
+/**
+ * Read the verified-reading flag, preferring the new key name and
+ * falling back to the legacy key during the rollover window.
+ *
+ * Why two reads instead of one OR'd lookup at the KV level: the
+ * `isEnabled` helper already encapsulates JSON parse + zod schema
+ * validation + default-off semantics. We want both keys to go
+ * through that pipeline so a stale-but-still-present legacy value
+ * (e.g. `{"mode":"users","users":[…]}`) keeps working for the same
+ * user set the operator originally rolled out to. Querying both
+ * keys in series costs one extra KV `get` per request when the new
+ * key is absent — acceptable for the few-day cutover window.
+ *
+ * After the operator copies the value to the new key the new-key
+ * read short-circuits and the legacy fallback is never touched.
+ */
+async function isVerifiedReadingEnabled(
+  userId: string,
+  env: FeatureFlagsEnv,
+): Promise<boolean> {
+  const fresh = await isEnabled(FLAG_VERIFIED_READING_CV, { userId }, env);
+  if (fresh) return true;
+  // Backward-compat fallback. Slice #11 of PRD #73; the follow-up
+  // cleanup PR removes this once the operator confirms the new key
+  // is the source of truth.
+  return isEnabled(FLAG_VERIFIED_READING_CV_LEGACY, { userId }, env);
+}
 // 10 MB cap on the uploaded image. Workers already enforce a body-size
 // limit but the cap here is the product contract — anything larger
 // gets a clean 413 rather than a generic workerd abort.
@@ -393,25 +433,23 @@ readingsByWatchRoute.post("/tap", async (c) => {
 });
 
 /**
- * POST /verified — log a verified (camera-captured, AI-read) reading.
+ * POST /verified — log a verified (camera-captured, CV-read) reading.
  *
  * Multipart body:
  *   * `image` (file, required, max 10 MB, image/jpeg)
  *   * `is_baseline` (string "true"/"false", optional, default false)
  *
- * Backend selection:
- *   * `ai_reading_v2` flag ON  → CV dial-reader container (slice
- *     #75 of PRD #73). Returns the new `dial_reader_*` error
- *     vocabulary on rejection.
- *   * `ai_reading_v2` flag OFF → legacy Workers AI runner.
- *     Preserved as a fallback path for the duration of the slice
- *     window; deleted in slice #11 once CV has proven itself.
+ * The dial reader is the CV container (`@/domain/dial-reader`).
+ * Slice #11 of PRD #73 deleted the legacy Workers AI runner; this
+ * route now has a single backend.
+ *
+ * The `verified_reading_cv` feature flag (renamed from the legacy
+ * `ai_reading_v2`) gates whether verified-reading is available at
+ * all. When the flag is OFF we return 503 so the SPA can fall back
+ * to the manual-entry flow.
  *
  * On success: 201 with the inserted reading.
- * On rejection: 422 with `{ error_code, ux_hint }` (CV path) or
- *   the legacy `{ error, raw_response }` shape (AI path) — the SPA
- *   already knows the AI shape and slice #80 will switch it to the
- *   structured CV shape once user-facing UX work lands.
+ * On rejection: 422 with `{ error_code, ux_hint }`.
  * On a transport-layer failure to the CV container: 502 (the
  *   container ran but did not return a CV decision; retryable).
  */
@@ -432,14 +470,30 @@ readingsByWatchRoute.post("/verified", async (c) => {
 
   // Event: attempt counter. Fires regardless of flag state / outcome
   // so funnel analysis can see how many users are bouncing off the
-  // feature-flagged gate vs the AI step.
+  // feature-flagged gate vs the CV step.
   await logEvent("verified_reading_attempted", { userId: user.id, watchId }, c.env);
 
-  // Feature flag gate decides which backend handles this read. The
-  // service default-offs on any error (missing FLAGS binding,
-  // malformed KV value, …) so a freshly-provisioned environment
-  // sees the legacy AI path, never the CV path.
-  const useDialReader = await isEnabled(FLAG_AI_READING_V2, { userId: user.id }, c.env);
+  // Feature flag gate. When verified-reading is disabled we surface
+  // a 503 — the SPA's slice-#80 error mapper handles this as
+  // "verified-reading temporarily unavailable; please log
+  // manually". Reads the new key first, falls back to the legacy
+  // key during the slice-#11 rollover window.
+  const verifiedReadingEnabled = await isVerifiedReadingEnabled(user.id, c.env);
+  if (!verifiedReadingEnabled) {
+    // The SPA's slice-#80 error mapper keys on `error_code:
+    // "verified_readings_disabled"` (plural — see
+    // src/app/watches/verifiedReadingErrors.ts) so it can render
+    // "Verified readings aren't enabled for your account yet"
+    // without leaking raw status codes.
+    return c.json(
+      {
+        error_code: "verified_readings_disabled",
+        ux_hint:
+          "Verified-reading is temporarily unavailable. Please log this reading manually.",
+      },
+      503,
+    );
+  }
 
   const db = createDb(c.env);
   const ownership = await assertWatchOwnership(db, watchId, user.id);
@@ -499,7 +553,6 @@ readingsByWatchRoute.post("/verified", async (c) => {
     imageBuffer,
     isBaseline,
     serverArrivalMs,
-    useDialReader,
     env: c.env,
   });
 
@@ -858,13 +911,10 @@ function errorResponse(
   code: VerifyReadingErrorCode,
   rawResponse: string | undefined,
 ): Response {
-  // Legacy AI-path errors keep their existing wire shape so the
-  // SPA's current handling stays valid until slice #80 unifies the
-  // shape. The CV-path errors use the new `error_code` + `ux_hint`
-  // structure spec'd in the slice #75 issue body.
-  if (code === "ai_refused" || code === "ai_unparseable" || code === "ai_implausible") {
-    return c.json({ error: code, raw_response: rawResponse }, 422);
-  }
+  // EXIF clock-skew keeps the legacy `{ error, raw_response }`
+  // wire shape so the SPA's existing handling stays valid; the
+  // structured `error_code` + `ux_hint` shape is reserved for the
+  // CV pipeline rejections (per the slice #75 issue body).
   if (code === "exif_clock_skew") {
     return c.json({ error: code, raw_response: rawResponse }, 422);
   }

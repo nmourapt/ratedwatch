@@ -117,11 +117,15 @@ async function setConsentCorpus(userId: string, value: 0 | 1): Promise<void> {
 
 async function setVerifiedFlagForUser(userId: string): Promise<void> {
   const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
-  await FLAGS.put("ai_reading_v2", JSON.stringify({ mode: "users", users: [userId] }));
+  await FLAGS.put(
+    "verified_reading_cv",
+    JSON.stringify({ mode: "users", users: [userId] }),
+  );
 }
 
 async function unsetVerifiedFlag(): Promise<void> {
   const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
+  await FLAGS.delete("verified_reading_cv");
   await FLAGS.delete("ai_reading_v2");
 }
 

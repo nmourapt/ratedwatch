@@ -1,28 +1,24 @@
 // Integration tests for POST /api/v1/watches/:id/readings/verified.
 //
 // Strategy: we drive the real Hono pipeline end-to-end but swap the
-// dial reader (legacy AI runner OR new CV container, depending on
-// the `ai_reading_v2` flag) for a canned fake. That module-level
-// override is shared by the test and Worker because
+// CV dial reader for a canned fake. That module-level override
+// (`__setTestDialReader`) is shared by the test and Worker because
 // vitest-pool-workers runs both inside the same workerd process per
 // test file.
 //
-// Backend selection (post-slice #75 of PRD #73):
-//   * Flag OFF → legacy AI runner via `__setTestAiRunner`. Existing
-//     "AI path" tests live here unchanged in spirit but unset the
-//     flag (rather than set it on) so the route routes through AI.
-//   * Flag ON  → CV container via `__setTestDialReader`. New tests
-//     pin the photo + confidence + version persistence and the
-//     mapped HTTP responses for each rejection class.
+// Slice #11 (cutover) of PRD #73 deleted the legacy Workers AI
+// runner. The CV container is now the sole backend, gated by the
+// `verified_reading_cv` feature flag (renamed from the legacy
+// `ai_reading_v2`; the route reads the new key first and falls back
+// to the legacy key during the rollover window).
 //
-// We also control `Date.now()` inside each test so the drift math
-// is hermetic — otherwise the dial time returned by the fake and
-// the reference timestamp captured by the verifier would race.
+// We control `Date.now()` inside each test so the drift math is
+// hermetic — otherwise the dial time returned by the fake and the
+// reference timestamp captured by the verifier would race.
 
 import { env } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { afterEach, beforeAll, describe, it, expect, vi } from "vitest";
-import { __setTestAiRunner, type AiRunner } from "@/domain/ai-dial-reader/runner";
 import { __setTestDialReader, type DialReader } from "@/domain/dial-reader/adapter";
 import { __setTestExifReader } from "@/domain/reading-verifier/exif";
 
@@ -49,12 +45,14 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  __setTestAiRunner(null);
   __setTestDialReader(null);
   __setTestExifReader(null);
   vi.useRealTimers();
   // Ensure no stale flag value bleeds across tests. Using delete is
-  // idempotent — KV silently no-ops when the key is missing.
+  // idempotent — KV silently no-ops when the key is missing. We
+  // clear both the new and legacy keys because tests pin the new
+  // one via `setVerifiedFlagForUser` but the legacy fallback could
+  // bleed in if a previous test wrote it.
   await unsetVerifiedFlag();
 });
 
@@ -121,16 +119,28 @@ async function createWatch(
 
 async function setVerifiedFlagForUser(userId: string): Promise<void> {
   const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
+  await FLAGS.put(
+    "verified_reading_cv",
+    JSON.stringify({ mode: "users", users: [userId] }),
+  );
+}
+
+async function setLegacyFlagForUser(userId: string): Promise<void> {
+  // Pins the backward-compat fallback. Used by the legacy-key
+  // coverage test below so we can prove the rollover window keeps
+  // the feature live for users still on the old KV key.
+  const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
   await FLAGS.put("ai_reading_v2", JSON.stringify({ mode: "users", users: [userId] }));
 }
 
 async function unsetVerifiedFlag(): Promise<void> {
   const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
+  await FLAGS.delete("verified_reading_cv");
   await FLAGS.delete("ai_reading_v2");
 }
 
-/** Minimal JPEG bytes — SOI + EOI. Enough for the route; the AI
- * runner is faked so it never actually parses the image. */
+/** Minimal JPEG bytes — SOI + EOI. Enough for the route; the dial
+ * reader is faked so it never actually parses the image. */
 function tinyJpegBytes(): Uint8Array {
   return new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
 }
@@ -159,19 +169,13 @@ async function postVerifiedReading(
   );
 }
 
-function installFakeAi(response: string): void {
-  const runner: AiRunner = async () => ({ response });
-  __setTestAiRunner(runner);
-}
-
 // ---- Tests --------------------------------------------------------
 
 const TWO_USER_TIMEOUT = 30_000;
 
-// Helpers for the CV path. Slice #75 wires `__setTestDialReader`
-// the same way `__setTestAiRunner` works: a canned response means
-// the verifier never reaches into the real DO binding (which can't
-// be hosted under miniflare anyway).
+// Helpers for the CV path. The fake dial reader installs a canned
+// response so the verifier never reaches into the real DO binding
+// (which can't be hosted under miniflare anyway).
 function installFakeDialReaderSuccess(opts: {
   m: number;
   s: number;
@@ -205,26 +209,79 @@ function installFakeDialReaderTransportError(message: string): void {
   __setTestDialReader(reader);
 }
 
-describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag OFF)", () => {
-  // Flag-off branch (preserved by slice #75 of PRD #73 — the AI
-  // path is deleted in slice #11 once CV has proven itself).
-  // Tests here deliberately do NOT call `setVerifiedFlagForUser` —
-  // the verified-reading service defaults to off without a KV value
-  // present, so leaving the flag unset routes through the AI runner.
-  it("computes deviation from AI dial MM:SS vs server reference clock", async () => {
+describe("POST /api/v1/watches/:id/readings/verified — feature-flag gate", () => {
+  it("returns 503 verified_reading_disabled when the flag is unset", async () => {
+    // Tests here deliberately do NOT call `setVerifiedFlagForUser` —
+    // the verified-reading service defaults to off without a KV
+    // value present. After the slice-#11 cutover that's a clean
+    // 503 (verified-reading temporarily unavailable) instead of
+    // routing through a now-deleted AI fallback.
     const user = await registerAndGetCookie();
+    const { id: watchId } = await createWatch(
+      { name: "FlagOff", movement_id: movementId },
+      user.cookie,
+    );
+    installFakeDialReaderSuccess({ m: 0, s: 0 });
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error_code: string; ux_hint: string };
+    // The SPA mapper keys on `verified_readings_disabled` (plural).
+    expect(body.error_code).toBe("verified_readings_disabled");
+    expect(body.ux_hint).toMatch(/temporarily unavailable/i);
+  });
+
+  it("requires authentication (401)", async () => {
+    // We don't even need the flag set to verify the 401 — requireAuth
+    // short-circuits before the handler runs.
+    const res = await postVerifiedReading("whatever", undefined);
+    expect(res.status).toBe(401);
+  });
+
+  it("falls back to the legacy ai_reading_v2 key during the rollover window", async () => {
+    // Slice #11 of PRD #73 renamed the flag from `ai_reading_v2`
+    // to `verified_reading_cv` and added a backward-compat
+    // fallback so the operator can keep the legacy key live during
+    // the rollover. Pin the contract so a future cleanup PR
+    // removing the fallback has to delete this test too — we don't
+    // want it silently disappearing.
+    const user = await registerAndGetCookie();
+    const { id: watchId } = await createWatch(
+      { name: "Legacy", movement_id: movementId },
+      user.cookie,
+    );
+    await setLegacyFlagForUser(user.userId);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.UTC(2024, 0, 15, 14, 32, 5));
+    installFakeDialReaderSuccess({ m: 32, s: 7, confidence: 0.92 });
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      verified: boolean;
+      deviation_seconds: number;
+    };
+    expect(body.verified).toBe(true);
+    expect(body.deviation_seconds).toBe(2);
+  });
+});
+
+describe("POST /api/v1/watches/:id/readings/verified — CV dial-reader backend", () => {
+  it("computes deviation from CV dial MM:SS vs server reference clock", async () => {
+    const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
     const { id: watchId } = await createWatch(
       { name: "V2", movement_id: movementId },
       user.cookie,
     );
 
     // Freeze Date.now() at 14:32:05 UTC so the reference clock is
-    // deterministic. Fake AI returns "32:07" (MM:SS) → +2s drift
-    // (same minute as reference, 2s ahead).
+    // deterministic. CV reader returns 32:07 → +2s drift.
     const refTime = Date.UTC(2024, 0, 15, 14, 32, 5);
     vi.useFakeTimers();
     vi.setSystemTime(refTime);
-    installFakeAi("32:07");
+    installFakeDialReaderSuccess({ m: 32, s: 7 });
 
     const res = await postVerifiedReading(watchId, user.cookie);
     expect(res.status).toBe(201);
@@ -243,6 +300,7 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
 
   it("captures drift larger than a minute (dial 33:10 vs ref 32:05 → +65s)", async () => {
     const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
     const { id: watchId } = await createWatch(
       { name: "V2b", movement_id: movementId },
       user.cookie,
@@ -254,7 +312,7 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     const refTime = Date.UTC(2024, 0, 15, 14, 32, 5);
     vi.useFakeTimers();
     vi.setSystemTime(refTime);
-    installFakeAi("33:10");
+    installFakeDialReaderSuccess({ m: 33, s: 10 });
 
     const res = await postVerifiedReading(watchId, user.cookie);
     expect(res.status).toBe(201);
@@ -262,38 +320,9 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     expect(body.deviation_seconds).toBe(65);
   });
 
-  it("422s on AI refusal (NO_DIAL)", async () => {
-    const user = await registerAndGetCookie();
-    const { id: watchId } = await createWatch(
-      { name: "V3", movement_id: movementId },
-      user.cookie,
-    );
-    installFakeAi("NO_DIAL");
-
-    const res = await postVerifiedReading(watchId, user.cookie);
-    expect(res.status).toBe(422);
-    const body = (await res.json()) as { error: string; raw_response?: string };
-    expect(body.error).toBe("ai_refused");
-    expect(body.raw_response).toBe("NO_DIAL");
-  });
-
-  it("422s on unparseable AI output", async () => {
-    const user = await registerAndGetCookie();
-    const { id: watchId } = await createWatch(
-      { name: "V4", movement_id: movementId },
-      user.cookie,
-    );
-    installFakeAi("banana");
-
-    const res = await postVerifiedReading(watchId, user.cookie);
-    expect(res.status).toBe(422);
-    const body = (await res.json()) as { error: string; raw_response?: string };
-    expect(body.error).toBe("ai_unparseable");
-    expect(body.raw_response).toBe("banana");
-  });
-
   it("forces deviation to 0 when is_baseline=true", async () => {
     const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
     const { id: watchId } = await createWatch(
       { name: "V5", movement_id: movementId },
       user.cookie,
@@ -301,10 +330,10 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
 
     vi.useFakeTimers();
     vi.setSystemTime(Date.UTC(2024, 0, 15, 10, 0, 0));
-    // AI "sees" 0:25 (25 s off the reference's 0:00); baseline
+    // CV "sees" 0:25 (25 s off the reference's 0:00); baseline
     // should still pin deviation to 0 because the user is declaring
     // "the watch is set to the exact time now".
-    installFakeAi("0:25");
+    installFakeDialReaderSuccess({ m: 0, s: 25 });
 
     const res = await postVerifiedReading(watchId, user.cookie, {
       isBaseline: true,
@@ -323,11 +352,15 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     async () => {
       const owner = await registerAndGetCookie();
       const other = await registerAndGetCookie();
+      // Both users need the flag on so the request gets past the
+      // 503 gate — we want to assert ownership 403, not the flag.
+      await setVerifiedFlagForUser(owner.userId);
+      await setVerifiedFlagForUser(other.userId);
       const { id: watchId } = await createWatch(
         { name: "Theirs", movement_id: movementId },
         owner.cookie,
       );
-      installFakeAi("0:0");
+      installFakeDialReaderSuccess({ m: 0, s: 0 });
 
       const res = await postVerifiedReading(watchId, other.cookie);
       expect(res.status).toBe(403);
@@ -335,30 +368,9 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     TWO_USER_TIMEOUT,
   );
 
-  it("stores the photo at readings/{id}/photo.jpg in R2", async () => {
-    const user = await registerAndGetCookie();
-    const { id: watchId } = await createWatch(
-      { name: "V6", movement_id: movementId },
-      user.cookie,
-    );
-    installFakeAi("0:30");
-    const probeBytes = new Uint8Array([0xff, 0xd8, 0xab, 0xcd, 0xff, 0xd9]);
-
-    const res = await postVerifiedReading(watchId, user.cookie, {
-      image: probeBytes,
-    });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string };
-
-    const IMAGES = (env as unknown as { IMAGES: R2Bucket }).IMAGES;
-    const obj = await IMAGES.get(`readings/${body.id}/photo.jpg`);
-    expect(obj).not.toBeNull();
-    const stored = new Uint8Array(await obj!.arrayBuffer());
-    expect(Array.from(stored)).toEqual(Array.from(probeBytes));
-  });
-
   it("rejects a missing image field (400)", async () => {
     const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
     const { id: watchId } = await createWatch(
       { name: "V7", movement_id: movementId },
       user.cookie,
@@ -378,13 +390,6 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     expect(json.error).toBe("image_required");
   });
 
-  it("requires authentication (401)", async () => {
-    // We don't even need the flag set to verify the 401 — requireAuth
-    // short-circuits before the handler runs.
-    const res = await postVerifiedReading("whatever", undefined);
-    expect(res.status).toBe(401);
-  });
-
   it("rejects EXIF outside the bounds window with 422 exif_clock_skew", async () => {
     // End-to-end check that the EXIF clock-skew gate fires through
     // the HTTP layer. We freeze the server clock so the bound
@@ -392,6 +397,7 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     // returns a timestamp 10 minutes in the past — well outside the
     // 5-minute past tolerance.
     const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
     const { id: watchId } = await createWatch(
       { name: "EXIFOOB", movement_id: movementId },
       user.cookie,
@@ -401,8 +407,9 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     vi.useFakeTimers();
     vi.setSystemTime(refTime);
     __setTestExifReader(async () => refTime - 10 * 60 * 1000);
-    // AI fake is irrelevant — the EXIF gate fires before the AI call.
-    installFakeAi("0:0");
+    // Dial reader fake is irrelevant — the EXIF gate fires before
+    // the dial-reader call.
+    installFakeDialReaderSuccess({ m: 0, s: 0 });
 
     const res = await postVerifiedReading(watchId, user.cookie);
     expect(res.status).toBe(422);
@@ -410,12 +417,7 @@ describe("POST /api/v1/watches/:id/readings/verified — legacy AI backend (flag
     expect(body.error).toBe("exif_clock_skew");
     expect(body.raw_response).toMatch(/too old/i);
   });
-});
 
-describe("POST /api/v1/watches/:id/readings/verified — CV dial-reader backend (flag ON)", () => {
-  // Slice #75 of PRD #73. With the flag set ON for the user, the
-  // verifier routes through the CV container instead of the AI
-  // runner. The container is faked here via __setTestDialReader.
   it("persists photo_r2_key + dial_reader_confidence + dial_reader_version on success", async () => {
     const user = await registerAndGetCookie();
     await setVerifiedFlagForUser(user.userId);
@@ -740,18 +742,19 @@ describe("dial-reader observability events (slice #83)", () => {
     expect(eventsOfKind("dial_reader_rejection")).toHaveLength(0);
   });
 
-  it("does NOT emit dial_reader_* events on the legacy AI path (flag OFF)", async () => {
+  it("does NOT emit dial_reader_* events when the flag is OFF (503 short-circuit)", async () => {
+    // Flag deliberately NOT set → 503. The dial reader must never
+    // run, so no attempt/success/rejection/error events should fire.
     const user = await registerAndGetCookie();
-    // Flag deliberately NOT set → AI path.
     const { id: watchId } = await createWatch(
-      { name: "CVObsAi", movement_id: movementId },
+      { name: "CVObsOff", movement_id: movementId },
       user.cookie,
     );
-    installFakeAi("0:0");
+    installFakeDialReaderSuccess({ m: 0, s: 0 });
     startCapture();
 
     const res = await postVerifiedReading(watchId, user.cookie);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(503);
 
     expect(eventsOfKind("dial_reader_attempt")).toHaveLength(0);
     expect(eventsOfKind("dial_reader_success")).toHaveLength(0);
