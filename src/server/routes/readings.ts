@@ -24,13 +24,17 @@
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import type { DB } from "@/db";
+import type { DialReaderEnv } from "@/domain/dial-reader";
 import {
   computeSessionStats,
   type Reading,
   type SessionStats,
 } from "@/domain/drift-calc";
 import { isEnabled } from "@/domain/feature-flags";
-import { verifyReading } from "@/domain/reading-verifier/verifier";
+import {
+  verifyReading,
+  type VerifyReadingErrorCode,
+} from "@/domain/reading-verifier/verifier";
 import { assertWatchOwnership } from "@/domain/watches/ownership";
 import { logEvent } from "@/observability/events";
 import {
@@ -43,16 +47,17 @@ import { getAuth, type AuthEnv } from "@/server/auth";
 import { purgeLeaderboardUrls } from "@/server/lib/purge-cache";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
 
-type Bindings = AuthEnv & {
-  DB: D1Database;
-  AI: Ai;
-  IMAGES: R2Bucket;
-  FLAGS: KVNamespace;
-  // Analytics Engine (slice #19). Optional because logEvent defaults
-  // to a silent no-op when unbound.
-  ANALYTICS?: AnalyticsEngineDataset;
-  [key: string]: unknown;
-};
+type Bindings = AuthEnv &
+  DialReaderEnv & {
+    DB: D1Database;
+    AI: Ai;
+    IMAGES: R2Bucket;
+    FLAGS: KVNamespace;
+    // Analytics Engine (slice #19). Optional because logEvent
+    // defaults to a silent no-op when unbound.
+    ANALYTICS?: AnalyticsEngineDataset;
+    [key: string]: unknown;
+  };
 
 // Feature flag gating the verified-reading endpoint. Default-off in
 // prod; the operator enables it per-user via `npm run flags:set`.
@@ -377,13 +382,21 @@ readingsByWatchRoute.post("/tap", async (c) => {
  *   * `image` (file, required, max 10 MB, image/jpeg)
  *   * `is_baseline` (string "true"/"false", optional, default false)
  *
- * Gated by feature flag `ai_reading_v2` (default off in prod). When
- * the flag is disabled for the caller we 503 with a machine-parsable
- * error so the SPA can hide the "take photo" button.
+ * Backend selection:
+ *   * `ai_reading_v2` flag ON  → CV dial-reader container (slice
+ *     #75 of PRD #73). Returns the new `dial_reader_*` error
+ *     vocabulary on rejection.
+ *   * `ai_reading_v2` flag OFF → legacy Workers AI runner.
+ *     Preserved as a fallback path for the duration of the slice
+ *     window; deleted in slice #11 once CV has proven itself.
  *
  * On success: 201 with the inserted reading.
- * On AI refusal / unparseable / implausible output: 422 with the
- * raw AI response for debugging.
+ * On rejection: 422 with `{ error_code, ux_hint }` (CV path) or
+ *   the legacy `{ error, raw_response }` shape (AI path) — the SPA
+ *   already knows the AI shape and slice #80 will switch it to the
+ *   structured CV shape once user-facing UX work lands.
+ * On a transport-layer failure to the CV container: 502 (the
+ *   container ran but did not return a CV decision; retryable).
  */
 readingsByWatchRoute.post("/verified", async (c) => {
   // Capture the wall-clock at handler entry, BEFORE any await. This
@@ -405,19 +418,11 @@ readingsByWatchRoute.post("/verified", async (c) => {
   // feature-flagged gate vs the AI step.
   await logEvent("verified_reading_attempted", { userId: user.id, watchId }, c.env);
 
-  // Feature flag gate — check FIRST so a disabled flag doesn't even
-  // do a DB lookup. The service default-offs on any error (missing
-  // FLAGS binding, malformed KV value, …) so this is safe even in
-  // freshly-provisioned environments.
-  const enabled = await isEnabled(FLAG_AI_READING_V2, { userId: user.id }, c.env);
-  if (!enabled) {
-    await logEvent(
-      "verified_reading_failed",
-      { userId: user.id, watchId, error: "verified_readings_disabled" },
-      c.env,
-    );
-    return c.json({ error: "verified_readings_disabled" }, 503);
-  }
+  // Feature flag gate decides which backend handles this read. The
+  // service default-offs on any error (missing FLAGS binding,
+  // malformed KV value, …) so a freshly-provisioned environment
+  // sees the legacy AI path, never the CV path.
+  const useDialReader = await isEnabled(FLAG_AI_READING_V2, { userId: user.id }, c.env);
 
   const db = createDb(c.env);
   const ownership = await assertWatchOwnership(db, watchId, user.id);
@@ -455,6 +460,7 @@ readingsByWatchRoute.post("/verified", async (c) => {
     imageBuffer,
     isBaseline,
     serverArrivalMs,
+    useDialReader,
     env: c.env,
   });
 
@@ -464,7 +470,7 @@ readingsByWatchRoute.post("/verified", async (c) => {
       { userId: user.id, watchId, error: result.error },
       c.env,
     );
-    return c.json({ error: result.error, raw_response: result.raw_response }, 422);
+    return errorResponse(c, result.error, result.raw_response);
   }
 
   // Map the verifier's row shape into the existing wire format.
@@ -486,6 +492,62 @@ readingsByWatchRoute.post("/verified", async (c) => {
   );
   return c.json(body, 201);
 });
+
+// ---- Error-code → HTTP response mapping ---------------------------
+//
+// PRD #73 User Stories #7-#11 spell out the SPA-facing UX for each
+// rejection class. Keeping the wording in one place here means the
+// SPA (slice #80) can switch on the `error_code` without ever
+// having to read the human-facing string — but the string IS the
+// fallback for any client that hasn't shipped the dedicated UX yet.
+//
+// Hint copy is intentionally short and action-oriented. Verbatim
+// from the PRD where possible so QA can grep the SPA / API for
+// drift in a single PR review.
+//
+// HTTP status choices:
+//   * 422 for any "your photo can't be processed" rejection — the
+//     request was well-formed, the verifier had a chance to look
+//     at it, but the content fails business validation. This is
+//     the same 422 the AI path uses today.
+//   * 502 for `dial_reader_transport_error` — the container did
+//     not have a chance to make a CV decision (5xx, network) so
+//     retrying might succeed. 502 is the conventional "upstream
+//     gave up" signal.
+const DIAL_READER_UX_HINTS: Record<string, string> = {
+  dial_reader_unsupported_dial:
+    "this watch type isn't supported by verified-reading yet — please log manually",
+  dial_reader_low_confidence:
+    "we couldn't read this dial confidently — please try a sharper photo, or log manually",
+  dial_reader_no_dial_found:
+    "we couldn't find a watch dial in this photo. Make sure the dial is centered and well-lit",
+  dial_reader_malformed_image:
+    "we couldn't decode this image. Please try again with a JPEG, PNG, WebP, or HEIC photo",
+  dial_reader_transport_error:
+    "the dial reader is temporarily unavailable. Please try again in a moment",
+};
+
+function errorResponse(
+  c: {
+    json: (body: unknown, status: number) => Response;
+  },
+  code: VerifyReadingErrorCode,
+  rawResponse: string | undefined,
+): Response {
+  // Legacy AI-path errors keep their existing wire shape so the
+  // SPA's current handling stays valid until slice #80 unifies the
+  // shape. The CV-path errors use the new `error_code` + `ux_hint`
+  // structure spec'd in the slice #75 issue body.
+  if (code === "ai_refused" || code === "ai_unparseable" || code === "ai_implausible") {
+    return c.json({ error: code, raw_response: rawResponse }, 422);
+  }
+  if (code === "exif_clock_skew") {
+    return c.json({ error: code, raw_response: rawResponse }, 422);
+  }
+  const hint = DIAL_READER_UX_HINTS[code] ?? "verified reading rejected";
+  const status = code === "dial_reader_transport_error" ? 502 : 422;
+  return c.json({ error_code: code, ux_hint: hint }, status);
+}
 
 // ---- /api/v1/readings/:id -----------------------------------------
 
