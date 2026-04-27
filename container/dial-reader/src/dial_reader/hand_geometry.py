@@ -235,33 +235,68 @@ def _radial_extents(
     (modulo `_RAY_GAP_TOLERANCE_PX` of slack). Hands produce wide
     peaks; chapter-ring indices, decorations, and any artefact
     not connected to the center produce zeros.
+
+    Implementation: vectorised polar sample. For each ray we
+    pre-compute its sample positions in pixel space and gather the
+    binary values along all rays in one numpy indexing pass; the
+    contiguous-run detection then runs as a simple Python loop
+    over rays of length-r 1-D arrays (≪ the cost of the gather).
     """
     cx, cy = dial.center_xy
-    r = dial.radius_px
+    r = int(dial.radius_px)
     h, w = binary.shape
-    extents = np.zeros(n_rays, dtype=np.float32)
-    for i in range(n_rays):
-        # Clockwise-from-north convention matches the synthetic
-        # generator and the time_translator that arrives in #79.
-        angle_rad = (i / n_rays) * 2.0 * math.pi
-        sin_a = math.sin(angle_rad)
-        cos_a = -math.cos(angle_rad)  # north
-        max_d = 0
-        gap = 0
-        for d in range(1, r + 1):
-            x = int(round(cx + sin_a * d))
-            y = int(round(cy + cos_a * d))
-            if 0 <= x < w and 0 <= y < h:
-                if binary[y, x] > 0:
-                    max_d = d
-                    gap = 0
-                else:
-                    gap += 1
-                    if gap > _RAY_GAP_TOLERANCE_PX:
-                        break
-            else:
-                break
-        extents[i] = float(max_d)
+
+    # Pre-compute per-angle (sin, -cos) and gather all rays as an
+    # (n_rays, r) array via vectorised rounding + bounds-clipping.
+    angles = np.linspace(0.0, 2.0 * math.pi, n_rays, endpoint=False, dtype=np.float64)
+    sin_a = np.sin(angles)
+    cos_a = -np.cos(angles)
+    radii = np.arange(1, r + 1, dtype=np.float64)
+    xs = np.rint(cx + np.outer(sin_a, radii)).astype(np.int32)
+    ys = np.rint(cy + np.outer(cos_a, radii)).astype(np.int32)
+    valid = (xs >= 0) & (xs < w) & (ys >= 0) & (ys < h)
+    xs_clip = np.clip(xs, 0, w - 1)
+    ys_clip = np.clip(ys, 0, h - 1)
+    samples = (binary[ys_clip, xs_clip] > 0) & valid
+
+    # Find, for each ray, the index of the (gap_tolerance+1)-th
+    # consecutive zero — that's where the ray "ends". The extent
+    # is then the last foreground index strictly before that point.
+    #
+    # We exploit a sliding-window sum on `~samples`: a window of
+    # `gap+1` consecutive False (i.e. background) samples means we
+    # crossed the gap tolerance.
+    gap_window = _RAY_GAP_TOLERANCE_PX + 1
+    n_cols = samples.shape[1]
+    bg = ~samples  # True where background or out-of-frame
+    # `search_end[i]` is the column index up to (but not including)
+    # which foreground samples on ray i still count toward its extent.
+    if n_cols >= gap_window:
+        bg_int = bg.astype(np.int32)
+        csum = np.cumsum(bg_int, axis=1)
+        head = csum[:, gap_window - 1 :]
+        tail = np.zeros_like(head)
+        tail[:, 1:] = csum[:, :-gap_window]
+        window_sum = head - tail
+        breaks = window_sum >= gap_window  # (n_rays, n_windows)
+        any_break = breaks.any(axis=1)
+        first_break = breaks.argmax(axis=1)
+        search_end = np.where(any_break, first_break, n_cols).astype(np.int64)
+    else:
+        search_end = np.full(n_rays, n_cols, dtype=np.int64)
+
+    # Per-ray "last foreground index strictly less than search_end".
+    # Build a (n_rays, n_cols) array of column indices and zero out
+    # the columns at or beyond each ray's search_end, then take the
+    # max.
+    col_idx = np.broadcast_to(np.arange(n_cols, dtype=np.int64), (n_rays, n_cols))
+    in_window = col_idx < search_end[:, None]
+    fg_in_window = samples & in_window
+    # Where there's no foreground in window, max(...) of the
+    # masked array would be 0; we want extent 0 in that case so a
+    # straight max works (col_idx + 1 if foreground, else 0).
+    fg_col_plus_one = np.where(fg_in_window, col_idx + 1, 0)
+    extents: NDArray[np.float32] = np.asarray(fg_col_plus_one.max(axis=1), dtype=np.float32)
     return extents
 
 
@@ -273,13 +308,12 @@ def _smooth_circular(arr: NDArray[np.float32], window: int = 3) -> NDArray[np.fl
     the array boundary so the angle space stays circular.
     """
     n = arr.shape[0]
-    out = np.zeros_like(arr)
     half = window // 2
-    for i in range(n):
-        s = 0.0
-        for k in range(-half, half + 1):
-            s += float(arr[(i + k) % n])
-        out[i] = s / window
+    # Pre-roll and sum: avoids a Python loop while preserving
+    # circular boundaries.
+    rolled = np.stack([np.roll(arr, -k) for k in range(-half, half + 1)])
+    out: NDArray[np.float32] = np.asarray(rolled.mean(axis=0), dtype=np.float32)
+    _ = n
     return out
 
 
