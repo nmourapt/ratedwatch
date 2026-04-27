@@ -1,18 +1,30 @@
 // GET /api/v1/me — "who am I" probe used by the SPA's auth gate.
-// PATCH /api/v1/me — update the authenticated user's profile
-//   (currently username and consent_corpus; later slices may add
-//   display name, avatar, etc.).
+// PATCH /api/v1/me — update the authenticated user's profile.
 //
-// Returns `{ id, email, username }` on 200 for an authenticated
-// request, or 401 JSON on an unauthenticated one. Session is resolved
-// from Better Auth (cookie by default; also works with Authorization:
-// Bearer <token> because Better Auth's session lookup honours both).
+// PATCH currently accepts:
+//   * `username` — the SPA's settings rename flow (slice #14).
+//   * `consent_corpus` (boolean) — slice #80 of PRD #73, the
+//     opt-in toggle that lets the operator copy a user's
+//     rejected/low-confidence photos into the training corpus.
+//     Default off, unset means "no change". Per PRD User Stories
+//     #13-#16, it's privacy-preserving by default.
 //
-// Slice #81 (PRD #73): the consent_corpus toggle is honoured here.
-// When a user transitions consent_corpus from 1 to 0, we kick off
-// a best-effort retroactive deletion of every corpus object derived
-// from any of the user's readings — wrapping it in waitUntil so the
-// HTTP response is unaffected.
+// Both fields are optional individually; the schema's refinement
+// rejects an empty body so a 400 invalid_input fires instead of a
+// silent no-op success. Each present field is updated independently
+// — the route never clobbers an unset field.
+//
+// Slice #81 (PRD #73 User Story #15): when `consent_corpus`
+// transitions 1→0, we kick off a best-effort retroactive deletion
+// of every corpus object derived from any of the user's readings.
+// Wrapped in `executionCtx.waitUntil` so the HTTP response is not
+// blocked on a potentially long R2 list+delete walk.
+//
+// Returns `{ id, email, username, consent_corpus }` on 200 for an
+// authenticated request, or 401 JSON on an unauthenticated one.
+// Session is resolved from Better Auth (cookie by default; also
+// works with Authorization: Bearer <token> because Better Auth's
+// session lookup honours both).
 
 import { Hono } from "hono";
 import { createDb } from "@/db";
@@ -37,8 +49,28 @@ export const meRoute = new Hono<{
 
 meRoute.use("*", requireAuth);
 
-meRoute.get("/", (c) => {
+/**
+ * Fetch the user's full row including the consent_corpus column,
+ * which Better Auth doesn't expose via its session-cached user
+ * object. A single small select per /me hit is fine — the route is
+ * only called on auth-gate refreshes and the settings page.
+ */
+async function fetchUserExtras(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+): Promise<{ username: string | null; consent_corpus: number } | null> {
+  const row = await db
+    .selectFrom("user")
+    .select(["username", "consent_corpus"])
+    .where("id", "=", userId)
+    .executeTakeFirst();
+  return (row as { username: string | null; consent_corpus: number } | undefined) ?? null;
+}
+
+meRoute.get("/", async (c) => {
   const user = c.get("user");
+  const db = createDb(c.env);
+  const extras = await fetchUserExtras(db, user.id);
   // Better Auth's additionalFields appear on the user object at
   // runtime. Type them narrowly for the JSON payload we expose to
   // the SPA; the full user may carry more fields we don't want to
@@ -46,7 +78,8 @@ meRoute.get("/", (c) => {
   const payload = {
     id: user.id,
     email: user.email,
-    username: (user as { username?: string }).username ?? null,
+    username: extras?.username ?? (user as { username?: string }).username ?? null,
+    consent_corpus: extras ? extras.consent_corpus === 1 : false,
   };
   return c.json(payload);
 });
@@ -56,7 +89,9 @@ meRoute.patch("/", async (c) => {
 
   // 1. Parse + validate the body against the shared Zod schema. We
   // return a compact { fieldErrors } shape so the SPA can render
-  // each error inline beneath the corresponding input.
+  // each error inline beneath the corresponding input. The schema's
+  // refinement catches the empty-body case (no fields present),
+  // surfacing it as invalid_input rather than a silent no-op.
   let json: unknown;
   try {
     json = await c.req.json();
@@ -74,6 +109,7 @@ meRoute.patch("/", async (c) => {
     );
   }
   const { username, consent_corpus } = parsed.data;
+
   const db = createDb(c.env);
 
   // 2. Username branch: case-insensitive uniqueness check, excluding
@@ -115,8 +151,11 @@ meRoute.patch("/", async (c) => {
   const updates: { username?: string; consent_corpus?: number; updatedAt: string } = {
     updatedAt: nowIso,
   };
-  if (username !== undefined) updates.username = username;
+  if (username !== undefined) {
+    updates.username = username;
+  }
   if (consent_corpus !== undefined) {
+    // SQLite booleans are 0/1 INTEGER (see migration 0007).
     updates.consent_corpus = consent_corpus ? 1 : 0;
   }
   await db.updateTable("user").set(updates).where("id", "=", user.id).execute();
@@ -132,20 +171,17 @@ meRoute.patch("/", async (c) => {
     );
   }
 
-  // 6. Refresh + return. We re-read the username from the DB so the
-  // response always reflects the persisted value (covers a
-  // consent-only PATCH where the body didn't include a username).
-  const fresh = await db
-    .selectFrom("user")
-    .select(["username", "consent_corpus"])
-    .where("id", "=", user.id)
-    .executeTakeFirst();
-
+  // 6. Refresh + return. Read consent_corpus and username back from
+  // the DB so the response always reflects the canonical persisted
+  // value (covers a consent-only PATCH where the body didn't
+  // include a username, and vice versa).
+  const refreshed = await fetchUserExtras(db, user.id);
   return c.json({
     id: user.id,
     email: user.email,
-    username: fresh?.username ?? username ?? null,
-    consent_corpus: (fresh?.consent_corpus ?? 0) === 1,
+    username:
+      refreshed?.username ?? username ?? (user as { username?: string }).username ?? null,
+    consent_corpus: refreshed ? refreshed.consent_corpus === 1 : false,
   });
 });
 

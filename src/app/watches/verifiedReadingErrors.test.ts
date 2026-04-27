@@ -12,9 +12,10 @@ import { mapVerifiedReadingError } from "./verifiedReadingErrors";
 
 describe("mapVerifiedReadingError", () => {
   it("maps ai_refused (422) to a re-take hint", () => {
-    expect(mapVerifiedReadingError(422, "ai_refused").message).toMatch(
-      /couldn't read the dial/i,
-    );
+    const mapped = mapVerifiedReadingError(422, "ai_refused");
+    expect(mapped.message).toMatch(/couldn't read the dial/i);
+    expect(mapped.manualFallback).toBe(false);
+    expect(mapped.canRetake).toBe(true);
   });
 
   it("maps ai_unparseable (422) to a generic AI-response error", () => {
@@ -67,5 +68,61 @@ describe("mapVerifiedReadingError", () => {
     expect(mapVerifiedReadingError(422, "martian_invasion").message).toMatch(
       /something went wrong/i,
     );
+  });
+
+  // CV-pipeline error vocabulary (PRD #73 User Stories #7-#11). The
+  // copy is verbatim from the issue body so QA can grep for drift.
+  it("maps dial_reader_unsupported_dial (422) with manualFallback=true", () => {
+    const mapped = mapVerifiedReadingError(422, "dial_reader_unsupported_dial");
+    expect(mapped.code).toBe("dial_reader_unsupported_dial");
+    expect(mapped.message).toMatch(/isn't supported by verified-reading yet/i);
+    expect(mapped.message).toMatch(/log this reading manually/i);
+    expect(mapped.manualFallback).toBe(true);
+    expect(mapped.canRetake).toBe(true);
+    expect(mapped.canRetry).toBe(false);
+  });
+
+  it("maps dial_reader_low_confidence (422) with manualFallback=true", () => {
+    const mapped = mapVerifiedReadingError(422, "dial_reader_low_confidence");
+    expect(mapped.code).toBe("dial_reader_low_confidence");
+    expect(mapped.message).toMatch(/sharper photo/i);
+    expect(mapped.message).toMatch(/direct lighting/i);
+    expect(mapped.manualFallback).toBe(true);
+    expect(mapped.canRetake).toBe(true);
+  });
+
+  it("maps dial_reader_no_dial_found (422) with manualFallback=false", () => {
+    const mapped = mapVerifiedReadingError(422, "dial_reader_no_dial_found");
+    expect(mapped.code).toBe("dial_reader_no_dial_found");
+    expect(mapped.message).toMatch(/centered and well-lit/i);
+    // Issue is photo quality, not watch type — retake only.
+    expect(mapped.manualFallback).toBe(false);
+    expect(mapped.canRetake).toBe(true);
+  });
+
+  it("maps dial_reader_malformed_image (400) with retake-only", () => {
+    const mapped = mapVerifiedReadingError(400, "dial_reader_malformed_image");
+    expect(mapped.code).toBe("dial_reader_malformed_image");
+    expect(mapped.message).toMatch(/please retake/i);
+    expect(mapped.manualFallback).toBe(false);
+    expect(mapped.canRetake).toBe(true);
+  });
+
+  it("maps dial_reader_transport_error (502) with canRetry=true and no manual", () => {
+    const mapped = mapVerifiedReadingError(502, "dial_reader_transport_error");
+    expect(mapped.code).toBe("dial_reader_transport_error");
+    expect(mapped.message).toMatch(/connection failed/i);
+    expect(mapped.canRetry).toBe(true);
+    expect(mapped.canRetake).toBe(false);
+    expect(mapped.manualFallback).toBe(false);
+  });
+
+  it("maps 429 to a daily-cap message with no retry/retake", () => {
+    const mapped = mapVerifiedReadingError(429);
+    expect(mapped.code).toBe("rate_limited");
+    expect(mapped.message).toMatch(/daily verified-reading cap/i);
+    expect(mapped.canRetry).toBe(false);
+    expect(mapped.canRetake).toBe(false);
+    expect(mapped.manualFallback).toBe(false);
   });
 });

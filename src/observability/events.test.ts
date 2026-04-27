@@ -63,7 +63,13 @@ describe("logEvent", () => {
       "verified_reading_attempted",
       "verified_reading_succeeded",
       "verified_reading_failed",
-      // Slice #83 added the dial-reader telemetry quintet.
+      // Slice #71 EXIF-reference telemetry.
+      "verified_reading_exif_ok",
+      "verified_reading_exif_missing",
+      "verified_reading_exif_clock_skew",
+      // Slice #80 manual_with_photo fallback funnel.
+      "manual_with_photo_submitted",
+      // Slice #83 dial-reader telemetry quintet.
       "dial_reader_attempt",
       "dial_reader_success",
       "dial_reader_rejection",

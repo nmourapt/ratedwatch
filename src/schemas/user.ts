@@ -6,6 +6,12 @@
 //
 // Error messages are written as human-readable strings rather than
 // the default Zod codes so they can be surfaced in the UI verbatim.
+//
+// Slice #80 (PRD #73 User Stories #13-#16) added the corpus-consent
+// toggle. Both fields are optional in the schema — a PATCH carrying
+// only `username` or only `consent_corpus` is valid; the route only
+// updates whichever fields the caller sent. The empty-object case
+// (`{}`) is rejected at the route layer.
 
 import { z } from "zod";
 
@@ -20,6 +26,12 @@ const NO_EDGE_DOT_DASH = /^[^.-].*[^.-]$|^[^.-]$/;
 // mirrors the original `{ username }`-only contract: a request with
 // nothing to do is a programmer error and we want a clear 400 over
 // a silent no-op success.
+//
+// Slice #80 introduced the consent_corpus boolean for the settings
+// toggle (PRD #73 User Stories #13-#16). Slice #81 adds the
+// retroactive-corpus-deletion side-effect on a 1→0 transition; the
+// schema's job here is the same in both — accept the boolean,
+// reject anything else.
 export const updateMeSchema = z
   .object({
     username: z
@@ -34,9 +46,6 @@ export const updateMeSchema = z
         message: "No leading/trailing dot or dash",
       })
       .optional(),
-    // Slice #81 (PRD #73): per-user opt-in to corpus collection.
-    // Boolean on the wire so the SPA toggle code path is intuitive;
-    // the route maps it onto the SQLite INTEGER 0/1 column.
     consent_corpus: z.boolean({ message: "consent_corpus must be a boolean" }).optional(),
   })
   .refine((data) => data.username !== undefined || data.consent_corpus !== undefined, {

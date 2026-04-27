@@ -201,12 +201,79 @@ export async function createVerifiedReading(
   if (!response.ok) {
     let serverCode: string | undefined;
     try {
-      const parsed = (await response.json()) as { error?: string };
-      serverCode = parsed.error;
+      // Slice #75 introduced the `error_code` field on CV-pipeline
+      // rejections (alongside a `ux_hint`). Legacy AI-pipeline errors
+      // continue to use `error`. Read whichever is present, in that
+      // order — `error_code` wins if both somehow appear.
+      const parsed = (await response.json()) as {
+        error?: string;
+        error_code?: string;
+      };
+      serverCode = parsed.error_code ?? parsed.error;
     } catch {
       /* non-JSON body */
     }
     return { ok: false, error: mapVerifiedReadingError(response.status, serverCode) };
+  }
+  const reading = (await response.json()) as Reading;
+  return { ok: true, reading };
+}
+
+// Slice #80 (PRD #73 User Story #10): manual_with_photo fallback.
+//
+// Called when the dial reader rejects a verified-reading photo and
+// the user clicks "Enter manually". The SPA submits the SAME
+// already-captured photo plus the user's typed HH:MM:SS. The
+// server persists a manual reading row (verified=0) with the photo
+// alongside it.
+
+export interface ManualWithPhotoSubmission {
+  image: File;
+  hh: number;
+  mm: number;
+  ss: number;
+  isBaseline: boolean;
+  notes?: string;
+}
+
+export async function createManualWithPhotoReading(
+  watchId: string,
+  submission: ManualWithPhotoSubmission,
+): Promise<
+  { ok: true; reading: Reading } | { ok: false; error: VerifiedReadingErrorMessage }
+> {
+  const form = new FormData();
+  form.append("image", submission.image);
+  form.append("hh", String(submission.hh));
+  form.append("mm", String(submission.mm));
+  form.append("ss", String(submission.ss));
+  form.append("is_baseline", submission.isBaseline ? "true" : "false");
+  if (submission.notes !== undefined) {
+    form.append("notes", submission.notes);
+  }
+  const response = await fetch(
+    `/api/v1/watches/${encodeURIComponent(watchId)}/readings/manual_with_photo`,
+    {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    let serverCode: string | undefined;
+    try {
+      const parsed = (await response.json()) as {
+        error?: string;
+        error_code?: string;
+      };
+      serverCode = parsed.error_code ?? parsed.error;
+    } catch {
+      /* non-JSON */
+    }
+    return {
+      ok: false,
+      error: mapVerifiedReadingError(response.status, serverCode),
+    };
   }
   const reading = (await response.json()) as Reading;
   return { ok: true, reading };

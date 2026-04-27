@@ -24,6 +24,12 @@ export type EventKind =
   | "verified_reading_attempted"
   | "verified_reading_succeeded"
   | "verified_reading_failed"
+  // Slice #80 (PRD #73 User Story #10): manual_with_photo flow —
+  // the user typed HH:MM:SS after the dial reader rejected their
+  // capture. Tracked separately from `reading_submitted` so we can
+  // measure the rate at which CV rejections funnel into manual
+  // entry vs an outright session-abandon.
+  | "manual_with_photo_submitted"
   // EXIF-reference telemetry. The verified-reading pipeline now uses
   // EXIF DateTimeOriginal as the reference timestamp (see
   // src/domain/reading-verifier/verifier.ts). These three events let

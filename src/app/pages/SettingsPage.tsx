@@ -1,17 +1,33 @@
-// Settings screen. Current slice only lets the user rename their
-// username; email change, password change, and account deletion land
-// in later (currently unplanned) slices.
+// Settings screen. Currently lets the user:
 //
-// The form validates client-side with the same `updateMeSchema` used
-// by the server, so inline errors match what the API would return
-// and we avoid a round-trip for obviously-bad input. Server-side
-// errors (duplicate username, invalid input we somehow let through,
-// expired session) are surfaced beneath the field too.
+//   * Rename their username (slice #14).
+//   * Toggle the corpus-consent opt-in (slice #80, PRD #73 User
+//     Stories #13-#16). Off by default. When on, rejected /
+//     low-confidence photos are eligible for inclusion in the
+//     anonymized training corpus that improves the dial reader.
+//
+// Email change, password change, and account deletion land in
+// later (currently unplanned) slices.
+//
+// The username form validates client-side with the same
+// `updateMeSchema` used by the server, so inline errors match what
+// the API would return and we avoid a round-trip for obviously-bad
+// input. Server-side errors (duplicate username, invalid input we
+// somehow let through, expired session) are surfaced beneath the
+// field too.
+//
+// The consent toggle is a separate PATCH — flipping it doesn't go
+// through the username form. This keeps the UX honest: the user
+// flips the switch, the network round-trip happens, and the toggle
+// reflects the SERVER's view (not just optimistic local state).
+// Failures roll the toggle back to its previous state and surface
+// an inline error.
 
 import { type FormEvent, useEffect, useState } from "react";
 import { updateMeSchema, formatUpdateMeErrors } from "@/schemas/user";
 import { updateMe } from "../auth/api";
 import { useSession } from "../auth/useSession";
+import { ConsentCorpusToggle } from "../settings/ConsentCorpusToggle";
 
 type Status =
   | { kind: "idle" }
@@ -38,10 +54,11 @@ export function SettingsPage() {
     event.preventDefault();
     setFieldError(null);
 
-    // Client-side validation against the shared Zod schema.
-    // Slice #81 made `username` optional on the schema (the schema
-    // also gained an optional `consent_corpus` field), so we narrow
-    // before forwarding — this form only mutates the username.
+    // Client-side validation against the shared Zod schema. Slice
+    // #80 / #81 made both `username` and `consent_corpus` optional
+    // on the schema (with a refinement that requires at least one);
+    // this form only mutates the username so we narrow back to the
+    // required-string contract before forwarding.
     const parsed = updateMeSchema.safeParse({ username });
     if (!parsed.success) {
       const errors = formatUpdateMeErrors(parsed.error);
@@ -172,6 +189,11 @@ export function SettingsPage() {
           {status.kind === "submitting" ? "Saving…" : "Save changes"}
         </button>
       </form>
+
+      {/* Slice #80: corpus-consent toggle. Self-contained component
+          so its loading / save states don't get tangled with the
+          username form's. */}
+      {sessionStatus === "authed" ? <ConsentCorpusToggle /> : null}
     </section>
   );
 }
