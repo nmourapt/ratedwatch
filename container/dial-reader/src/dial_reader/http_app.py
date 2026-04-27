@@ -3,12 +3,18 @@
 Slice #77 plugs the dial locator (HoughCircles + filtering) into
 the post-decode flow. After bytes successfully decode into an RGB
 ndarray, the locator is run; if no plausible dial circle is found
-the endpoint returns a structured `no_dial_found` rejection. When a
-dial IS found, the success-shape is returned with the *real*
-`dial_detection` block reflecting the located circle. The
-`displayed_time`, `confidence`, and `hand_angles_deg` fields are
-still hardcoded zero values — those land in slice #78 (hand
-geometry) and slice #80 (confidence scoring).
+the endpoint returns a structured `no_dial_found` rejection.
+
+Slice #78 plugs in `hand_geometry.detect_hand_contours` +
+`classify_hands` after the locator. When the classifier returns
+`None` (≠ 3 hands detected, indicating a chronograph / GMT /
+2-hand / partial detection) the endpoint returns a structured
+`unsupported_dial` rejection so the SPA can show "this watch
+type isn't supported by verified-reading yet — please log
+manually" with the appropriate fallback button. Slice #79 layers
+real angle math + time translation on top; until then the
+success branch keeps emitting the hardcoded `displayed_time` and
+`confidence` so the contract stays stable.
 
 Four response shapes the Worker-side adapter has to handle:
 
@@ -52,6 +58,7 @@ from fastapi.responses import JSONResponse
 
 from dial_reader import sentry_init
 from dial_reader.dial_locator import locate
+from dial_reader.hand_geometry import classify_hands, detect_hand_contours
 from dial_reader.image_decoder import (
     MalformedImageError,
     UnsupportedFormatError,
@@ -60,9 +67,11 @@ from dial_reader.image_decoder import (
 
 # Bumped when the response shape or behaviour changes in a way
 # operators need to see. Slice #74 was `v0.0.1-scaffolding`,
-# slice #76 was `v0.1.0-decode`; this slice plugs the dial locator
-# into the post-decode flow.
-_VERSION: Final[str] = "v0.2.0-dial-locator"
+# slice #76 was `v0.1.0-decode`, slice #77 was `v0.2.0-dial-locator`;
+# this slice plugs hand-geometry classification on top so that
+# 3-hand-vs-other (chronograph / GMT / 2-hand) is detected and
+# surfaced as `unsupported_dial`.
+_VERSION: Final[str] = "v0.3.0-hand-classification"
 
 # Initialise Sentry once at module load. The init is idempotent and
 # becomes a no-op when SENTRY_DSN is unset, so this is safe in tests
@@ -288,9 +297,46 @@ async def read_dial(request: Request) -> JSONResponse:
             },
         )
 
-    # Dial located. Return the success shape with the real
-    # detection geometry; the rest of `result` stays zeroed
-    # until later slices implement hand geometry + confidence.
+    # Dial located → run hand detection + classification. Slice
+    # #78 surfaces "≠ 3 hands found" as `unsupported_dial` so the
+    # SPA can show the manual-fallback dialog. The success branch
+    # keeps the hardcoded h/m/s + confidence — slice #79 plugs in
+    # real angle math and confidence scoring lands in #80.
+    contours = detect_hand_contours(img, circle)
+    hands = classify_hands(contours)
+    if hands is None:
+        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+        _log_request(
+            {
+                "event": "read_dial",
+                "reading_id": reading_id,
+                "dial_reader_version": _VERSION,
+                "processing_ms": elapsed_ms,
+                "image_bytes": image_size,
+                "outcome": "rejection",
+                "rejection_reason": "unsupported_dial",
+                "hand_candidates": len(contours),
+                "dial_radius_px": circle.radius_px,
+            }
+        )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "version": _VERSION,
+                "ok": False,
+                "rejection": {
+                    "reason": "unsupported_dial",
+                    "details": (
+                        f"Detected {len(contours)} hand candidates; expected 3. "
+                        "This watch type isn't supported by verified-reading yet."
+                    ),
+                },
+            },
+        )
+
+    # Hands detected and classified. Return the success shape with
+    # the real detection geometry; `displayed_time`, `confidence`,
+    # and `hand_angles_deg` stay hardcoded until #79 / #80.
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
     _log_request(
         {
@@ -306,6 +352,7 @@ async def read_dial(request: Request) -> JSONResponse:
             # detection-size distribution from Workers Logs without
             # re-querying the response body.
             "dial_radius_px": circle.radius_px,
+            "hand_candidates": len(contours),
         }
     )
     success_body: dict[str, Any] = {
