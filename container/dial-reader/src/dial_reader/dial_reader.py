@@ -53,7 +53,7 @@ with a tie-break that, if the implied real-valued hour is e.g.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 from dial_reader.confidence_scorer import ConfidenceSignals, score
 from dial_reader.dial_locator import DialCircle, locate
@@ -70,7 +70,6 @@ from dial_reader.image_decoder import (
     decode,
 )
 from dial_reader.time_translator import to_mmss
-
 
 # ---------------------------------------------------------------
 # Result types.
@@ -101,16 +100,16 @@ class DialReadResult:
         "malformed_image",
         "unsupported_format",
     ]
-    displayed_time: Optional[DisplayedTime] = None
+    displayed_time: DisplayedTime | None = None
     confidence: float = 0.0
-    rejection_reason: Optional[str] = None
-    rejection_details: Optional[str] = None
-    dial_detection: Optional[DialCircle] = None
-    hand_angles: Optional[HandAngles] = None
+    rejection_reason: str | None = None
+    rejection_details: str | None = None
+    dial_detection: DialCircle | None = None
+    hand_angles: HandAngles | None = None
     # Internal sub-signals for observability — surfaced on the
     # log line so the operator can investigate borderline-confident
     # rejections without re-running the pipeline.
-    confidence_signals: Optional[ConfidenceSignals] = None
+    confidence_signals: ConfidenceSignals | None = None
 
 
 # ---------------------------------------------------------------

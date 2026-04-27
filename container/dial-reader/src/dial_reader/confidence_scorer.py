@@ -66,7 +66,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-
 # Public, immutable weights. Operators reading the code can
 # verify exactly what each component contributes to the final
 # score by reading these constants. Sum to 1.0 by construction

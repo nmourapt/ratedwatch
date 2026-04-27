@@ -16,8 +16,6 @@ locator-stage 30° tolerance because the time translator
 
 from __future__ import annotations
 
-import math
-
 import pytest
 
 from dial_reader.dial_locator import locate
