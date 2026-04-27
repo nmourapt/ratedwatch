@@ -251,6 +251,72 @@ function sniffImageFormat(bytes: Uint8Array): string {
 }
 
 /**
+ * Emit the appropriate outcome event for a `DialReadResult`. Used by
+ * the test-override path so that integration tests installing a fake
+ * via `__setTestDialReader` still see the same observability events
+ * as the production binding path. The binding path emits its own
+ * events inline because it has richer context (HTTP response, raw
+ * body) for the error / success branches that would be lossy to
+ * pass through this helper.
+ *
+ * Note: the binding path's `dial_reader_success` payload pulls the
+ * confidence + processing_ms + version from the parsed JSON body
+ * directly. We mirror that exactly here from the typed result, so
+ * an integration-test-fake reader emits the same shape as a real
+ * container response.
+ */
+async function emitResultEvent(
+  result: DialReadResult,
+  ctx: ReadDialContext,
+  env: EventLoggerEnv,
+): Promise<void> {
+  if (result.kind === "success") {
+    await logEvent(
+      "dial_reader_success",
+      {
+        reading_id: ctx.readingId,
+        confidence: result.body.result.confidence,
+        processing_ms: result.body.result.processing_ms,
+        dial_reader_version: result.body.version,
+      },
+      env,
+    );
+    return;
+  }
+  if (result.kind === "rejection") {
+    await logEvent(
+      "dial_reader_rejection",
+      { reading_id: ctx.readingId, reason: result.reason },
+      env,
+    );
+    return;
+  }
+  if (result.kind === "malformed_image") {
+    // Mirror the binding path's choice: a malformed image is a
+    // structured client-side rejection from the container's POV.
+    await logEvent(
+      "dial_reader_rejection",
+      { reading_id: ctx.readingId, reason: "malformed_image" },
+      env,
+    );
+    return;
+  }
+  // result.kind === "transport_error". The test-override path can't
+  // distinguish "5xx" from "fetch threw"; we surface a generic
+  // `error_type` so the operator dashboard shows it as an error
+  // rather than a deliberate rejection.
+  await logEvent(
+    "dial_reader_error",
+    {
+      reading_id: ctx.readingId,
+      error_type: "test_override_transport_error",
+      error_message: result.message,
+    },
+    env,
+  );
+}
+
+/**
  * Read the time displayed by a watch in the supplied image bytes.
  *
  * Production path: forwards the bytes as the body of
@@ -276,13 +342,11 @@ export async function readDial(
   env: DialReaderEnv,
   ctx?: ReadDialContext,
 ): Promise<DialReadResult> {
-  if (testReader) {
-    return testReader(image);
-  }
-
-  // Telemetry: emit the attempt event before any work. Even if every
-  // downstream step fails, the operator gets a denominator for the
-  // success-rate query.
+  // Telemetry: emit the attempt event before any work, regardless
+  // of whether we route through the test override or the real
+  // binding. Integration tests that install a fake reader still
+  // need the operator-facing events to fire so the route's
+  // observability contract stays under test.
   if (ctx) {
     await logEvent(
       "dial_reader_attempt",
@@ -293,6 +357,14 @@ export async function readDial(
       },
       env,
     );
+  }
+
+  if (testReader) {
+    const result = await testReader(image);
+    if (ctx) {
+      await emitResultEvent(result, ctx, env);
+    }
+    return result;
   }
 
   const stub = getContainer(env.DIAL_READER, "global");
