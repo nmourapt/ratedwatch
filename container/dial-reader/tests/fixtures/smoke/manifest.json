@@ -1,8 +1,8 @@
 {
   "smoke-01.jpg": {
-    "hh": 3,
-    "mm": 14,
-    "ss": 22,
+    "hh": 1,
+    "mm": 35,
+    "ss": 50,
     "watch_make": "synthetic",
     "watch_model": "smoke-01"
   },
@@ -14,16 +14,16 @@
     "watch_model": "smoke-02"
   },
   "smoke-03.jpg": {
-    "hh": 10,
-    "mm": 30,
-    "ss": 45,
+    "hh": 4,
+    "mm": 25,
+    "ss": 13,
     "watch_make": "synthetic",
     "watch_model": "smoke-03"
   },
   "smoke-04.jpg": {
-    "hh": 12,
-    "mm": 0,
-    "ss": 0,
+    "hh": 11,
+    "mm": 5,
+    "ss": 30,
     "watch_make": "synthetic",
     "watch_model": "smoke-04"
   },
