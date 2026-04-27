@@ -161,6 +161,18 @@
   //   GOOGLE_CLIENT_ID      — Google OAuth 2.0 client ID from the
   //                            Google Cloud Console.
   //   GOOGLE_CLIENT_SECRET  — matching OAuth client secret.
+  //   SENTRY_DSN            — shared Sentry DSN used by both the
+  //                            Worker and the dial-reader Python
+  //                            container (slice #83 of PRD #73).
+  //                            The container reads the DSN via
+  //                            envVars on `DialReaderContainer`
+  //                            (see src/worker/index.tsx), which
+  //                            forwards `env.SENTRY_DSN` into the
+  //                            container at startup. Missing DSN is
+  //                            a no-op on both sides — the Worker's
+  //                            withSentry wrapper degrades to a
+  //                            passthrough, the container's
+  //                            sentry_init.init() short-circuits.
   //
   // When the Google pair is unset the Worker still boots and
   // email+password flows work; only the Google social provider is

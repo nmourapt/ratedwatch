@@ -63,6 +63,12 @@ describe("logEvent", () => {
       "verified_reading_attempted",
       "verified_reading_succeeded",
       "verified_reading_failed",
+      // Slice #83 added the dial-reader telemetry quintet.
+      "dial_reader_attempt",
+      "dial_reader_success",
+      "dial_reader_rejection",
+      "dial_reader_error",
+      "dial_reader_cold_start",
       "movement_suggested",
       "chrono24_click",
       "leaderboard_filter_changed",
