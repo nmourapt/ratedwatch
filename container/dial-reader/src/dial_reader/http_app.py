@@ -1,20 +1,23 @@
 """FastAPI HTTP surface for the dial-reader service.
 
-Slice #76 wires real image decoding into `POST /v1/read-dial`.
-The endpoint now actually parses the request body, validates the
-format, and rejects malformed or unsupported inputs — but on a
-successful decode it still returns the same hardcoded "successful
-reading" introduced by the slice #74 scaffolding. Real CV
-(HoughCircles dial detection, hand-angle parsing, calibrated
-confidence) lands in subsequent slices.
+Slice #77 plugs the dial locator (HoughCircles + filtering) into
+the post-decode flow. After bytes successfully decode into an RGB
+ndarray, the locator is run; if no plausible dial circle is found
+the endpoint returns a structured `no_dial_found` rejection. When a
+dial IS found, the success-shape is returned with the *real*
+`dial_detection` block reflecting the located circle. The
+`displayed_time`, `confidence`, and `hand_angles_deg` fields are
+still hardcoded zero values — those land in slice #78 (hand
+geometry) and slice #80 (confidence scoring).
 
-Three response shapes the Worker-side adapter has to handle:
+Four response shapes the Worker-side adapter has to handle:
 
-  - 200 + ok:true + result:{...}     successful read
+  - 200 + ok:true + result:{...}     decode + dial-locate succeeded
   - 200 + ok:false + rejection:{...} structured rejection
-                                     (unsupported format today;
-                                     low confidence, no dial,
-                                     etc. in future slices)
+                                     (unsupported_format from #76;
+                                     no_dial_found new in #77;
+                                     low_confidence etc. in later
+                                     slices)
   - 400 + error:"malformed_image"    bytes were unreadable —
                                      transport-style failure
 
@@ -31,6 +34,7 @@ from typing import Any, Final
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from dial_reader.dial_locator import locate
 from dial_reader.image_decoder import (
     MalformedImageError,
     UnsupportedFormatError,
@@ -38,30 +42,23 @@ from dial_reader.image_decoder import (
 )
 
 # Bumped when the response shape or behaviour changes in a way
-# operators need to see. Slice #74 was `v0.0.1-scaffolding`; this
-# slice flips real decode on while keeping the success shape.
-_VERSION: Final[str] = "v0.1.0-decode"
+# operators need to see. Slice #74 was `v0.0.1-scaffolding`,
+# slice #76 was `v0.1.0-decode`; this slice plugs the dial locator
+# into the post-decode flow.
+_VERSION: Final[str] = "v0.2.0-dial-locator"
 
-# The complete success response. Defined at module level so it
-# round-trips through json (Python dict -> FastAPI response -> client
-# .json()) byte-for-byte equal to the contract test, and so the
-# constant stays trivially auditable in a code review.
-#
-# The values are still the slice #74 scaffolding values: the CV
-# pipeline isn't implemented yet, so confidence is 0.0 and the
-# fields a verifier would consume are zeroed. Slice #77+ replaces
-# these with real numbers without changing the keys.
-_SCAFFOLDING_SUCCESS_RESPONSE: Final[dict[str, Any]] = {
-    "version": _VERSION,
-    "ok": True,
-    "result": {
-        "displayed_time": {"h": 12, "m": 0, "s": 0},
-        "confidence": 0.0,
-        "dial_detection": {"center_xy": [0, 0], "radius_px": 0},
-        "hand_angles_deg": {"hour": 0, "minute": 0, "second": 0},
-        "processing_ms": 0,
-    },
+# Hardcoded zeros for fields the CV pipeline hasn't implemented
+# yet. Slice #78 fills `displayed_time`, `hand_angles_deg`, and
+# `confidence` with real values. Keeping these as named constants
+# at module scope makes them trivially auditable in a code review.
+_HARDCODED_DISPLAYED_TIME: Final[dict[str, int]] = {"h": 12, "m": 0, "s": 0}
+_HARDCODED_HAND_ANGLES_DEG: Final[dict[str, float]] = {
+    "hour": 0.0,
+    "minute": 0.0,
+    "second": 0.0,
 }
+_HARDCODED_CONFIDENCE: Final[float] = 0.0
+_HARDCODED_PROCESSING_MS: Final[int] = 0
 
 
 app = FastAPI(
@@ -94,15 +91,17 @@ async def read_dial(request: Request) -> JSONResponse:
     Format detection is done on the bytes themselves — we never
     trust the `Content-Type` header.
 
-    Slice #76 (decode): runs `image_decoder.decode()` over the body
-    and translates its outcomes into the documented response shapes.
-    On a successful decode the hardcoded scaffolding reading is
-    still returned; real CV lands in slice #77+.
+    Slice #77 (dial locator): after a successful decode, runs
+    `dial_locator.locate()` to find the dial circle. If no plausible
+    dial is found we return a structured `no_dial_found` rejection;
+    if found, the success shape is returned with the real
+    `dial_detection` geometry. Hand-geometry, real time, and real
+    confidence land in subsequent slices.
     """
     image_bytes = await request.body()
 
     try:
-        decode(image_bytes)
+        img = decode(image_bytes)
     except UnsupportedFormatError as e:
         # Recognised-but-rejected format. The Worker-side adapter
         # turns this into a `DialReadResult` of kind `rejection`,
@@ -132,8 +131,44 @@ async def read_dial(request: Request) -> JSONResponse:
             },
         )
 
-    # On a successful decode the CV pipeline isn't implemented yet,
-    # so we still return the scaffolding response. Returning the
-    # decoded ndarray would burn bandwidth without producing any
-    # meaningful caller-side behaviour.
-    return JSONResponse(status_code=200, content=_SCAFFOLDING_SUCCESS_RESPONSE)
+    # Image decoded into an RGB ndarray. Run the dial locator.
+    circle = locate(img)
+    if circle is None:
+        # No plausible dial circle. Surface as a structured
+        # rejection so the SPA can show "we couldn't find a watch
+        # dial in this photo — make sure the dial is centered and
+        # well-lit" with only a "Retake" button (no manual
+        # fallback — the user needs to retry).
+        return JSONResponse(
+            status_code=200,
+            content={
+                "version": _VERSION,
+                "ok": False,
+                "rejection": {
+                    "reason": "no_dial_found",
+                    "details": (
+                        "No watch dial detected. Frame the dial centered "
+                        "and well-lit, then try again."
+                    ),
+                },
+            },
+        )
+
+    # Dial located. Return the success shape with the real
+    # detection geometry; the rest of `result` stays zeroed
+    # until later slices implement hand geometry + confidence.
+    success_body: dict[str, Any] = {
+        "version": _VERSION,
+        "ok": True,
+        "result": {
+            "displayed_time": _HARDCODED_DISPLAYED_TIME,
+            "confidence": _HARDCODED_CONFIDENCE,
+            "dial_detection": {
+                "center_xy": [circle.center_xy[0], circle.center_xy[1]],
+                "radius_px": circle.radius_px,
+            },
+            "hand_angles_deg": _HARDCODED_HAND_ANGLES_DEG,
+            "processing_ms": _HARDCODED_PROCESSING_MS,
+        },
+    }
+    return JSONResponse(status_code=200, content=success_body)
