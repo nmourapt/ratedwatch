@@ -20,6 +20,11 @@ export interface UserTable {
   username: string;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
+  // Slice 2 of PRD #73 (issue #75): per-user opt-in toggle for
+  // sharing rejected / low-confidence photos into the training
+  // corpus. Stored as INTEGER 0/1; default 0. See
+  // migrations/0007_verified_reading_cv.sql.
+  consent_corpus: Generated<number>;
 }
 
 export interface SessionTable {
@@ -126,6 +131,15 @@ export interface ReadingsTable {
   verified: Generated<number>; // 0 | 1, default 0 (slice #16 flips this)
   notes: string | null;
   created_at: Generated<string>; // ISO 8601, populated by DEFAULT
+  // Slice 2 of PRD #73 (issue #75): CV-pipeline metadata. All three
+  // are nullable — populated only when the verified-reading path
+  // routes through the dial-reader container (and a photo upload
+  // succeeds, in `photo_r2_key`'s case). Manual / tap / AI-path
+  // readings leave these NULL. See
+  // migrations/0007_verified_reading_cv.sql.
+  photo_r2_key: string | null;
+  dial_reader_confidence: number | null;
+  dial_reader_version: string | null;
 }
 
 export interface Database {
