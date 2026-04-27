@@ -32,6 +32,7 @@
 
 import { getContainer } from "@cloudflare/containers";
 import type { DialReaderContainer } from "@/worker/index";
+import { logEvent, type EventLoggerEnv } from "@/observability/events";
 
 /**
  * The successful body shape returned by the container's
@@ -56,17 +57,23 @@ export interface DialReadSuccessBody {
 
 /**
  * Known rejection reasons. The list grows as later slices add real
- * CV outcomes (`no_dial_detected`, `low_confidence`, etc.). The
+ * CV outcomes (`low_confidence`, `unsupported_dial`, etc.). The
  * `(string & {})` tail keeps the type assignable from arbitrary
  * strings (so a forward-compatible reason from the container
  * doesn't break callers) while preserving IDE autocompletion for
  * the known set.
  *
- * Slice #76 introduces `unsupported_format`, returned when the
- * container's image_decoder rejects bytes whose format isn't on
- * the rated.watch supported list (GIF, BMP, TIFF, AVIF, …).
+ * - Slice #76 introduces `unsupported_format`, returned when the
+ *   container's image_decoder rejects bytes whose format isn't on
+ *   the rated.watch supported list (GIF, BMP, TIFF, AVIF, …).
+ * - Slice #77 introduces `no_dial_found`, returned when the
+ *   container's dial_locator can't find a plausible dial circle
+ *   (uniform color, blurry frame, dial too off-center, etc.).
  */
-export type DialReadRejectionReason = "unsupported_format" | (string & {});
+export type DialReadRejectionReason =
+  | "unsupported_format"
+  | "no_dial_found"
+  | (string & {});
 
 /**
  * Discriminated union returned by `readDial`. The verifier branches
@@ -109,10 +116,43 @@ export type DialReader = (image: Uint8Array) => Promise<DialReadResult>;
  * Subset of the Worker's `Env` that the adapter needs. Kept narrow
  * so unit tests can construct a minimal fake without rebuilding
  * every binding.
+ *
+ * The `EventLoggerEnv` intersection lets the adapter emit the slice
+ * #83 dial-reader telemetry events when a `ReadDialContext` is
+ * supplied. The ANALYTICS binding remains optional — when it's
+ * absent the events are silently dropped (per `logEvent`'s contract)
+ * and the dial read still proceeds.
  */
-export interface DialReaderEnv {
+export interface DialReaderEnv extends EventLoggerEnv {
   DIAL_READER: DurableObjectNamespace<DialReaderContainer>;
 }
+
+/**
+ * Optional context the verifier (and any other caller that wants
+ * end-to-end correlation) supplies on each call. When present, the
+ * adapter emits the five `dial_reader_*` events with `reading_id`
+ * stamped on every payload so an operator can SQL-join across
+ * Analytics Engine using a single key per attempt.
+ *
+ * Why optional: the legacy two-arg form (no context) is preserved
+ * for tests that exercise the production binding path without
+ * caring about telemetry, and as a defensive option for any
+ * future internal caller that doesn't have a reading_id to share.
+ */
+export interface ReadDialContext {
+  /** Stable correlation id, usually the readings.id UUID. */
+  readingId: string;
+}
+
+/**
+ * Cold-start threshold. We call the container fetch a "cold start"
+ * when it took more than this many milliseconds. The number is
+ * deliberately a bit-too-generous-for-warm-traffic so the rate of
+ * `dial_reader_cold_start` events matches the operator's intuition
+ * of "we waited for the box to come up", not "this request was a
+ * little slow".
+ */
+const COLD_START_THRESHOLD_MS = 1000;
 
 // Test-only module-level override. `null` ⇒ use the real binding.
 //
@@ -140,6 +180,149 @@ export function __setTestDialReader(fn: DialReader | null): void {
 const READ_DIAL_URL = "http://dial-reader.internal/v1/read-dial";
 
 /**
+ * Best-effort image-format sniffer. Looks at the first few bytes
+ * (the only bytes any of the supported formats use to declare their
+ * type) and returns a short lower-case label. We never trust the
+ * Content-Type header — clients lie, particularly Safari which
+ * sometimes labels HEIC as `image/jpeg` for cross-app sharing.
+ *
+ * Returning `"unknown"` is fine; the format string is for telemetry
+ * only and the container itself runs its own (more thorough) sniff
+ * in `image_decoder.py`. We're optimising here for "tell the operator
+ * what the user uploaded", not "make a decode decision".
+ */
+function sniffImageFormat(bytes: Uint8Array): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "jpeg";
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "png";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "webp";
+  }
+  // ISO BMFF heuristic. HEIC/HEIF and AVIF share the same overall
+  // layout (`....ftyp....`), so we look at bytes 4..7 for the `ftyp`
+  // ASCII and bytes 8..11 for the brand.
+  if (
+    bytes.length >= 12 &&
+    bytes[4] === 0x66 && // 'f'
+    bytes[5] === 0x74 && // 't'
+    bytes[6] === 0x79 && // 'y'
+    bytes[7] === 0x70 // 'p'
+  ) {
+    const brand = String.fromCharCode(bytes[8]!, bytes[9]!, bytes[10]!, bytes[11]!);
+    if (brand === "heic" || brand === "heix" || brand === "mif1" || brand === "msf1") {
+      return "heic";
+    }
+    if (brand === "avif" || brand === "avis") {
+      return "avif";
+    }
+    return "isobmff";
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    return "gif";
+  }
+  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return "bmp";
+  }
+  if (
+    bytes.length >= 4 &&
+    ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
+      (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a))
+  ) {
+    return "tiff";
+  }
+  return "unknown";
+}
+
+/**
+ * Emit the appropriate outcome event for a `DialReadResult`. Used by
+ * the test-override path so that integration tests installing a fake
+ * via `__setTestDialReader` still see the same observability events
+ * as the production binding path. The binding path emits its own
+ * events inline because it has richer context (HTTP response, raw
+ * body) for the error / success branches that would be lossy to
+ * pass through this helper.
+ *
+ * Note: the binding path's `dial_reader_success` payload pulls the
+ * confidence + processing_ms + version from the parsed JSON body
+ * directly. We mirror that exactly here from the typed result, so
+ * an integration-test-fake reader emits the same shape as a real
+ * container response.
+ */
+async function emitResultEvent(
+  result: DialReadResult,
+  ctx: ReadDialContext,
+  env: EventLoggerEnv,
+): Promise<void> {
+  if (result.kind === "success") {
+    await logEvent(
+      "dial_reader_success",
+      {
+        reading_id: ctx.readingId,
+        confidence: result.body.result.confidence,
+        processing_ms: result.body.result.processing_ms,
+        dial_reader_version: result.body.version,
+      },
+      env,
+    );
+    return;
+  }
+  if (result.kind === "rejection") {
+    await logEvent(
+      "dial_reader_rejection",
+      { reading_id: ctx.readingId, reason: result.reason },
+      env,
+    );
+    return;
+  }
+  if (result.kind === "malformed_image") {
+    // Mirror the binding path's choice: a malformed image is a
+    // structured client-side rejection from the container's POV.
+    await logEvent(
+      "dial_reader_rejection",
+      { reading_id: ctx.readingId, reason: "malformed_image" },
+      env,
+    );
+    return;
+  }
+  // result.kind === "transport_error". The test-override path can't
+  // distinguish "5xx" from "fetch threw"; we surface a generic
+  // `error_type` so the operator dashboard shows it as an error
+  // rather than a deliberate rejection.
+  await logEvent(
+    "dial_reader_error",
+    {
+      reading_id: ctx.readingId,
+      error_type: "test_override_transport_error",
+      error_message: result.message,
+    },
+    env,
+  );
+}
+
+/**
  * Read the time displayed by a watch in the supplied image bytes.
  *
  * Production path: forwards the bytes as the body of
@@ -149,14 +332,45 @@ const READ_DIAL_URL = "http://dial-reader.internal/v1/read-dial";
  * and switching the name to a per-image hash if locality matters).
  *
  * Test path: when `__setTestDialReader` has installed a fake, it is
- * called instead and the binding is never touched.
+ * called instead and the binding is never touched. The fake never
+ * sees the telemetry events (those wrap the binding call below); a
+ * caller that wants end-to-end event coverage in tests should drive
+ * `readDial` against a fake-fetch DurableObjectStub instead.
+ *
+ * When `ctx` is supplied the adapter emits five `dial_reader_*`
+ * events into Analytics Engine: `attempt` always, plus exactly one
+ * of `success` / `rejection` / `error`, plus `cold_start` whenever
+ * the binding fetch took >1s. See `EventKind` in
+ * src/observability/events.ts for the per-event payload shape.
  */
 export async function readDial(
   image: Uint8Array,
   env: DialReaderEnv,
+  ctx?: ReadDialContext,
 ): Promise<DialReadResult> {
+  // Telemetry: emit the attempt event before any work, regardless
+  // of whether we route through the test override or the real
+  // binding. Integration tests that install a fake reader still
+  // need the operator-facing events to fire so the route's
+  // observability contract stays under test.
+  if (ctx) {
+    await logEvent(
+      "dial_reader_attempt",
+      {
+        reading_id: ctx.readingId,
+        image_format: sniffImageFormat(image),
+        image_bytes: image.byteLength,
+      },
+      env,
+    );
+  }
+
   if (testReader) {
-    return testReader(image);
+    const result = await testReader(image);
+    if (ctx) {
+      await emitResultEvent(result, ctx, env);
+    }
+    return result;
   }
 
   const stub = getContainer(env.DIAL_READER, "global");
@@ -171,20 +385,61 @@ export async function readDial(
   // container can route HEIC vs JPEG decoders without sniffing.
   // Until then `application/octet-stream` is the safest default.
   const body = image.slice().buffer;
+  // The container stamps `reading_id` from the `x-reading-id`
+  // header onto its per-request structured log line (slice #83 of
+  // PRD #73). Forward the same id we use for the Worker-side
+  // events so the operator can SQL-join container logs against
+  // Analytics Engine without an opaque correlation problem.
+  const headers: Record<string, string> = {
+    "content-type": "application/octet-stream",
+  };
+  if (ctx) {
+    headers["x-reading-id"] = ctx.readingId;
+  }
   const req = new Request(READ_DIAL_URL, {
     method: "POST",
-    headers: { "content-type": "application/octet-stream" },
+    headers,
     body,
   });
 
+  // Cold-start measurement — we time the binding fetch wall-clock
+  // and emit `dial_reader_cold_start` if it crossed the threshold.
+  // Captured in a local so a thrown fetch (transport error path)
+  // still gets the cold-start emit if applicable.
+  const waitStart = Date.now();
   let res: Response;
   try {
     res = await stub.fetch(req);
   } catch (err) {
-    return {
-      kind: "transport_error",
-      message: err instanceof Error ? err.message : String(err),
-    };
+    const message = err instanceof Error ? err.message : String(err);
+    if (ctx) {
+      const waitMs = Date.now() - waitStart;
+      if (waitMs > COLD_START_THRESHOLD_MS) {
+        await logEvent(
+          "dial_reader_cold_start",
+          { reading_id: ctx.readingId, wait_ms: waitMs },
+          env,
+        );
+      }
+      await logEvent(
+        "dial_reader_error",
+        {
+          reading_id: ctx.readingId,
+          error_type: "transport_exception",
+          error_message: message,
+        },
+        env,
+      );
+    }
+    return { kind: "transport_error", message };
+  }
+  const waitMs = Date.now() - waitStart;
+  if (ctx && waitMs > COLD_START_THRESHOLD_MS) {
+    await logEvent(
+      "dial_reader_cold_start",
+      { reading_id: ctx.readingId, wait_ms: waitMs },
+      env,
+    );
   }
 
   if (!res.ok) {
@@ -197,10 +452,24 @@ export async function readDial(
         error?: string;
         details?: string;
       } | null;
-      return {
-        kind: "malformed_image",
-        message: errBody?.details ?? "image bytes could not be decoded",
-      };
+      const message = errBody?.details ?? "image bytes could not be decoded";
+      // A 400 is a structured client-side rejection from the
+      // container's POV — the bytes were the problem. We surface
+      // it on the rejection-style telemetry channel because that's
+      // the operator's mental model ("the container deliberately
+      // rejected this input") even though the result kind is
+      // `malformed_image` rather than `rejection`.
+      if (ctx) {
+        await logEvent(
+          "dial_reader_rejection",
+          {
+            reading_id: ctx.readingId,
+            reason: "malformed_image",
+          },
+          env,
+        );
+      }
+      return { kind: "malformed_image", message };
     }
 
     // Anything else (5xx, gateway error, etc.) is a transport
@@ -208,10 +477,19 @@ export async function readDial(
     // Distinguishing it from a structured rejection lets the
     // verifier retry / fall back to manual entry without
     // contaminating the success path.
-    return {
-      kind: "transport_error",
-      message: `dial-reader container returned HTTP ${res.status}`,
-    };
+    const message = `dial-reader container returned HTTP ${res.status}`;
+    if (ctx) {
+      await logEvent(
+        "dial_reader_error",
+        {
+          reading_id: ctx.readingId,
+          error_type: "http_5xx",
+          error_message: message,
+        },
+        env,
+      );
+    }
+    return { kind: "transport_error", message };
   }
 
   // Structured 200 response. The container returns either a success
@@ -240,11 +518,27 @@ export async function readDial(
       "unspecified";
     const details =
       typeof json.rejection?.details === "string" ? json.rejection.details : undefined;
+    if (ctx) {
+      await logEvent("dial_reader_rejection", { reading_id: ctx.readingId, reason }, env);
+    }
     return {
       kind: "rejection",
       reason,
       ...(details !== undefined ? { details } : {}),
     };
+  }
+
+  if (ctx) {
+    await logEvent(
+      "dial_reader_success",
+      {
+        reading_id: ctx.readingId,
+        confidence: json.result.confidence,
+        processing_ms: json.result.processing_ms,
+        dial_reader_version: json.version,
+      },
+      env,
+    );
   }
 
   return { kind: "success", body: json };

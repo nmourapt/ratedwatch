@@ -289,9 +289,18 @@ export async function verifyReading(
   //    (deviation calc, baseline override, INSERT, photo upload).
   //    We normalise both onto a `BackendRead` envelope so the rest
   //    of this function stays backend-agnostic.
+  //
+  //    The reading_id is generated NOW (rather than at INSERT time)
+  //    so the slice #83 dial-reader telemetry events can correlate
+  //    against it even on the rejection / transport-error paths
+  //    where no row is ever written. The same id flows into the
+  //    INSERT below; readingId == readings.id is the contract that
+  //    lets the operator SQL-join Analytics Engine onto the D1
+  //    readings table.
+  const readingId = crypto.randomUUID();
   const image = new Uint8Array(imageBuffer);
   const backendRead = input.useDialReader
-    ? await runDialReaderBackend(image, env)
+    ? await runDialReaderBackend(image, env, readingId)
     : await runAiBackend(image, env, referenceTimestamp);
 
   if (!backendRead.ok) {
@@ -317,8 +326,12 @@ export async function verifyReading(
   //    confidence + version metadata. `photo_r2_key` is filled in
   //    after the R2 upload below — best-effort so a failed upload
   //    leaves the row with NULL there, which is fine.
+  //
+  //    `id` is the reading_id we generated up-front so the
+  //    Analytics Engine events from the CV path correlate to the
+  //    same row.
   const db = createDb(env);
-  const id = crypto.randomUUID();
+  const id = readingId;
   await db
     .insertInto("readings")
     .values({
@@ -480,9 +493,15 @@ function mapDialReaderRejection(reason: string): VerifyReadingErrorCode {
 
 async function runDialReaderBackend(
   image: Uint8Array,
-  env: DialReaderEnv,
+  env: DialReaderEnv & EventLoggerEnv,
+  readingId: string,
 ): Promise<BackendRead> {
-  const result = await readDial(image, env);
+  // Pass the reading_id into the adapter so it can stamp the
+  // slice-#83 telemetry events (dial_reader_attempt / _success /
+  // _rejection / _error / _cold_start). The adapter handles the
+  // entire emission story; the verifier only owns the correlation
+  // key here.
+  const result = await readDial(image, env, { readingId });
   if (result.kind === "transport_error") {
     return {
       ok: false,
