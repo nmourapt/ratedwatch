@@ -47,3 +47,12 @@ infra/terraform/*.tfplan
 
 # Design preview (pre-palette-swap eyeballing)
 design-preview.html
+
+# Python (container/dial-reader/)
+container/**/.venv/
+container/**/__pycache__/
+container/**/*.pyc
+container/**/.pytest_cache/
+container/**/.mypy_cache/
+container/**/.ruff_cache/
+container/**/*.egg-info/

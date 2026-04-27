@@ -50,6 +50,7 @@
     "wrangler": "^4.84.1"
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.3.3",
     "@sentry/cloudflare": "^10.50.0",
     "better-auth": "^1.6.8",
     "exifr": "^7.1.3",

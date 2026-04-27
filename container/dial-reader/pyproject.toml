@@ -1,0 +1,79 @@
+[project]
+name = "dial-reader"
+version = "0.0.1"
+description = "rated.watch CV-based watch dial reader. Runs as a Cloudflare Container behind a Worker-side adapter."
+readme = "README.md"
+requires-python = ">=3.12"
+# Runtime deps. Lower bounds only — `uv lock` resolves and pins the
+# exact versions; the lockfile is the source of truth across local
+# dev, CI, and the production container build.
+#
+# OpenCV is `opencv-python-headless` (no GUI toolkits) — this service
+# is HTTP-in / JSON-out and never draws a window.
+# Pillow-HEIF gives us iPhone HEIC decoding alongside JPEG/PNG.
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "numpy>=2.0,<3.0",
+    "opencv-python-headless>=4.10,<5.0",
+    "pillow>=10.4,<13.0",
+    "pillow-heif>=0.18,<2.0",
+    "sentry-sdk[fastapi]>=2.20,<3.0",
+]
+
+[dependency-groups]
+# Test + lint deps. Kept out of the runtime image (uv sync --no-dev
+# in the Dockerfile) so production layers stay small.
+dev = [
+    "httpx>=0.27,<1.0",
+    "mypy>=1.13,<2.0",
+    "pytest>=8.3,<10.0",
+    "ruff>=0.7,<1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dial_reader"]
+
+[tool.uv]
+package = true
+
+# ---------------------------------------------------------------
+# Tooling configuration. Kept in pyproject.toml so anyone with uv
+# can run `uv run pytest`, `uv run ruff check .`, `uv run mypy src/`
+# and get the same behaviour as CI.
+# ---------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+# Sensible defaults: pycodestyle, pyflakes, isort-equivalent, bugbear,
+# pyupgrade. Keeps the diff small while catching the usual suspects.
+select = ["E", "F", "I", "B", "UP", "W"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/dial_reader"]
+
+# OpenCV + pillow-heif ship without inline type hints; treat them as
+# untyped rather than failing every import. Each module override
+# needs its own table per the mypy docs.
+[[tool.mypy.overrides]]
+module = "cv2"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pillow_heif"
+ignore_missing_imports = true

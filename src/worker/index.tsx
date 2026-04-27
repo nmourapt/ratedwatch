@@ -3,6 +3,7 @@
 // Slice 4 adds the auth surface at /api/v1/auth/* (handed off to Better
 // Auth verbatim) and the `requireAuth`-gated /api/v1/me endpoint. The
 // landing page at `/` is unchanged from slice 3.
+import { Container } from "@cloudflare/containers";
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
@@ -325,6 +326,29 @@ app.route("/images/watches", watchImagePublicRoute);
 // `/out/*` in run_worker_first / wrangler.jsonc) so each click emits
 // an Analytics Engine event before the 302.
 app.route("/out", outRoute);
+
+// CV-based dial reader container. Registered as a Durable Object
+// (container-enabled DOs are SQLite-backed — see
+// `migrations.new_sqlite_classes` in wrangler.jsonc). The Worker
+// reaches it via the `DIAL_READER` binding using
+// `getContainer(env.DIAL_READER, "global").fetch(req)` from
+// src/domain/dial-reader/.
+//
+// `defaultPort = 8080` matches the uvicorn `--port 8080` in the
+// container's CMD; `sleepAfter = "15m"` keeps a warm instance for
+// the 15-minute window where the verified-reading flow is most
+// likely to see repeat hits, then lets the runtime reclaim memory.
+//
+// Slice #74: the container responds with a fixed scaffolding
+// payload. No production code path uses it yet — slice #75 wires
+// it into the verified-reading flow behind the `ai_reading_v2`
+// flag. The class must still be exported here so the Durable
+// Object runtime can instantiate it as soon as `wrangler deploy`
+// runs the v1 migration.
+export class DialReaderContainer extends Container {
+  override defaultPort = 8080;
+  override sleepAfter = "15m";
+}
 
 // Wrap the Hono app so Sentry auto-captures unhandled exceptions.
 // With SENTRY_DSN set as a Worker secret, every throw in any handler
