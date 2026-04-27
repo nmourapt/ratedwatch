@@ -55,6 +55,20 @@ export interface DialReadSuccessBody {
 }
 
 /**
+ * Known rejection reasons. The list grows as later slices add real
+ * CV outcomes (`no_dial_detected`, `low_confidence`, etc.). The
+ * `(string & {})` tail keeps the type assignable from arbitrary
+ * strings (so a forward-compatible reason from the container
+ * doesn't break callers) while preserving IDE autocompletion for
+ * the known set.
+ *
+ * Slice #76 introduces `unsupported_format`, returned when the
+ * container's image_decoder rejects bytes whose format isn't on
+ * the rated.watch supported list (GIF, BMP, TIFF, AVIF, …).
+ */
+export type DialReadRejectionReason = "unsupported_format" | (string & {});
+
+/**
  * Discriminated union returned by `readDial`. The verifier branches
  * on `kind`:
  *
@@ -63,8 +77,14 @@ export interface DialReadSuccessBody {
  *     trusting the read.
  *
  *   - `rejection`: the container ran but cannot produce a meaningful
- *     read (e.g. no dial visible, image too blurry). The verifier
- *     treats this the same as the AI runner's "refused" outcome.
+ *     read (e.g. unsupported format today; no dial visible / image
+ *     too blurry in later slices). The verifier treats this the same
+ *     as the AI runner's "refused" outcome.
+ *
+ *   - `malformed_image`: the request bytes were corrupt, truncated,
+ *     or empty — the container surfaced a 400. Distinct from
+ *     `transport_error` because retrying with the same bytes can't
+ *     help; the SPA should ask the user for a fresh capture.
  *
  *   - `transport_error`: HTTP 5xx, network failure, or any other
  *     condition where the container did NOT have a chance to make
@@ -73,7 +93,8 @@ export interface DialReadSuccessBody {
  */
 export type DialReadResult =
   | { kind: "success"; body: DialReadSuccessBody }
-  | { kind: "rejection"; reason: string }
+  | { kind: "rejection"; reason: DialReadRejectionReason; details?: string }
+  | { kind: "malformed_image"; message: string }
   | { kind: "transport_error"; message: string };
 
 /**
@@ -167,27 +188,62 @@ export async function readDial(
   }
 
   if (!res.ok) {
-    // 5xx (or any non-2xx) is a transport error: the container ran
-    // but did not return a CV decision. Distinguishing it from a
-    // structured rejection lets the verifier retry / fall back to
-    // manual entry without contaminating the success path.
+    // 400 from the container is a structured malformed-image
+    // signal: the bytes were unreadable. We surface it as its own
+    // result kind so the verifier can show "the photo couldn't be
+    // decoded — please retake" rather than a generic retry message.
+    if (res.status === 400) {
+      const errBody = (await res.json().catch(() => null)) as {
+        error?: string;
+        details?: string;
+      } | null;
+      return {
+        kind: "malformed_image",
+        message: errBody?.details ?? "image bytes could not be decoded",
+      };
+    }
+
+    // Anything else (5xx, gateway error, etc.) is a transport
+    // error: the container ran but did not return a CV decision.
+    // Distinguishing it from a structured rejection lets the
+    // verifier retry / fall back to manual entry without
+    // contaminating the success path.
     return {
       kind: "transport_error",
       message: `dial-reader container returned HTTP ${res.status}`,
     };
   }
 
-  // Structured response. The container returns either a success
-  // body (`ok: true`) or a rejection body (`ok: false, reason: "..."`).
-  // Slice #74's container only returns the success shape; the
-  // rejection branch is here so slice #75 can light it up without a
-  // contract change.
-  const json = (await res.json()) as DialReadSuccessBody | { ok: false; reason?: string };
+  // Structured 200 response. The container returns either a success
+  // body (`ok: true`) or a rejection body
+  // (`ok: false, rejection: { reason, details? }`).
+  //
+  // Slice #76's container ships the rejection branch for
+  // `unsupported_format`; subsequent slices add `no_dial_detected`,
+  // `low_confidence`, etc. without a contract change.
+  const json = (await res.json()) as
+    | DialReadSuccessBody
+    | {
+        ok: false;
+        // New shape (slice #76): structured `rejection` block.
+        rejection?: { reason?: string; details?: string };
+        // Legacy flat `reason` kept defensively in case an older
+        // container build is in flight; the field has never been
+        // emitted in production.
+        reason?: string;
+      };
 
   if (json.ok === false) {
+    const reason =
+      (typeof json.rejection?.reason === "string" && json.rejection.reason) ||
+      (typeof json.reason === "string" && json.reason) ||
+      "unspecified";
+    const details =
+      typeof json.rejection?.details === "string" ? json.rejection.details : undefined;
     return {
       kind: "rejection",
-      reason: typeof json.reason === "string" ? json.reason : "unspecified",
+      reason,
+      ...(details !== undefined ? { details } : {}),
     };
   }
 
