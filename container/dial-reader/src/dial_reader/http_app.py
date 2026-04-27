@@ -22,15 +22,32 @@ The success vs rejection vs error split mirrors the
 `DialReadResult` discriminated union in
 `src/domain/dial-reader/adapter.ts`. Both sides live in the same
 repo so contract drift is caught in a single PR review.
+
+Slice #83 of PRD #73 layered observability on top:
+
+  - Sentry SDK is initialised at module load via `sentry_init.init`,
+    reading SENTRY_DSN from the env. Missing DSN is a no-op (local
+    dev, pytest, freshly provisioned previews).
+  - Each call to `/v1/read-dial` emits a single structured JSON log
+    line on stdout. Cloudflare's container observability integration
+    forwards stdout/stderr to Workers Logs, where the operator can
+    query success rate / rejection breakdown / latency from the
+    same place as the Worker's events.
 """
 
 from __future__ import annotations
 
+import json
+import logging
+import os
+import sys
+import time
 from typing import Any, Final
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from dial_reader import sentry_init
 from dial_reader.image_decoder import (
     MalformedImageError,
     UnsupportedFormatError,
@@ -41,6 +58,71 @@ from dial_reader.image_decoder import (
 # operators need to see. Slice #74 was `v0.0.1-scaffolding`; this
 # slice flips real decode on while keeping the success shape.
 _VERSION: Final[str] = "v0.1.0-decode"
+
+# Initialise Sentry once at module load. The init is idempotent and
+# becomes a no-op when SENTRY_DSN is unset, so this is safe in tests
+# and local docker runs.
+sentry_init.init(os.environ.get("SENTRY_DSN"))
+
+
+# ---- Structured request logging --------------------------------
+#
+# Cloudflare's container observability integration forwards
+# stdout/stderr from the container into Workers Logs. We emit one
+# JSON object per request rather than free-form text so the operator
+# can SQL-query the lines (success rate / latency / rejection
+# breakdown / version distribution) without parser pain.
+#
+# The schema is documented per-callsite of `_log_request` below;
+# every call carries `event`, `dial_reader_version`, and
+# `processing_ms`, plus the call-specific fields.
+
+
+class _JsonFormatter(logging.Formatter):
+    """A logging.Formatter that emits one JSON object per record.
+
+    Used for the per-request access log on the dial-reader service.
+    The fields the operator queries against are placed at the top
+    level (event, reading_id, processing_ms, confidence, …); free-
+    form context goes into the standard `message` slot only when no
+    structured fields are present, which keeps line size predictable.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        if isinstance(record.msg, dict):
+            payload: dict[str, Any] = dict(record.msg)
+        else:
+            payload = {"message": record.getMessage()}
+        payload.setdefault("level", record.levelname.lower())
+        return json.dumps(payload, separators=(",", ":"))
+
+
+# Wire the formatter onto a single logger we own. We deliberately do
+# NOT touch the root logger configuration — uvicorn / FastAPI / any
+# third-party noise should keep its existing format. Only our
+# own per-request log line goes through `_request_logger`.
+_request_logger = logging.getLogger("dial_reader.requests")
+_request_logger.setLevel(logging.INFO)
+# Avoid duplicate handlers when a hot-reload or pytest collection
+# re-imports the module.
+if not _request_logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(_JsonFormatter())
+    _request_logger.addHandler(_handler)
+# Don't propagate to root — that would re-emit the line through
+# whatever default formatter the root logger has, doubling the
+# log volume.
+_request_logger.propagate = False
+
+
+def _log_request(payload: dict[str, Any]) -> None:
+    """Emit one per-request JSON log line.
+
+    Keeping this in a helper means every callsite agrees on the
+    shape and the JSON encoder is pinned in a single place.
+    """
+    _request_logger.info(payload)
+
 
 # The complete success response. Defined at module level so it
 # round-trips through json (Python dict -> FastAPI response -> client
@@ -98,8 +180,22 @@ async def read_dial(request: Request) -> JSONResponse:
     and translates its outcomes into the documented response shapes.
     On a successful decode the hardcoded scaffolding reading is
     still returned; real CV lands in slice #77+.
+
+    Slice #83 (observability): every code path emits a single
+    structured JSON log line via `_log_request` so Workers Logs
+    sees one row per attempt with `event`, `processing_ms`, and
+    the relevant outcome fields.
     """
+    # Caller correlation. The Worker stamps reading_id on the
+    # request via the `x-reading-id` header (slice #83); when absent
+    # we substitute None and the operator-side join skips the row.
+    # We don't fail the request when the header is missing — the
+    # container must stay tolerant of older Worker callers.
+    reading_id: str | None = request.headers.get("x-reading-id")
+
+    start_ns = time.perf_counter_ns()
     image_bytes = await request.body()
+    image_size = len(image_bytes)
 
     try:
         decode(image_bytes)
@@ -108,6 +204,18 @@ async def read_dial(request: Request) -> JSONResponse:
         # turns this into a `DialReadResult` of kind `rejection`,
         # which the verifier surfaces as a polite "this format
         # isn't supported yet" message.
+        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+        _log_request(
+            {
+                "event": "read_dial",
+                "reading_id": reading_id,
+                "dial_reader_version": _VERSION,
+                "processing_ms": elapsed_ms,
+                "image_bytes": image_size,
+                "outcome": "rejection",
+                "rejection_reason": "unsupported_format",
+            }
+        )
         return JSONResponse(
             status_code=200,
             content={
@@ -123,6 +231,18 @@ async def read_dial(request: Request) -> JSONResponse:
         # Bytes are corrupt or empty. A retry with the same bytes
         # cannot succeed, so we surface this as a 400 rather than
         # a structured rejection.
+        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+        _log_request(
+            {
+                "event": "read_dial",
+                "reading_id": reading_id,
+                "dial_reader_version": _VERSION,
+                "processing_ms": elapsed_ms,
+                "image_bytes": image_size,
+                "outcome": "malformed_image",
+                "rejection_reason": "malformed_image",
+            }
+        )
         return JSONResponse(
             status_code=400,
             content={
@@ -136,4 +256,16 @@ async def read_dial(request: Request) -> JSONResponse:
     # so we still return the scaffolding response. Returning the
     # decoded ndarray would burn bandwidth without producing any
     # meaningful caller-side behaviour.
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+    _log_request(
+        {
+            "event": "read_dial",
+            "reading_id": reading_id,
+            "dial_reader_version": _VERSION,
+            "processing_ms": elapsed_ms,
+            "image_bytes": image_size,
+            "outcome": "success",
+            "confidence": _SCAFFOLDING_SUCCESS_RESPONSE["result"]["confidence"],
+        }
+    )
     return JSONResponse(status_code=200, content=_SCAFFOLDING_SUCCESS_RESPONSE)

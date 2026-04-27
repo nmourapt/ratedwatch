@@ -379,9 +379,20 @@ export async function readDial(
   // container can route HEIC vs JPEG decoders without sniffing.
   // Until then `application/octet-stream` is the safest default.
   const body = image.slice().buffer;
+  // The container stamps `reading_id` from the `x-reading-id`
+  // header onto its per-request structured log line (slice #83 of
+  // PRD #73). Forward the same id we use for the Worker-side
+  // events so the operator can SQL-join container logs against
+  // Analytics Engine without an opaque correlation problem.
+  const headers: Record<string, string> = {
+    "content-type": "application/octet-stream",
+  };
+  if (ctx) {
+    headers["x-reading-id"] = ctx.readingId;
+  }
   const req = new Request(READ_DIAL_URL, {
     method: "POST",
-    headers: { "content-type": "application/octet-stream" },
+    headers,
     body,
   });
 
