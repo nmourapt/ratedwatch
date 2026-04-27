@@ -160,7 +160,51 @@
       "binding": "ANALYTICS",
       "dataset": "rw_events"
     }
-  ]
+  ],
+
+  // Workers Rate Limiting binding — slice #82 of PRD #73.
+  //
+  // The verified-reading capture flow (POST /readings/verified) and
+  // its manual fallback (POST /readings/manual_with_photo) share a
+  // single 50-attempts-per-24h-per-user quota. Both endpoints upload
+  // a 10 MB photo to R2 and (for /verified) round-trip the CV
+  // container; the cap exists to bound the cost of a runaway client
+  // / abusive user, not to throttle normal use.
+  //
+  // Why `unsafe.bindings` and not the GA `ratelimits` top-level form?
+  // The GA form caps `simple.period` at 10 or 60 seconds (see
+  // https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/),
+  // which is too short for our 24h product cap. The legacy
+  // `unsafe.bindings` form supports `period: 86400` and the GA
+  // changelog explicitly states that "existing deployments using the
+  // unsafe binding will continue to function" — so this is the
+  // path that satisfies the slice's product requirement today. If
+  // Cloudflare later loosens the GA period constraint, swap this to
+  // the GA `ratelimits` shape in a follow-up PR; the runtime API
+  // (`env.VERIFIED_READING_LIMITER.limit({ key })`) is identical.
+  //
+  // The Worker-side wrapper lives at src/domain/rate-limit/, not
+  // inline in the route, so both endpoints share one gate and tests
+  // can install a fake limiter via `__setTestRateLimiter` (mirroring
+  // the existing `__setTestDialReader` / `__setTestAiRunner`
+  // patterns). miniflare does not simulate ratelimit bindings under
+  // vitest-pool-workers, so a module-level fake is the only viable
+  // integration-test strategy.
+  //
+  // Operator action: the namespace_id below is opaque and unique
+  // within this Cloudflare account. No `wrangler ratelimit ...`
+  // provisioning command is required — the binding auto-provisions
+  // on first deploy. See the operator note in PR #82's body.
+  "unsafe": {
+    "bindings": [
+      {
+        "type": "ratelimit",
+        "name": "VERIFIED_READING_LIMITER",
+        "namespace_id": "ratedwatch-verified-reading-1",
+        "simple": { "limit": 50, "period": 86400 }
+      }
+    ]
+  }
 
   // ---------------------------------------------------------------
   // Runtime secrets (NOT stored here — set via `wrangler secret put`)
