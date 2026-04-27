@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeAll, describe, it, expect } from "vitest";
 import { __setTestAiRunner, type AiRunner } from "@/domain/ai-dial-reader/runner";
+import type { DialReaderEnv } from "@/domain/dial-reader";
 import { __setTestExifReader } from "./exif";
 import { computeVerifiedDeviation, verifyReading } from "./verifier";
 
@@ -146,12 +147,18 @@ describe("computeVerifiedDeviation", () => {
 // test is "what reference timestamp ends up in the row, and which
 // telemetry events fire?".
 
+// The verifier's input env now intersects DialReaderEnv so the CV
+// branch (slice #75 of PRD #73) can reach `env.DIAL_READER`. The
+// AI-only tests in this file never trigger the CV branch
+// (`useDialReader` is undefined → falls through to the AI runner)
+// so the binding doesn't need to exist at runtime; but TypeScript
+// needs to see the field on the env object the tests pass in.
 const VerifierEnv = env as unknown as {
   DB: D1Database;
   AI: Ai;
   IMAGES: R2Bucket;
   ANALYTICS: AnalyticsEngineDataset;
-};
+} & DialReaderEnv;
 
 type DataPoint = AnalyticsEngineDataPoint;
 let captured: DataPoint[] = [];
