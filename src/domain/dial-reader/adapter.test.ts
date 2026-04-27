@@ -41,17 +41,14 @@ const READING_ID = "rdg-abc-123";
 
 // The dial-reader adapter is the typed bridge between the Worker
 // and the Cloudflare Container that runs OpenCV / image decoding /
-// hand-angle parsing. Slice #74 (this scaffolding step) does not
-// wire it into any production code path; the verifier still uses
-// the legacy AI runner. These tests pin the contract so slice #75
-// can wire the verifier without ambiguity.
+// hand-angle parsing. Scaffolded in slice #74, wired through the
+// verifier in slice #75, and made the sole verified-reading
+// backend by slice #11 (cutover) of PRD #73.
 //
-// The pattern mirrors `__setTestAiRunner` in
-// src/domain/ai-dial-reader/runner.ts: a module-level fake lets
+// `__setTestDialReader` is a module-level fake that lets
 // integration tests drive the verifier without spinning up a real
 // container, which is impossible inside vitest-pool-workers anyway
-// (Container DOs always resolve remotely in production, the same
-// way the AI binding does).
+// (Container DOs always resolve remotely in production).
 
 afterEach(() => {
   __setTestDialReader(null);

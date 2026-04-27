@@ -145,7 +145,7 @@ function canvasToBlob(
 
 // --- Test override hook -------------------------------------------
 //
-// Mirrors the `__setTestExifReader` / `__setTestAiRunner` pattern.
+// Mirrors the `__setTestExifReader` / `__setTestDialReader` pattern.
 // Lets RTL component tests (when we add them — slice #80 leaves an
 // integration-only assertion as a placeholder while RTL infra is
 // added separately) swap the resize for a deterministic stub that

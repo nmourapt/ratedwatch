@@ -162,14 +162,16 @@ export async function deleteReading(
 }
 
 // -------------------------------------------------------------------
-// Slice #17 (issue #18): verified readings — camera-captured + AI-read.
+// Slice #17 (issue #18): verified readings — camera-captured + CV-read.
 // -------------------------------------------------------------------
 //
-// The backend (slice #16) accepts a multipart body with an `image`
-// file and an optional `is_baseline` toggle. It returns 201 with the
-// full reading row on success, 422 on AI refusal / implausible / un-
-// parseable output, 503 when the `ai_reading_v2` feature flag is off
-// for the caller, and the usual 4xx auth/ownership codes.
+// The backend accepts a multipart body with an `image` file and an
+// optional `is_baseline` toggle. It returns 201 with the full
+// reading row on success, 422 on a structured CV rejection
+// (low_confidence / no_dial_found / unsupported_dial /
+// malformed_image), 502 on a dial-reader transport failure, 503
+// when the `verified_reading_cv` feature flag is off for the caller,
+// and the usual 4xx auth/ownership codes.
 //
 // We don't surface the verifier's raw_response to the SPA — the
 // mapped message in verifiedReadingErrors.ts is enough. If we ever
