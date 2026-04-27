@@ -48,7 +48,7 @@ from dial_reader.synthetic import generate_dial
 # ASGI lifespan once per test.
 client = TestClient(app)
 
-VERSION = "v0.3.0-hand-classification"
+VERSION = "v1.0.0"
 
 
 def _synthetic_dial_jpeg(hh: int = 8, mm: int = 56, ss: int = 6) -> bytes:
