@@ -89,21 +89,11 @@
     }
   ],
 
-  // Workers AI binding — consumed by the *legacy* verified-reading
-  // pipeline. The AI dial reader (Llama 3.2 vision) is being replaced
-  // by a CV-based container service (see `containers` + `DIAL_READER`
-  // below); this binding stays put until the AI path is fully removed
-  // in a later slice of PRD #73.
-  "ai": {
-    "binding": "AI"
-  },
-
   // CV-based dial reader runs as a Cloudflare Container. The Worker
   // calls it via the `DIAL_READER` Durable Object binding using
-  // `getContainer(env.DIAL_READER, "global").fetch(req)`. Slice #74
-  // (this PR) lands the plumbing only — the service returns a fixed
-  // `confidence: 0.0` scaffolding response. Real CV (image decode +
-  // HoughCircles + hand-angle parse) lands in subsequent slices.
+  // `getContainer(env.DIAL_READER, "global").fetch(req)`. The
+  // verified-reading flow (POST /api/v1/watches/:id/readings/verified)
+  // is the sole consumer.
   //
   // - image: Dockerfile path; wrangler builds and pushes during deploy.
   // - class_name: matches the DurableObject class exported from
