@@ -69,10 +69,17 @@ export interface DialReadSuccessBody {
  * - Slice #77 introduces `no_dial_found`, returned when the
  *   container's dial_locator can't find a plausible dial circle
  *   (uniform color, blurry frame, dial too off-center, etc.).
+ * - Slice #78 introduces `unsupported_dial`, returned when the
+ *   container's hand-classifier returns None (≠ 3 hands detected
+ *   — chronograph / GMT / 2-hand / partial detection). Already
+ *   plumbed through `mapDialReaderRejection` in
+ *   `src/domain/reading-verifier/verifier.ts` to surface as the
+ *   `dial_reader_unsupported_dial` SPA error code.
  */
 export type DialReadRejectionReason =
   | "unsupported_format"
   | "no_dial_found"
+  | "unsupported_dial"
   | (string & {});
 
 /**

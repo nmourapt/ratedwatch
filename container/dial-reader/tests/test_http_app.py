@@ -1,30 +1,35 @@
 """HTTP-surface tests for the dial-reader service.
 
-Slice #77 adds the dial-locator stage: after a successful decode,
-the container runs `dial_locator.locate(img)` and returns
-`no_dial_found` rejection if no plausible dial is detected.
-Successful detections still flow into the slice-#74 hardcoded
-"successful reading" — real CV (hand geometry, time translation,
-confidence scoring) lands in subsequent slices.
+Slice #78 adds the hand-classifier stage: after the locator
+finds a dial, the container runs `detect_hand_contours` +
+`classify_hands` and returns `unsupported_dial` rejection if the
+classifier returns `None` (≠ 3 hands found, indicating a
+chronograph / GMT / 2-hand / partial detection). 3-hand
+synthetic dials still flow into the slice-#74 hardcoded success
+shape — real angle math + time translation lands in #79.
 
-Three core 200 shapes the Worker-side adapter must handle:
+Four core 200 shapes the Worker-side adapter must handle:
 
-  - `ok: true`  + `result: {...}` — image decoded and a dial was
-    located. `result.dial_detection` now reflects the actual
-    detected circle from the locator (previous slices zeroed it).
+  - `ok: true`  + `result: {...}` — image decoded, dial located,
+    AND 3 hands successfully classified. `result.dial_detection`
+    reflects the actual detected circle from the locator.
 
   - `ok: false` + `rejection: {reason: "unsupported_format"}` —
     decode rejected the bytes (slice #76).
 
   - `ok: false` + `rejection: {reason: "no_dial_found"}` — image
-    decoded fine but no plausible dial circle was found.
+    decoded fine but no plausible dial circle was found
+    (slice #77).
+
+  - `ok: false` + `rejection: {reason: "unsupported_dial"}` —
+    dial located but hand-classifier returned None
+    (slice #78).
 
 Plus 400 for malformed image bytes; that contract is unchanged.
 
-The two test assets used here are produced inline:
-  - a tiny solid-red JPEG decodes but contains no dial → expect
-    `no_dial_found`.
-  - a synthetic dial → expect `ok: true` with a non-zero detection.
+Test assets used here are all produced inline from the synthetic
+generator + small Pillow snippets so the diff stays text-only
+and reviewable.
 """
 
 from __future__ import annotations
@@ -43,7 +48,7 @@ from dial_reader.synthetic import generate_dial
 # ASGI lifespan once per test.
 client = TestClient(app)
 
-VERSION = "v0.2.0-dial-locator"
+VERSION = "v0.3.0-hand-classification"
 
 
 def _synthetic_dial_jpeg(hh: int = 8, mm: int = 56, ss: int = 6) -> bytes:
@@ -137,6 +142,56 @@ def test_read_dial_with_solid_color_returns_no_dial_found() -> None:
     # specifically rejected; details is a free-form string.
     assert "details" in body["rejection"]
     assert isinstance(body["rejection"]["details"], str)
+
+
+# ---------------------------------------------------------------
+# Decoded + located but classify_hands returns None → 200 with
+# `unsupported_dial` rejection.
+# ---------------------------------------------------------------
+
+
+def _gmt_mock_jpeg() -> bytes:
+    """Synthetic 3-hander + a 4th GMT-style hand → 4 contours →
+    classify_hands returns None → http surfaces `unsupported_dial`."""
+    import math
+
+    rgb = generate_dial(8, 56, 6).copy()
+    cx, cy = 400, 400
+    r = 350
+    angle = math.radians(110.0)
+    end_x = int(round(cx + math.sin(angle) * r * 0.80))
+    end_y = int(round(cy - math.cos(angle) * r * 0.80))
+    import cv2
+
+    cv2.line(rgb, (cx, cy), (end_x, end_y), (240, 240, 240), 12, lineType=cv2.LINE_AA)
+    pil = Image.fromarray(rgb)
+    buf = io.BytesIO()
+    pil.save(buf, format="JPEG", quality=90)
+    return buf.getvalue()
+
+
+def test_read_dial_with_gmt_mock_returns_unsupported_dial() -> None:
+    """A GMT-style 4-hand synthetic dial decodes + locates fine
+    but classify_hands rejects → 200 + `unsupported_dial`. This is
+    the headline acceptance test for slice #78: chronograph / GMT
+    / sub-dial inputs surface as `unsupported_dial` rather than
+    silently producing a wrong reading."""
+    response = client.post(
+        "/v1/read-dial",
+        content=_gmt_mock_jpeg(),
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["version"] == VERSION
+    assert body["ok"] is False
+    assert body["rejection"]["reason"] == "unsupported_dial"
+    # Operator-facing details must include the candidate count so
+    # the Workers Logs row is self-explanatory.
+    assert "details" in body["rejection"]
+    assert isinstance(body["rejection"]["details"], str)
+    assert "candidate" in body["rejection"]["details"].lower()
 
 
 # ---------------------------------------------------------------
