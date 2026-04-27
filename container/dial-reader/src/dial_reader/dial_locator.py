@@ -203,8 +203,11 @@ def locate(img: NDArray[np.uint8]) -> DialCircle | None:
     # transition is the strongest edge; converting RGB → BGR vs
     # the other way doesn't matter for the grayscale because we
     # only use the luminance.
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    gray = cv2.GaussianBlur(gray, _BLUR_KERNEL, sigmaX=0)
+    # cv2 returns ndarray with a less-specific dtype than the input;
+    # cast explicitly so the typed helpers below see uint8.
+    gray_raw = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    gray_blurred = cv2.GaussianBlur(gray_raw, _BLUR_KERNEL, sigmaX=0)
+    gray: NDArray[np.uint8] = np.asarray(gray_blurred, dtype=np.uint8)
 
     long_edge = max(w, h)
     min_radius = int(long_edge * _MIN_RADIUS_FRAC)
