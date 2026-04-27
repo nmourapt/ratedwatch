@@ -59,11 +59,17 @@ FROM --platform=linux/amd64 python:${PYTHON_VERSION} AS runtime
 # OpenCV-headless still depends on a few system shared libraries
 # even without the GUI toolkits — libglib for image I/O and the
 # rendering backend. libgl1 is needed by some opencv operations on
-# Debian. Keep the list minimal; every package adds attack surface.
+# Debian. libheif1 is the libheif runtime that pillow-heif binds
+# to for HEIC/HEIF decoding (iPhone camera default format) — the
+# pillow-heif wheel ships its own libheif on most platforms but
+# Debian-slim still needs the apt package for ABI compatibility
+# with the system codecs. Keep the list minimal; every package
+# adds attack surface.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libgl1 \
         libglib2.0-0 \
+        libheif1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user. Cloudflare Containers' platform documentation does

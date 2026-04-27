@@ -1,47 +1,57 @@
 """FastAPI HTTP surface for the dial-reader service.
 
-Slice #74 is the tracer-bullet container: it stands up the runtime,
-the routing layer, the deploy plumbing, and the typed Worker-side
-adapter — but does NOT do any real CV work yet. The single endpoint
-returns a fixed scaffolding response with `confidence: 0.0` so no
-caller is tempted to surface it as a real verified reading.
+Slice #76 wires real image decoding into `POST /v1/read-dial`.
+The endpoint now actually parses the request body, validates the
+format, and rejects malformed or unsupported inputs — but on a
+successful decode it still returns the same hardcoded "successful
+reading" introduced by the slice #74 scaffolding. Real CV
+(HoughCircles dial detection, hand-angle parsing, calibrated
+confidence) lands in subsequent slices.
 
-Subsequent slices replace `read_dial` with real image decoding,
-HoughCircles dial detection, hand-angle parsing, and a true
-confidence score. The response schema here is the contract the real
-implementation must conform to; pinning it in tests now means a
-real-CV PR can't drift the shape without updating callers.
+Three response shapes the Worker-side adapter has to handle:
 
-The Worker-side adapter (`src/domain/dial-reader/`) consumes this
-endpoint as `getContainer(env.DIAL_READER, "global").fetch(req)`.
-Both sides live in the same repo so contract drift is caught in a
-single PR review rather than across a dependency boundary.
+  - 200 + ok:true + result:{...}     successful read
+  - 200 + ok:false + rejection:{...} structured rejection
+                                     (unsupported format today;
+                                     low confidence, no dial,
+                                     etc. in future slices)
+  - 400 + error:"malformed_image"    bytes were unreadable —
+                                     transport-style failure
+
+The success vs rejection vs error split mirrors the
+`DialReadResult` discriminated union in
+`src/domain/dial-reader/adapter.ts`. Both sides live in the same
+repo so contract drift is caught in a single PR review.
 """
 
 from __future__ import annotations
 
 from typing import Any, Final
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
-# Bumped when the response shape changes in a meaningful way. The
-# Worker-side adapter doesn't gate on this today (we deploy both
-# sides together) but it's exposed in the body so operators reading
-# Worker Logs can correlate which container build answered.
-_VERSION: Final[str] = "v0.0.1-scaffolding"
+from dial_reader.image_decoder import (
+    MalformedImageError,
+    UnsupportedFormatError,
+    decode,
+)
 
-# The complete scaffolding response. Defined at module level so it
+# Bumped when the response shape or behaviour changes in a way
+# operators need to see. Slice #74 was `v0.0.1-scaffolding`; this
+# slice flips real decode on while keeping the success shape.
+_VERSION: Final[str] = "v0.1.0-decode"
+
+# The complete success response. Defined at module level so it
 # round-trips through json (Python dict -> FastAPI response -> client
 # .json()) byte-for-byte equal to the contract test, and so the
 # constant stays trivially auditable in a code review.
 #
-# Why these specific values:
-#   - confidence: 0.0 — explicit "do not trust this read"
-#   - displayed_time: 12:00:00 — neutral, doesn't echo any reference
-#   - hand_angles_deg: all 0 — only meaningful when CV lands
-#   - dial_detection: zero center + zero radius — same
-#   - processing_ms: 0 — no work done, no time consumed
-_SCAFFOLDING_RESPONSE: Final[dict[str, Any]] = {
+# The values are still the slice #74 scaffolding values: the CV
+# pipeline isn't implemented yet, so confidence is 0.0 and the
+# fields a verifier would consume are zeroed. Slice #77+ replaces
+# these with real numbers without changing the keys.
+_SCAFFOLDING_SUCCESS_RESPONSE: Final[dict[str, Any]] = {
     "version": _VERSION,
     "ok": True,
     "result": {
@@ -77,17 +87,53 @@ def healthz() -> dict[str, str]:
 
 
 @app.post("/v1/read-dial")
-def read_dial() -> dict[str, Any]:
+async def read_dial(request: Request) -> JSONResponse:
     """Read the time displayed by a watch in the request body.
 
-    Slice #74 (scaffolding): returns the fixed shape above regardless
-    of input. Future slices will:
-      1. Read the image bytes from the request body.
-      2. Decode JPEG / PNG / HEIC into a numpy array.
-      3. Run HoughCircles to find the dial.
-      4. Parse hand angles from the dial-cropped image.
-      5. Convert hand angles to displayed time + confidence.
+    The body is the raw image bytes (any of JPEG, PNG, WebP, HEIC).
+    Format detection is done on the bytes themselves — we never
+    trust the `Content-Type` header.
 
-    Until then this endpoint is suitable only for plumbing tests.
+    Slice #76 (decode): runs `image_decoder.decode()` over the body
+    and translates its outcomes into the documented response shapes.
+    On a successful decode the hardcoded scaffolding reading is
+    still returned; real CV lands in slice #77+.
     """
-    return _SCAFFOLDING_RESPONSE
+    image_bytes = await request.body()
+
+    try:
+        decode(image_bytes)
+    except UnsupportedFormatError as e:
+        # Recognised-but-rejected format. The Worker-side adapter
+        # turns this into a `DialReadResult` of kind `rejection`,
+        # which the verifier surfaces as a polite "this format
+        # isn't supported yet" message.
+        return JSONResponse(
+            status_code=200,
+            content={
+                "version": _VERSION,
+                "ok": False,
+                "rejection": {
+                    "reason": "unsupported_format",
+                    "details": str(e),
+                },
+            },
+        )
+    except MalformedImageError as e:
+        # Bytes are corrupt or empty. A retry with the same bytes
+        # cannot succeed, so we surface this as a 400 rather than
+        # a structured rejection.
+        return JSONResponse(
+            status_code=400,
+            content={
+                "version": _VERSION,
+                "error": "malformed_image",
+                "details": str(e),
+            },
+        )
+
+    # On a successful decode the CV pipeline isn't implemented yet,
+    # so we still return the scaffolding response. Returning the
+    # decoded ndarray would burn bandwidth without producing any
+    # meaningful caller-side behaviour.
+    return JSONResponse(status_code=200, content=_SCAFFOLDING_SUCCESS_RESPONSE)
