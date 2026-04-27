@@ -31,8 +31,8 @@
 // -----------------
 // `__setTestRateLimiter(fn)` lets integration tests install a
 // deterministic fake for the binding layer. The pattern mirrors
-// `__setTestDialReader` / `__setTestAiRunner` already in the
-// codebase. miniflare under vitest-pool-workers does simulate the
+// `__setTestDialReader` already in the codebase.
+// miniflare under vitest-pool-workers does simulate the
 // ratelimit binding, but counter state across test files is
 // fragile (the bucket persists across the file boundary), so a
 // module-level fake is the only ordering-independent way to drive

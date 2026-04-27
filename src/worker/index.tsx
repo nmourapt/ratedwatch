@@ -340,12 +340,12 @@ app.route("/out", outRoute);
 // the 15-minute window where the verified-reading flow is most
 // likely to see repeat hits, then lets the runtime reclaim memory.
 //
-// Slice #74: the container responds with a fixed scaffolding
-// payload. No production code path uses it yet — slice #75 wires
-// it into the verified-reading flow behind the `ai_reading_v2`
-// flag. The class must still be exported here so the Durable
-// Object runtime can instantiate it as soon as `wrangler deploy`
-// runs the v1 migration.
+// Slice #74 scaffolded the container, slice #75 wired it into the
+// verified-reading flow, and slice #11 (cutover) made it the sole
+// dial-reader backend. The CV pipeline is gated by the
+// `verified_reading_cv` feature flag (renamed from the legacy
+// `ai_reading_v2` in slice #11; reads via a backward-compat
+// fallback during the rollover window).
 //
 // Slice #83 of PRD #73 added the `envVars` block so the container
 // receives `SENTRY_DSN` at startup. We pull from the Worker's

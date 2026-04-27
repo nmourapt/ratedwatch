@@ -12,12 +12,12 @@
 //
 // Strategy: we do NOT actually hammer the route 50 times. The
 // helper module exposes `__setTestRateLimiter` (mirroring
-// `__setTestDialReader` / `__setTestAiRunner`) so the burst gate
-// is fully controllable. The DAILY-CAP gate IS exercised with real
-// D1 writes — we seed N rows directly via the DB binding and then
-// hit the route once, asserting the helper's row-count query sees
-// them. Seeding is much faster than driving 50 multipart uploads
-// and avoids timing out the suite.
+// `__setTestDialReader`) so the burst gate is fully controllable.
+// The DAILY-CAP gate IS exercised with real D1 writes — we seed N
+// rows directly via the DB binding and then hit the route once,
+// asserting the helper's row-count query sees them. Seeding is
+// much faster than driving 50 multipart uploads and avoids timing
+// out the suite.
 //
 // The rate-limit helper's two-layer design is unit-tested in
 // src/domain/rate-limit/verified-reading.test.ts; this file is the
@@ -27,7 +27,6 @@
 import { env } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { __setTestAiRunner, type AiRunner } from "@/domain/ai-dial-reader/runner";
 import { __setTestDialReader, type DialReader } from "@/domain/dial-reader/adapter";
 import { __setTestExifReader } from "@/domain/reading-verifier/exif";
 import { __setTestRateLimiter } from "@/domain/rate-limit/verified-reading";
@@ -55,12 +54,32 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  __setTestAiRunner(null);
   __setTestDialReader(null);
   __setTestExifReader(null);
   __setTestRateLimiter(null);
   vi.useRealTimers();
+  // Drop any feature-flag values left over from previous tests so
+  // the verified-reading flag-gate state is hermetic.
+  await unsetVerifiedFlag();
 });
+
+/**
+ * Enable verified-reading globally for the duration of a test.
+ * The rate-limit tests don't care which specific users are
+ * targeted — `mode:always` keeps the flag-gate stable across
+ * multi-user fixtures (per-user-isolation in particular) without
+ * the orchestration of merging users[] into a single KV value.
+ */
+async function enableVerifiedReadingForAll(): Promise<void> {
+  const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
+  await FLAGS.put("verified_reading_cv", JSON.stringify({ mode: "always" }));
+}
+
+async function unsetVerifiedFlag(): Promise<void> {
+  const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
+  await FLAGS.delete("verified_reading_cv");
+  await FLAGS.delete("ai_reading_v2");
+}
 
 // ---- Auth + watch helpers (mirror readings.verified.test.ts) ------
 
@@ -190,12 +209,10 @@ async function postPureManualReading(watchId: string, cookie: string): Promise<R
 
 function installPassthroughBackends(): void {
   // The verified-reading flow needs SOME backend so the request
-  // gets to the rate-limit gate without immediately failing on a
-  // missing AI runner. We never reach the verifier — the rate-limit
-  // gate either short-circuits with 429 or the caller doesn't run a
-  // real /verified hit. Just install minimal fakes for safety.
-  const aiRunner: AiRunner = async () => ({ response: "ai is not consulted" });
-  __setTestAiRunner(aiRunner);
+  // gets to the rate-limit gate without immediately failing. We
+  // never reach the verifier itself — the rate-limit gate either
+  // short-circuits with 429 or the caller doesn't run a real
+  // /verified hit. Just install a minimal fake for safety.
   const dialReader: DialReader = async () => ({
     kind: "rejection",
     reason: "low_confidence",
@@ -209,6 +226,7 @@ describe("Rate limit — verified-reading endpoint", () => {
   it("returns 429 with structured body once the daily cap is hit", async () => {
     installPassthroughBackends();
     const user = await registerAndGetCookie();
+    await enableVerifiedReadingForAll();
     const { id: watchId } = await createWatch(
       { name: "rate-watch", movement_id: movementId },
       user.cookie,
@@ -232,6 +250,7 @@ describe("Rate limit — verified-reading endpoint", () => {
   it("allows the request when the daily count is just under the cap", async () => {
     installPassthroughBackends();
     const user = await registerAndGetCookie();
+    await enableVerifiedReadingForAll();
     const { id: watchId } = await createWatch(
       { name: "rate-watch-49", movement_id: movementId },
       user.cookie,
@@ -249,6 +268,7 @@ describe("Rate limit — verified-reading endpoint", () => {
     // Burst-gate-blocking limiter — every call returns success=false.
     __setTestRateLimiter(async () => ({ success: false }));
     const user = await registerAndGetCookie();
+    await enableVerifiedReadingForAll();
     const { id: watchId } = await createWatch(
       { name: "burst-watch", movement_id: movementId },
       user.cookie,
@@ -267,6 +287,7 @@ describe("Rate limit — per-user isolation", () => {
     installPassthroughBackends();
     const userA = await registerAndGetCookie();
     const userB = await registerAndGetCookie();
+    await enableVerifiedReadingForAll();
     const { id: watchA } = await createWatch(
       { name: "watch-a", movement_id: movementId },
       userA.cookie,
@@ -311,6 +332,7 @@ describe("Rate limit — shared quota across /verified and /manual_with_photo", 
   it("25 verified + 25 manual_with_photo fills the bucket; 51st of either is 429", async () => {
     installPassthroughBackends();
     const user = await registerAndGetCookie();
+    await enableVerifiedReadingForAll();
     const { id: watchId } = await createWatch(
       { name: "shared-watch", movement_id: movementId },
       user.cookie,

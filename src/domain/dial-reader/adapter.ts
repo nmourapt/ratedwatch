@@ -2,20 +2,17 @@
 //
 // This is the typed bridge between the Worker and the Cloudflare
 // Container that runs OpenCV / image decoding / hand-angle parsing.
-// Slice #74 (this scaffolding step) lands the adapter and the
-// container plumbing but does NOT wire the adapter into any
-// production code path: the verified-reading flow (verifier.ts +
-// routes/readings.ts) still calls the legacy AI runner. Slice #75
-// flips the verifier behind the `ai_reading_v2` flag.
+// Scaffolded in slice #74, wired through the verifier in slice #75,
+// and made the sole verified-reading backend by slice #11 (cutover)
+// of PRD #73 once the legacy Workers AI runner was removed.
 //
-// Why a thin indirection (mirror of `__setTestAiRunner` in
-// src/domain/ai-dial-reader/runner.ts):
+// Why a thin indirection (the `__setTestDialReader` escape hatch):
 //
 //   - Container Durable Objects always resolve remotely in
 //     production. miniflare in `vitest-pool-workers` cannot host
 //     a real container instance, so integration tests need a
-//     module-level fake the way the AI binding does. This file
-//     installs the same shape of escape hatch.
+//     module-level fake the way other binding wrappers do. This
+//     file installs the same shape of escape hatch.
 //
 //   - The contract (`DialReadResult`) is a discriminated union over
 //     the three outcomes the verifier needs to handle differently:
@@ -112,7 +109,7 @@ export type DialReadResult =
   | { kind: "transport_error"; message: string };
 
 /**
- * Test-injectable runner type. Mirrors the production `readDial`
+ * Test-injectable reader type. Mirrors the production `readDial`
  * signature at the post-binding layer: it returns the same typed
  * result the production path returns, lets tests skip the binding
  * entirely.
@@ -163,9 +160,9 @@ const COLD_START_THRESHOLD_MS = 1000;
 
 // Test-only module-level override. `null` ⇒ use the real binding.
 //
-// Like `__setTestAiRunner`, this lives below the index re-export so
-// production code cannot reach for it accidentally — only test files
-// that import the adapter module directly can install fakes.
+// This lives below the index re-export so production code cannot
+// reach for it accidentally — only test files that import the
+// adapter module directly can install fakes.
 let testReader: DialReader | null = null;
 
 /**
@@ -269,8 +266,8 @@ function sniffImageFormat(bytes: Uint8Array): string {
  * via `__setTestDialReader` still see the same observability events
  * as the production binding path. The binding path emits its own
  * events inline because it has richer context (HTTP response, raw
- * body) for the error / success branches that would be lossy to
- * pass through this helper.
+ * body) for the error / success branches that would be lossy to pass
+ * through this helper.
  *
  * Note: the binding path's `dial_reader_success` payload pulls the
  * confidence + processing_ms + version from the parsed JSON body

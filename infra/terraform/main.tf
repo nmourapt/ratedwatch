@@ -4,11 +4,12 @@ terraform {
   required_providers {
     cloudflare = {
       source = "cloudflare/cloudflare"
-      # 5.19.0-beta.5 is the first release that ships the
-      # `cloudflare_ai_gateway` resource (see
-      # infra/terraform/ai-gateway.tf). Terraform range constraints
-      # skip pre-releases, so the version is pinned exactly until a
-      # stable 5.19.x is cut — bump this line when that lands.
+      # Pinned at the version that originally shipped the
+      # `cloudflare_ai_gateway` resource. The AI Gateway resource
+      # was removed in slice #11 of PRD #73 (cutover) but we keep
+      # the pin to avoid an unrelated provider upgrade landing in
+      # the same PR. Bump when there's a deliberate provider-upgrade
+      # cycle.
       version = "5.19.0-beta.5"
     }
   }

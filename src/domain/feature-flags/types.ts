@@ -1,8 +1,8 @@
 // Feature-flag rule shapes and their Zod schema.
 //
 // Rules are stored in the `FLAGS` KV namespace as JSON under the flag
-// name (e.g. KV key `ai_reading_v2` → value `{"mode":"always"}`). The
-// Worker reads and validates with `ruleSchema` on every call to
+// name (e.g. KV key `verified_reading_cv` → value `{"mode":"always"}`).
+// The Worker reads and validates with `ruleSchema` on every call to
 // `isEnabled`; a missing or malformed value defaults to OFF so a
 // broken KV entry cannot brick a production Worker.
 

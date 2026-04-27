@@ -92,8 +92,8 @@ function toMs(value: unknown): number | null {
 
 // --- Test override hook -------------------------------------------------
 //
-// Mirrors the `__setTestAiRunner` pattern in src/domain/ai-dial-reader/
-// runner.ts. The verifier's integration tests need a way to inject a
+// Mirrors the `__setTestDialReader` pattern in src/domain/dial-reader/
+// adapter.ts. The verifier's integration tests need a way to inject a
 // known timestamp without juggling real EXIF-bearing fixtures. The
 // override is module-level (fine — vitest-pool-workers gives us a
 // fresh worker per test file) and a `null` clears it. Keep this in

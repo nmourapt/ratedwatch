@@ -19,21 +19,12 @@
 //      trade-off (an attacker with control over their phone clock
 //      can fake deviations within the bounds window) is documented
 //      in AGENTS.md.
-//   2. Run the image through a dial reader. Two backends exist:
+//   2. Run the image through the CV dial-reader container.
+//      Returns a structured `displayed_time: { h, m, s }` plus a
+//      confidence score and a version string.
 //
-//        * Legacy AI runner (Workers AI vision model, default off
-//          via the route's `ai_reading_v2` flag check) — returns
-//          MM:SS as a parsed string.
-//
-//        * CV container (slice #74 scaffolding, slice #75 (this)
-//          wires it behind the same flag) — returns a structured
-//          `displayed_time: { h, m, s }` plus a confidence score
-//          and a version string.
-//
-//      Both backends are routed through this verifier; the choice
-//      is made by the caller (see `useDialReader` below). Slice
-//      #11 of PRD #73 deletes the AI runner once the CV path has
-//      proved itself in alpha.
+//      Slice #11 (cutover) of PRD #73 deleted the legacy Workers AI
+//      runner — the CV container is now the only backend.
 //   3. On reader error → bubble up as a structured failure.
 //   4. On reader success, compute the signed drift in seconds
 //      between the dial's observed MM:SS (minute + second
@@ -45,9 +36,9 @@
 //      constraint below).
 //   5. If `is_baseline`, force deviation to 0 — by definition the
 //      user has just set the watch to the true time.
-//   6. Insert a readings row with verified=1. On the CV path the
-//      row also carries `photo_r2_key`, `dial_reader_confidence`,
-//      and `dial_reader_version` (slice #75; columns added in
+//   6. Insert a readings row with verified=1. The row carries
+//      `photo_r2_key`, `dial_reader_confidence`, and
+//      `dial_reader_version` (columns added in
 //      migrations/0007_verified_reading_cv.sql).
 //   7. Best-effort R2 upload of the photo at `readings/{id}/photo.jpg`.
 //      A failure here is logged but doesn't roll back the reading —
@@ -55,19 +46,18 @@
 //
 // Design constraint introduced by the MM:SS-only model contract:
 //
-//   We do NOT trust the model/container's hour reading, because a
-//   12-hour dial wrap means any hour output is ambiguous. The HOUR
-//   comes from the reference clock. That caps the verifier's
-//   detectable drift at ±30 minutes — anything beyond that would
-//   wrap. That's more than adequate for any realistic mechanical
-//   watch drift; a watch that's an hour or more off has stopped,
-//   not drifted. The CV container returns `h` because the internal
-//   hour-hand read is part of the confidence signal (hour-hand
-//   position must agree with minute-hand position) — but only `m`
-//   and `s` flow downstream from this verifier.
+//   We do NOT trust the container's hour reading, because a 12-hour
+//   dial wrap means any hour output is ambiguous. The HOUR comes
+//   from the reference clock. That caps the verifier's detectable
+//   drift at ±30 minutes — anything beyond that would wrap. That's
+//   more than adequate for any realistic mechanical watch drift; a
+//   watch that's an hour or more off has stopped, not drifted. The
+//   CV container returns `h` because the internal hour-hand read is
+//   part of the confidence signal (hour-hand position must agree
+//   with minute-hand position) — but only `m` and `s` flow
+//   downstream from this verifier.
 
 import { createDb } from "@/db";
-import { readDialTime, type DialReaderError } from "@/domain/ai-dial-reader/reader";
 import { readDial, type DialReaderEnv } from "@/domain/dial-reader";
 import type { Reading } from "@/domain/drift-calc";
 import { logEvent, type EventLoggerEnv } from "@/observability/events";
@@ -97,17 +87,7 @@ export interface VerifyReadingInput {
    * formData parse time on cellular.
    */
   serverArrivalMs: number;
-  /**
-   * Slice #75 of PRD #73. When true, the verifier routes the image
-   * through the CV dial-reader container (`@/domain/dial-reader`).
-   * When false (the default), the legacy AI runner from
-   * `@/domain/ai-dial-reader` handles the read. The route reads the
-   * `ai_reading_v2` feature flag and sets this; tests can pass
-   * either value directly.
-   */
-  useDialReader?: boolean;
   env: {
-    AI: Ai;
     DB: D1Database;
     IMAGES: R2Bucket;
   } & DialReaderEnv &
@@ -115,9 +95,6 @@ export interface VerifyReadingInput {
 }
 
 export type VerifyReadingErrorCode =
-  | "ai_refused"
-  | "ai_unparseable"
-  | "ai_implausible"
   | "exif_clock_skew"
   | "dial_reader_unsupported_dial"
   | "dial_reader_low_confidence"
@@ -137,13 +114,11 @@ export type VerifyReadingResult =
       raw_response?: string;
       // Slice #81 (PRD #73): CV metadata surfaced on the failure
       // branch so the route can pass it to `corpus.maybeIngest`
-      // without re-running the dial reader. All three are NULL on
-      // the AI path / EXIF skew branch (where the dial reader
-      // never ran or has no equivalent signal); on the CV path
-      // they are populated whenever the container responded
-      // (low-confidence rejection, structured rejection with a
-      // confidence echo, …). For pure transport errors confidence
-      // and version are NULL because the container never returned.
+      // without re-running the dial reader. Both fields are NULL
+      // on the EXIF skew branch (where the dial reader never ran)
+      // and on pure transport errors (the container never returned
+      // a confidence). On structured rejections / low-confidence
+      // success rejections they are populated.
       dial_reader_confidence?: number | null;
       dial_reader_version?: string | null;
     };
@@ -152,12 +127,10 @@ export type VerifyReadingResult =
 // but kept local so callers can decide how to project it for their
 // route's wire format.
 //
-// Slice #75 (PRD #73) added the three CV-specific fields. They are
-// nullable and only populated on the CV path; the AI path leaves
-// them null. The route doesn't currently surface them on the wire,
-// but the verifier carries them so a future SPA query can ask
-// "what's the confidence of my latest verified read?" without a
-// second DB hit.
+// The three CV-specific fields (`photo_r2_key`, `dial_reader_*`)
+// are nullable on the schema because earlier rows (manual readings,
+// the AI-era era, …) didn't have them. Verified-reading rows always
+// populate them.
 export interface VerifiedReadingRow {
   id: string;
   watch_id: string;
@@ -212,7 +185,7 @@ const EXIF_MAX_FUTURE_MS = 1 * 60 * 1000;
  *
  * Invariants:
  *   * dialReading.minutes and .seconds are integers in [0, 59].
- *     Callers (readDialTime) enforce that — this helper still
+ *     Callers (the dial reader) enforce that — this helper still
  *     tolerates out-of-range by `%%`-normalising first.
  *   * referenceTimestampMs is a millisecond unix timestamp.
  *
@@ -296,10 +269,7 @@ export async function verifyReading(
     await logEvent("verified_reading_exif_ok", { userId, watchId, delta_ms: delta }, env);
   }
 
-  // 2. Dial read. Two backends share the same downstream pipeline
-  //    (deviation calc, baseline override, INSERT, photo upload).
-  //    We normalise both onto a `BackendRead` envelope so the rest
-  //    of this function stays backend-agnostic.
+  // 2. Dial read via the CV container.
   //
   //    The reading_id is generated NOW (rather than at INSERT time)
   //    so the slice #83 dial-reader telemetry events can correlate
@@ -310,9 +280,7 @@ export async function verifyReading(
   //    readings table.
   const readingId = crypto.randomUUID();
   const image = new Uint8Array(imageBuffer);
-  const backendRead = input.useDialReader
-    ? await runDialReaderBackend(image, env, readingId)
-    : await runAiBackend(image, env, referenceTimestamp);
+  const backendRead = await runDialReaderBackend(image, env, readingId);
 
   if (!backendRead.ok) {
     // Hoist the BackendRead failure straight onto the
@@ -329,8 +297,7 @@ export async function verifyReading(
     };
   }
 
-  // 4. Compute deviation from dial MM:SS vs reference MM:SS. Both
-  //    backends collapse onto the same minute+second pair; the
+  // 4. Compute deviation from dial MM:SS vs reference MM:SS. The
   //    container's `h` is deliberately discarded (see module-level
   //    comment).
   let deviation = computeVerifiedDeviation(
@@ -344,10 +311,10 @@ export async function verifyReading(
     deviation = 0;
   }
 
-  // 6. Insert the readings row, including (on the CV path) the
-  //    confidence + version metadata. `photo_r2_key` is filled in
-  //    after the R2 upload below — best-effort so a failed upload
-  //    leaves the row with NULL there, which is fine.
+  // 6. Insert the readings row with the confidence + version
+  //    metadata. `photo_r2_key` is filled in after the R2 upload
+  //    below — best-effort so a failed upload leaves the row with
+  //    NULL there, which is fine.
   //
   //    `id` is the reading_id we generated up-front so the
   //    Analytics Engine events from the CV path correlate to the
@@ -434,15 +401,11 @@ export async function verifyReading(
 }
 
 /**
- * Internal envelope normalising the legacy AI and CV-container
- * reader outputs into one shape the post-read pipeline can consume
- * without knowing which backend produced the read.
- *
- * - `confidence` and `version` are NULL on the AI path (the legacy
- *   runner has no equivalent signal).
- * - `rawResponse` is the model's text reply on the AI path or a
- *   short structured serialisation on the CV path; only used for
- *   the route's debug `ai_response` echo.
+ * Internal envelope normalising the CV-container reader output into
+ * a shape the post-read pipeline consumes without having to know
+ * the wire format. Kept after the slice-#11 cutover (which deleted
+ * the AI runner) because a future second backend (e.g. an on-device
+ * reader) would slot in here without changing the verifier core.
  *
  * `BackendRead` is intentionally NOT exported — it's a private
  * implementation detail of the verifier, not part of the public
@@ -463,40 +426,12 @@ type BackendRead =
       raw_response?: string;
       // Slice #81 (PRD #73): propagate the CV-pipeline metadata
       // even on the failure branch so the route can pass it to
-      // `corpus.maybeIngest`. Both fields are NULL on the AI path
-      // / pure transport error / EXIF skew (the container either
-      // didn't run or has no equivalent signal).
+      // `corpus.maybeIngest`. Both fields are NULL on a pure
+      // transport error / EXIF skew (the container either didn't
+      // run or has no equivalent signal).
       confidence?: number | null;
       version?: string | null;
     };
-
-async function runAiBackend(
-  image: Uint8Array,
-  env: { AI: Ai },
-  referenceTimestamp: number,
-): Promise<BackendRead> {
-  const result = await readDialTime(image, env, new Date(referenceTimestamp));
-  if ("error" in result) {
-    return aiResultToError(result);
-  }
-  return {
-    ok: true,
-    minutes: result.minutes,
-    seconds: result.seconds,
-    confidence: null,
-    version: null,
-    rawResponse: result.raw_response,
-  };
-}
-
-function aiResultToError(err: DialReaderError): BackendRead {
-  const code: VerifyReadingErrorCode =
-    `ai_${err.error}` as const as VerifyReadingErrorCode;
-  const raw = err.raw_response;
-  return raw === undefined
-    ? { ok: false, error: code }
-    : { ok: false, error: code, raw_response: raw };
-}
 
 /**
  * Map a CV-container rejection `reason` to a verifier-level error

@@ -66,7 +66,7 @@ describe("evaluateRule (rollout)", () => {
     const rule: FlagRule = { mode: "rollout", rolloutPct: 25 };
     let enabled = 0;
     for (let i = 0; i < 1000; i++) {
-      if (await evaluateRule(rule, { userId: `user-${i}` }, "ai_reading_v2")) {
+      if (await evaluateRule(rule, { userId: `user-${i}` }, "verified_reading_cv")) {
         enabled++;
       }
     }
