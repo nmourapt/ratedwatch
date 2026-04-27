@@ -174,4 +174,94 @@ describe("readDial — production (binding) path", () => {
       expect(result.message).toContain("network unreachable");
     }
   });
+
+  // Slice #76 adds the structured `rejection` block on the
+  // success transport (200 + ok:false) and the `malformed_image`
+  // 400 path. Both have to round-trip through the adapter as
+  // their own DialReadResult kinds.
+
+  it("surfaces an unsupported_format rejection from a 200 response", async () => {
+    const { env } = makeFakeContainerEnv(
+      async () =>
+        new Response(
+          JSON.stringify({
+            version: "v0.1.0-decode",
+            ok: false,
+            rejection: {
+              reason: "unsupported_format",
+              details: "GIF is not supported. Use JPEG, PNG, WebP, or HEIC.",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+    const result = await readDial(new Uint8Array([0x47, 0x49, 0x46, 0x38]), env);
+
+    expect(result.kind).toBe("rejection");
+    if (result.kind === "rejection") {
+      expect(result.reason).toBe("unsupported_format");
+      expect(result.details).toContain("GIF");
+    }
+  });
+
+  it("classifies a 400 malformed_image response as kind: malformed_image", async () => {
+    const { env } = makeFakeContainerEnv(
+      async () =>
+        new Response(
+          JSON.stringify({
+            version: "v0.1.0-decode",
+            error: "malformed_image",
+            details: "image decoding failed: truncated stream",
+          }),
+          {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+    const result = await readDial(new Uint8Array([0xff, 0xd8, 0xff]), env);
+
+    expect(result.kind).toBe("malformed_image");
+    if (result.kind === "malformed_image") {
+      expect(result.message).toContain("truncated");
+    }
+  });
+
+  it("falls back to a default malformed_image message when the 400 body is unparsable", async () => {
+    const { env } = makeFakeContainerEnv(
+      async () =>
+        new Response("not json", {
+          status: 400,
+          headers: { "content-type": "text/plain" },
+        }),
+    );
+    const result = await readDial(new Uint8Array([0xff]), env);
+
+    expect(result.kind).toBe("malformed_image");
+    if (result.kind === "malformed_image") {
+      expect(result.message).toBeTruthy();
+    }
+  });
+
+  it("still parses a legacy flat `reason` rejection body", async () => {
+    // Defensive: an older container build that never shipped the
+    // structured `rejection` block must still surface as a
+    // rejection rather than as a parser explosion.
+    const { env } = makeFakeContainerEnv(
+      async () =>
+        new Response(JSON.stringify({ ok: false, reason: "legacy_reason" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const result = await readDial(new Uint8Array([0xff]), env);
+
+    expect(result.kind).toBe("rejection");
+    if (result.kind === "rejection") {
+      expect(result.reason).toBe("legacy_reason");
+    }
+  });
 });
