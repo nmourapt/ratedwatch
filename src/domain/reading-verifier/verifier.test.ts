@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeAll, describe, it, expect } from "vitest";
-import { __setTestAiRunner, type AiRunner } from "@/domain/ai-dial-reader/runner";
+import { __setTestDialReader, type DialReader } from "@/domain/dial-reader/adapter";
 import type { DialReaderEnv } from "@/domain/dial-reader";
 import { __setTestExifReader } from "./exif";
 import { computeVerifiedDeviation, verifyReading } from "./verifier";
@@ -140,22 +140,15 @@ describe("computeVerifiedDeviation", () => {
 // shutter fired) bounded against server arrival time. EXIF outside
 // the bounds is rejected; missing EXIF falls back to server arrival.
 //
-// These tests stub both the AI runner (so we don't need a real model)
-// and the EXIF reader (so we don't need real EXIF-bearing fixtures)
-// and drive `verifyReading` directly. They use the real D1 / R2 from
-// vitest-pool-workers, but those are incidental — the contract under
-// test is "what reference timestamp ends up in the row, and which
-// telemetry events fire?".
+// These tests stub both the dial reader (so we don't need the real
+// container DO) and the EXIF reader (so we don't need real EXIF-
+// bearing fixtures) and drive `verifyReading` directly. They use
+// the real D1 / R2 from vitest-pool-workers, but those are
+// incidental — the contract under test is "what reference timestamp
+// ends up in the row, and which telemetry events fire?".
 
-// The verifier's input env now intersects DialReaderEnv so the CV
-// branch (slice #75 of PRD #73) can reach `env.DIAL_READER`. The
-// AI-only tests in this file never trigger the CV branch
-// (`useDialReader` is undefined → falls through to the AI runner)
-// so the binding doesn't need to exist at runtime; but TypeScript
-// needs to see the field on the env object the tests pass in.
 const VerifierEnv = env as unknown as {
   DB: D1Database;
-  AI: Ai;
   IMAGES: R2Bucket;
   ANALYTICS: AnalyticsEngineDataset;
 } & DialReaderEnv;
@@ -194,7 +187,7 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  __setTestAiRunner(null);
+  __setTestDialReader(null);
   __setTestExifReader(null);
   captured = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -243,9 +236,27 @@ async function ensureWatch(userId: string): Promise<string> {
   return id;
 }
 
-function installFakeAi(response: string): void {
-  const runner: AiRunner = async () => ({ response });
-  __setTestAiRunner(runner);
+/**
+ * Install a fake dial reader that returns a successful read at the
+ * given MM:SS with full confidence. Mirrors the helper used in
+ * `tests/integration/readings.verified.test.ts`.
+ */
+function installFakeDialReader(opts: { m: number; s: number }): void {
+  const reader: DialReader = async () => ({
+    kind: "success",
+    body: {
+      version: "v0.1.0-verifier-test",
+      ok: true,
+      result: {
+        displayed_time: { h: 12, m: opts.m, s: opts.s },
+        confidence: 0.95,
+        dial_detection: { center_xy: [0, 0], radius_px: 0 },
+        hand_angles_deg: { hour: 0, minute: 0, second: 0 },
+        processing_ms: 0,
+      },
+    },
+  });
+  __setTestDialReader(reader);
 }
 
 function tinyJpegBuffer(): ArrayBuffer {
@@ -263,11 +274,13 @@ describe("verifyReading — EXIF reference timestamp", () => {
     const watchId = await ensureWatch(userId);
     const exifMs = SERVER_ARRIVAL - 30_000;
     __setTestExifReader(async () => exifMs);
-    // AI returns "32:07" (matches the EXIF clock's MM:SS = 31:35).
-    // But the deviation only depends on the dial vs the reference,
-    // so feed the AI a value 2s ahead of the EXIF MM:SS.
-    const exifMmSs = new Date(exifMs);
-    installFakeAi(`${exifMmSs.getUTCMinutes()}:${exifMmSs.getUTCSeconds() + 2}`);
+    // Fake dial reader returns MM:SS = (exif min, exif sec + 2),
+    // so the deviation should be +2.
+    const exifDate = new Date(exifMs);
+    installFakeDialReader({
+      m: exifDate.getUTCMinutes(),
+      s: exifDate.getUTCSeconds() + 2,
+    });
     startCapture();
 
     const result = await verifyReading({
@@ -299,7 +312,7 @@ describe("verifyReading — EXIF reference timestamp", () => {
     const watchId = await ensureWatch(userId);
     const exifMs = SERVER_ARRIVAL - 5 * 60 * 1000;
     __setTestExifReader(async () => exifMs);
-    installFakeAi("0:0");
+    installFakeDialReader({ m: 0, s: 0 });
     startCapture();
 
     const result = await verifyReading({
@@ -323,7 +336,7 @@ describe("verifyReading — EXIF reference timestamp", () => {
     const watchId = await ensureWatch(userId);
     const exifMs = SERVER_ARRIVAL - 5 * 60 * 1000 - 1;
     __setTestExifReader(async () => exifMs);
-    installFakeAi("0:0");
+    installFakeDialReader({ m: 0, s: 0 });
     startCapture();
 
     const result = await verifyReading({
@@ -358,7 +371,7 @@ describe("verifyReading — EXIF reference timestamp", () => {
     const watchId = await ensureWatch(userId);
     const exifMs = SERVER_ARRIVAL + 1 * 60 * 1000 + 1;
     __setTestExifReader(async () => exifMs);
-    installFakeAi("0:0");
+    installFakeDialReader({ m: 0, s: 0 });
     startCapture();
 
     const result = await verifyReading({
@@ -382,7 +395,7 @@ describe("verifyReading — EXIF reference timestamp", () => {
     const watchId = await ensureWatch(userId);
     const exifMs = SERVER_ARRIVAL + 30_000;
     __setTestExifReader(async () => exifMs);
-    installFakeAi("0:0");
+    installFakeDialReader({ m: 0, s: 0 });
     startCapture();
 
     const result = await verifyReading({
@@ -409,7 +422,7 @@ describe("verifyReading — EXIF reference timestamp", () => {
     const userId = await ensureUser();
     const watchId = await ensureWatch(userId);
     __setTestExifReader(async () => null);
-    installFakeAi("0:0");
+    installFakeDialReader({ m: 0, s: 0 });
     startCapture();
 
     const result = await verifyReading({
