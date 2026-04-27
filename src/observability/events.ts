@@ -24,6 +24,15 @@ export type EventKind =
   | "verified_reading_attempted"
   | "verified_reading_succeeded"
   | "verified_reading_failed"
+  // Slice #82 (PRD #73 user story #25): rate-limit telemetry. Fired
+  // when the verified-reading or manual_with_photo route blocked a
+  // user because they hit either the per-minute burst gate or the
+  // 50-attempts-per-24h product cap. Tracked separately from
+  // `_failed` so an operator can answer "how often does the cap
+  // matter in practice?" with one Analytics Engine query.
+  // Fields: userId, watchId, reason ("burst" | "daily_cap").
+  | "verified_reading_rate_limited"
+  | "manual_with_photo_rate_limited"
   // Slice #80 (PRD #73 User Story #10): manual_with_photo flow —
   // the user typed HH:MM:SS after the dial reader rejected their
   // capture. Tracked separately from `reading_submitted` so we can

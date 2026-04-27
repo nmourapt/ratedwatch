@@ -34,6 +34,12 @@ import {
 import { isEnabled } from "@/domain/feature-flags";
 import { resolveReferenceTimestamp } from "@/domain/reading-verifier/reference-timestamp";
 import {
+  checkVerifiedReadingLimit,
+  createRateLimitDb,
+  DAILY_WINDOW_MS,
+  type RateLimitEnv,
+} from "@/domain/rate-limit/verified-reading";
+import {
   computeVerifiedDeviation,
   verifyReading,
   type VerifyReadingErrorCode,
@@ -52,7 +58,8 @@ import { purgeLeaderboardUrls } from "@/server/lib/purge-cache";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
 
 type Bindings = AuthEnv &
-  DialReaderEnv & {
+  DialReaderEnv &
+  RateLimitEnv & {
     DB: D1Database;
     AI: Ai;
     IMAGES: R2Bucket;
@@ -443,6 +450,26 @@ readingsByWatchRoute.post("/verified", async (c) => {
     return c.json({ error: "forbidden" }, 403);
   }
 
+  // Rate-limit gate (slice #82). Fires AFTER ownership checks (we
+  // don't want to leak quota state to callers who don't even own
+  // the resource) but BEFORE the multipart body parse so a denied
+  // request doesn't burn upload bandwidth. Pure manual readings
+  // (no photo) skip this — they go through `POST /readings`, not
+  // here.
+  const limitDecision = await checkVerifiedReadingLimit({
+    env: c.env,
+    db: createRateLimitDb(db),
+    userId: user.id,
+  });
+  if (!limitDecision.allowed) {
+    await logEvent(
+      "verified_reading_rate_limited",
+      { userId: user.id, watchId, reason: limitDecision.reason },
+      c.env,
+    );
+    return rateLimitResponse(c);
+  }
+
   let form: FormData;
   try {
     form = await c.req.formData();
@@ -581,9 +608,12 @@ readingsByWatchRoute.post("/verified", async (c) => {
  * arrival fallback when EXIF is missing — so a manual_with_photo
  * row is comparable on the timeline to a verified one.
  *
- * TODO(#82): rate limit the same way as the verified-reading path
- * (50 attempts/24h) once slice #82 lands. The endpoint intentionally
- * does NOT enforce a limit yet — slice #80 is just the route+UX.
+ * Slice #82 wires this endpoint to the same rate-limit gate as
+ * `/verified` because both consume the photo-upload resource. A
+ * user who hits the cap on `/verified` cannot bypass it by
+ * switching to `/manual_with_photo` — the limiter keys on userId
+ * and the D1 row-count counts every photo-bearing reading, not
+ * just the verified ones.
  */
 readingsByWatchRoute.post("/manual_with_photo", async (c) => {
   // Same upload-latency-immune capture as /verified — see that route's
@@ -600,6 +630,22 @@ readingsByWatchRoute.post("/manual_with_photo", async (c) => {
   }
   if (ownership.status === "forbidden") {
     return c.json({ error: "forbidden" }, 403);
+  }
+
+  // Rate-limit gate. Same shared quota as /verified — see that
+  // route's comment for the layer breakdown.
+  const limitDecision = await checkVerifiedReadingLimit({
+    env: c.env,
+    db: createRateLimitDb(db),
+    userId: user.id,
+  });
+  if (!limitDecision.allowed) {
+    await logEvent(
+      "manual_with_photo_rate_limited",
+      { userId: user.id, watchId, reason: limitDecision.reason },
+      c.env,
+    );
+    return rateLimitResponse(c);
   }
 
   let form: FormData;
@@ -773,6 +819,37 @@ const DIAL_READER_UX_HINTS: Record<string, string> = {
   dial_reader_transport_error:
     "the dial reader is temporarily unavailable. Please try again in a moment",
 };
+
+/**
+ * Structured 429 body shared by `/verified` and `/manual_with_photo`
+ * (slice #82, PRD #73 user story #25). The SPA's slice-#80 error
+ * mapper renders any 429 as "you've hit your daily verified-reading
+ * cap, please try again tomorrow" — see
+ * src/app/watches/verifiedReadingErrors.ts.
+ *
+ * Fields:
+ *   * `error_code: "rate_limit"` — the SPA's discriminator. Stable
+ *     across the burst-gate vs daily-cap distinction; the SPA does
+ *     not need to differentiate. Future tooling may want to look at
+ *     the per-event `reason` field in observability events.
+ *   * `retry_after_seconds: 86400` — pessimistic. The actual reset
+ *     for the daily cap is whenever the oldest of the user's last
+ *     50 photo-bearing readings ages out, which is bounded by 24h.
+ *   * `ux_hint` — fallback text for clients that haven't shipped
+ *     the structured handler yet.
+ */
+function rateLimitResponse(c: {
+  json: (body: unknown, status: number) => Response;
+}): Response {
+  return c.json(
+    {
+      error_code: "rate_limit",
+      retry_after_seconds: Math.floor(DAILY_WINDOW_MS / 1000),
+      ux_hint: "You've hit your daily verified-reading cap. Try again tomorrow.",
+    },
+    429,
+  );
+}
 
 function errorResponse(
   c: {
