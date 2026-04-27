@@ -201,8 +201,15 @@ export async function createVerifiedReading(
   if (!response.ok) {
     let serverCode: string | undefined;
     try {
-      const parsed = (await response.json()) as { error?: string };
-      serverCode = parsed.error;
+      // Slice #75 introduced the `error_code` field on CV-pipeline
+      // rejections (alongside a `ux_hint`). Legacy AI-pipeline errors
+      // continue to use `error`. Read whichever is present, in that
+      // order — `error_code` wins if both somehow appear.
+      const parsed = (await response.json()) as {
+        error?: string;
+        error_code?: string;
+      };
+      serverCode = parsed.error_code ?? parsed.error;
     } catch {
       /* non-JSON body */
     }
