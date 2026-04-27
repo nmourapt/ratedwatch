@@ -4,6 +4,7 @@
 // Auth verbatim) and the `requireAuth`-gated /api/v1/me endpoint. The
 // landing page at `/` is unchanged from slice 3.
 import { Container } from "@cloudflare/containers";
+import { env as workerEnv } from "cloudflare:workers";
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
@@ -345,9 +346,29 @@ app.route("/out", outRoute);
 // flag. The class must still be exported here so the Durable
 // Object runtime can instantiate it as soon as `wrangler deploy`
 // runs the v1 migration.
+//
+// Slice #83 of PRD #73 added the `envVars` block so the container
+// receives `SENTRY_DSN` at startup. We pull from the Worker's
+// process-level `env` (via `cloudflare:workers`) rather than from
+// the per-request `Bindings`-typed env because envVars must be
+// resolvable when the Container DO instantiates — which can happen
+// before the first fetch. When SENTRY_DSN is unset on the Worker
+// the field is `undefined`; `sentry_init.init(None)` handles that
+// as a no-op so the container still boots cleanly in previews
+// without the secret provisioned.
 export class DialReaderContainer extends Container {
   override defaultPort = 8080;
   override sleepAfter = "15m";
+  override envVars = {
+    // Reading the secret here lets the container init Sentry with
+    // the same DSN the Worker uses, so Worker errors and Python
+    // errors land in the same project (with `runtime` tags
+    // distinguishing them).
+    //
+    // ESLint forbids non-null assertion below; the literal `?? ""`
+    // is fine because `sentry_init.init` short-circuits on empty.
+    SENTRY_DSN: (workerEnv as { SENTRY_DSN?: string }).SENTRY_DSN ?? "",
+  };
 }
 
 // Wrap the Hono app so Sentry auto-captures unhandled exceptions.

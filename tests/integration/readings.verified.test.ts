@@ -585,3 +585,156 @@ describe("POST /api/v1/watches/:id/readings/verified — CV dial-reader backend 
     expect(body.deviation_seconds).toBe(0);
   });
 });
+
+// ---- Slice #83: dial-reader observability events ------------------
+//
+// These tests pin the contract that every CV-path call emits the
+// `dial_reader_*` quintet into Analytics Engine. We capture
+// writeDataPoint side-effects via the env's ANALYTICS binding
+// (the integration test harness already exposes a real AE binding
+// per wrangler.jsonc) and assert on the emitted events.
+//
+// We deliberately drive these end-to-end through the route rather
+// than directly through the verifier so the contract is "the HTTP
+// call produces these events" — which is what the operator's
+// SQL queries actually depend on.
+
+describe("dial-reader observability events (slice #83)", () => {
+  type DataPoint = AnalyticsEngineDataPoint;
+  let captured: DataPoint[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ANALYTICS = (env as any).ANALYTICS as AnalyticsEngineDataset;
+  const originalWriteDataPoint = ANALYTICS.writeDataPoint.bind(ANALYTICS);
+
+  function startCapture(): void {
+    captured = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (ANALYTICS as any).writeDataPoint = (dp?: DataPoint) => {
+      if (dp) {
+        captured.push({ blobs: dp.blobs, indexes: dp.indexes, doubles: dp.doubles });
+      }
+      originalWriteDataPoint(dp);
+    };
+  }
+
+  function stopCapture(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (ANALYTICS as any).writeDataPoint = originalWriteDataPoint;
+  }
+
+  function eventsOfKind(kind: string): DataPoint[] {
+    return captured.filter((dp) => Array.isArray(dp.indexes) && dp.indexes[0] === kind);
+  }
+
+  function payload(dp: DataPoint): Record<string, unknown> {
+    return JSON.parse(dp.blobs![1] as string) as Record<string, unknown>;
+  }
+
+  afterEach(() => {
+    stopCapture();
+  });
+
+  it("emits dial_reader_attempt + _success on a successful CV read", async () => {
+    const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
+    const { id: watchId } = await createWatch(
+      { name: "CVObsOK", movement_id: movementId },
+      user.cookie,
+    );
+
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.UTC(2024, 0, 15, 14, 32, 5));
+    installFakeDialReaderSuccess({
+      m: 32,
+      s: 7,
+      confidence: 0.88,
+      version: "v0.7.0-test",
+    });
+    startCapture();
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string };
+
+    const attempts = eventsOfKind("dial_reader_attempt");
+    expect(attempts).toHaveLength(1);
+    expect(payload(attempts[0]!)).toMatchObject({
+      reading_id: body.id,
+      image_format: "jpeg",
+    });
+    expect(payload(attempts[0]!).image_bytes).toBeGreaterThan(0);
+
+    const successes = eventsOfKind("dial_reader_success");
+    expect(successes).toHaveLength(1);
+    expect(payload(successes[0]!)).toMatchObject({
+      reading_id: body.id,
+      confidence: 0.88,
+      dial_reader_version: "v0.7.0-test",
+    });
+
+    expect(eventsOfKind("dial_reader_rejection")).toHaveLength(0);
+    expect(eventsOfKind("dial_reader_error")).toHaveLength(0);
+  });
+
+  it("emits dial_reader_attempt + _rejection on a structured rejection", async () => {
+    const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
+    const { id: watchId } = await createWatch(
+      { name: "CVObsRej", movement_id: movementId },
+      user.cookie,
+    );
+    installFakeDialReaderRejection("low_confidence");
+    startCapture();
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(422);
+
+    expect(eventsOfKind("dial_reader_attempt")).toHaveLength(1);
+    const rejections = eventsOfKind("dial_reader_rejection");
+    expect(rejections).toHaveLength(1);
+    expect(payload(rejections[0]!)).toMatchObject({ reason: "low_confidence" });
+    expect(eventsOfKind("dial_reader_success")).toHaveLength(0);
+    expect(eventsOfKind("dial_reader_error")).toHaveLength(0);
+  });
+
+  it("emits dial_reader_attempt + _error on a transport-level failure", async () => {
+    const user = await registerAndGetCookie();
+    await setVerifiedFlagForUser(user.userId);
+    const { id: watchId } = await createWatch(
+      { name: "CVObsErr", movement_id: movementId },
+      user.cookie,
+    );
+    installFakeDialReaderTransportError("boom");
+    startCapture();
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(502);
+
+    expect(eventsOfKind("dial_reader_attempt")).toHaveLength(1);
+    const errors = eventsOfKind("dial_reader_error");
+    expect(errors).toHaveLength(1);
+    expect(payload(errors[0]!).error_message).toContain("boom");
+    expect(eventsOfKind("dial_reader_success")).toHaveLength(0);
+    expect(eventsOfKind("dial_reader_rejection")).toHaveLength(0);
+  });
+
+  it("does NOT emit dial_reader_* events on the legacy AI path (flag OFF)", async () => {
+    const user = await registerAndGetCookie();
+    // Flag deliberately NOT set → AI path.
+    const { id: watchId } = await createWatch(
+      { name: "CVObsAi", movement_id: movementId },
+      user.cookie,
+    );
+    installFakeAi("0:0");
+    startCapture();
+
+    const res = await postVerifiedReading(watchId, user.cookie);
+    expect(res.status).toBe(201);
+
+    expect(eventsOfKind("dial_reader_attempt")).toHaveLength(0);
+    expect(eventsOfKind("dial_reader_success")).toHaveLength(0);
+    expect(eventsOfKind("dial_reader_rejection")).toHaveLength(0);
+    expect(eventsOfKind("dial_reader_error")).toHaveLength(0);
+    expect(eventsOfKind("dial_reader_cold_start")).toHaveLength(0);
+  });
+});

@@ -34,6 +34,47 @@ export type EventKind =
   | "verified_reading_exif_ok"
   | "verified_reading_exif_missing"
   | "verified_reading_exif_clock_skew"
+  // Dial-reader (CV container) telemetry. Slice #83 of PRD #73.
+  // These five events trace every call into the CV container:
+  //
+  //   * `dial_reader_attempt`   — fired before each call, regardless
+  //                                of outcome. Used as the
+  //                                attempt-rate denominator.
+  //                                Fields: reading_id, image_format,
+  //                                image_bytes.
+  //   * `dial_reader_success`   — fired on a structured 2xx success.
+  //                                Carries the calibrated confidence
+  //                                + processing time so we can build
+  //                                histograms / latency percentiles
+  //                                over Analytics Engine.
+  //                                Fields: reading_id, confidence,
+  //                                processing_ms, dial_reader_version.
+  //   * `dial_reader_rejection` — fired on a structured non-success
+  //                                the container produced deliberately
+  //                                (unsupported format, low confidence,
+  //                                no dial found, malformed image).
+  //                                Distinct from `_error` because
+  //                                retrying won't help.
+  //                                Fields: reading_id, reason,
+  //                                confidence (when known).
+  //   * `dial_reader_error`     — fired on a transport-level failure
+  //                                (5xx, network exception). The
+  //                                container did NOT make a CV
+  //                                decision; the user should retry
+  //                                or fall back to manual entry.
+  //                                Fields: reading_id, error_type,
+  //                                error_message.
+  //   * `dial_reader_cold_start`— fired when the Worker observes the
+  //                                container fetch took >1s. Logged
+  //                                only when the threshold is crossed
+  //                                so the rate of this event is
+  //                                directly the cold-start rate.
+  //                                Fields: reading_id, wait_ms.
+  | "dial_reader_attempt"
+  | "dial_reader_success"
+  | "dial_reader_rejection"
+  | "dial_reader_error"
+  | "dial_reader_cold_start"
   | "movement_suggested"
   | "chrono24_click"
   | "leaderboard_filter_changed"
