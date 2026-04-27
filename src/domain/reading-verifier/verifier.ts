@@ -494,7 +494,18 @@ async function runDialReaderBackend(
     return {
       ok: false,
       error: mapDialReaderRejection(result.reason),
-      raw_response: result.reason,
+      raw_response: result.details ?? result.reason,
+    };
+  }
+  if (result.kind === "malformed_image") {
+    // Container surfaced a 400 — the bytes were corrupt, truncated,
+    // or empty. Distinct from `transport_error` because retrying
+    // with the same bytes can't help. SPA should ask the user for
+    // a fresh capture (handled in slice #80's UX paths).
+    return {
+      ok: false,
+      error: "dial_reader_malformed_image",
+      raw_response: result.message,
     };
   }
   // Success branch. Apply the verifier-side confidence threshold
