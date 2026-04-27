@@ -239,6 +239,37 @@ describe("readDial — production (binding) path", () => {
     }
   });
 
+  // Slice #77: the dial locator returns `no_dial_found` when no
+  // plausible dial circle is detected. The verifier surfaces this
+  // as a "we couldn't find a watch dial" UX path with a
+  // retake-only button (no manual fallback).
+  it("surfaces a no_dial_found rejection from a 200 response", async () => {
+    const { env } = makeFakeContainerEnv(
+      async () =>
+        new Response(
+          JSON.stringify({
+            version: "v0.2.0-dial-locator",
+            ok: false,
+            rejection: {
+              reason: "no_dial_found",
+              details: "No watch dial detected. Frame the dial centered and well-lit.",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+    const result = await readDial(new Uint8Array([0xff, 0xd8, 0xff]), env);
+
+    expect(result.kind).toBe("rejection");
+    if (result.kind === "rejection") {
+      expect(result.reason).toBe("no_dial_found");
+      expect(result.details).toContain("dial");
+    }
+  });
+
   it("classifies a 400 malformed_image response as kind: malformed_image", async () => {
     const { env } = makeFakeContainerEnv(
       async () =>
