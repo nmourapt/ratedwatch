@@ -17,11 +17,18 @@
 # `--platform=linux/amd64` is set on the FROM lines so an Apple-Silicon
 # `docker build` produces an amd64 image rather than silently
 # cross-compiling to arm64.
+#
+# Registry note: we pull `astral/uv` from Docker Hub rather than
+# `ghcr.io/astral-sh/uv` because some operator environments (corp
+# Docker Desktop policy enforcement) deny ghcr.io traffic. Docker Hub
+# hosts an identical mirror published by Astral with the same
+# `python3.12-bookworm-slim` tag — same digest contents, different
+# registry source.
 
 ARG PYTHON_VERSION=3.12-slim-bookworm
 
 # ---- Stage 1: install dependencies into a venv via uv ------------
-FROM --platform=linux/amd64 ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+FROM --platform=linux/amd64 astral/uv:python3.12-bookworm-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
