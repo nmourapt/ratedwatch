@@ -1,0 +1,44 @@
+{
+  "bambino_10_19_34.jpeg": {
+    "hh": 10,
+    "mm": 19,
+    "ss": 34,
+    "watch_make": "orient",
+    "watch_model": "bambino"
+  },
+  "greenseiko_07_56_06.jpeg": {
+    "hh": 7,
+    "mm": 56,
+    "ss": 6,
+    "watch_make": "seiko",
+    "watch_model": "unknown"
+  },
+  "sinn_10_38_29.jpeg": {
+    "hh": 10,
+    "mm": 38,
+    "ss": 29,
+    "watch_make": "sinn",
+    "watch_model": "556"
+  },
+  "snk803_01_07_20.jpeg": {
+    "hh": 1,
+    "mm": 7,
+    "ss": 20,
+    "watch_make": "seiko",
+    "watch_model": "snk803"
+  },
+  "snk803_10_15_40.jpeg": {
+    "hh": 10,
+    "mm": 15,
+    "ss": 40,
+    "watch_make": "seiko",
+    "watch_model": "snk803"
+  },
+  "waterbury_02_38_16.jpeg": {
+    "hh": 2,
+    "mm": 38,
+    "ss": 16,
+    "watch_make": "timex",
+    "watch_model": "waterbury"
+  }
+}

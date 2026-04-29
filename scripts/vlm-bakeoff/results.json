@@ -1,0 +1,1178 @@
+[
+  {
+    "fixture": "bambino_10_19_34.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:19:24",
+    "anchor_offset_seconds": -10,
+    "truth_hms": "10:19:34",
+    "raw_response": "10:21:33",
+    "parsed_hms": "10:21:33",
+    "error_seconds": 119,
+    "mmss_error_seconds": 119,
+    "latency_ms": 11692,
+    "tokens_in": 1287,
+    "tokens_out": 364,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0WWW2xIPkXYMsQKxHHQIPkWFugj",
+      "object": "chat.completion",
+      "created": 1777474192,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:21:33",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 364,
+        "total_tokens": 1651,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 350,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "bambino_10_19_34.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 2,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:19:37",
+    "anchor_offset_seconds": 3,
+    "truth_hms": "10:19:34",
+    "raw_response": "10:19:36",
+    "parsed_hms": "10:19:36",
+    "error_seconds": 2,
+    "mmss_error_seconds": 2,
+    "latency_ms": 14007,
+    "tokens_in": 1287,
+    "tokens_out": 423,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0WicMrDRZhQgKhAwATDdv1pUUTQ",
+      "object": "chat.completion",
+      "created": 1777474204,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:19:36",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 423,
+        "total_tokens": 1710,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 409,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "bambino_10_19_34.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 3,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:19:39",
+    "anchor_offset_seconds": 5,
+    "truth_hms": "10:19:34",
+    "raw_response": "10:19:34",
+    "parsed_hms": "10:19:34",
+    "error_seconds": 0,
+    "mmss_error_seconds": 0,
+    "latency_ms": 10431,
+    "tokens_in": 1287,
+    "tokens_out": 389,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0Ww0zJiLBYOsd45yyQl9Gr2fXEZ",
+      "object": "chat.completion",
+      "created": 1777474218,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:19:34",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 389,
+        "total_tokens": 1676,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 375,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "greenseiko_07_56_06.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "anchor",
+    "anchor_hms": "07:56:15",
+    "anchor_offset_seconds": 9,
+    "truth_hms": "07:56:06",
+    "raw_response": "07:56:10",
+    "parsed_hms": "07:56:10",
+    "error_seconds": 4,
+    "mmss_error_seconds": 4,
+    "latency_ms": 16492,
+    "tokens_in": 1287,
+    "tokens_out": 584,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0X6T12OXAjQL9xJ5dGjyrB0olDl",
+      "object": "chat.completion",
+      "created": 1777474228,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "07:56:10",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 584,
+        "total_tokens": 1871,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 570,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "greenseiko_07_56_06.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 2,
+    "anchor_mode": "anchor",
+    "anchor_hms": "07:56:09",
+    "anchor_offset_seconds": 3,
+    "truth_hms": "07:56:06",
+    "raw_response": "07:56:09",
+    "parsed_hms": "07:56:09",
+    "error_seconds": 3,
+    "mmss_error_seconds": 3,
+    "latency_ms": 13030,
+    "tokens_in": 1287,
+    "tokens_out": 560,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0XMSdFf8KIzlsgdQjbW76BIcUVf",
+      "object": "chat.completion",
+      "created": 1777474244,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "07:56:09",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 560,
+        "total_tokens": 1847,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 546,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "greenseiko_07_56_06.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 3,
+    "anchor_mode": "anchor",
+    "anchor_hms": "07:56:15",
+    "anchor_offset_seconds": 9,
+    "truth_hms": "07:56:06",
+    "raw_response": "07:56:10",
+    "parsed_hms": "07:56:10",
+    "error_seconds": 4,
+    "mmss_error_seconds": 4,
+    "latency_ms": 14588,
+    "tokens_in": 1287,
+    "tokens_out": 616,
+    "cost_usd": 0.00153195,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0XZIR1MKQ6Lh3dEqXraT4w4sZtm",
+      "object": "chat.completion",
+      "created": 1777474257,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "07:56:10",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 616,
+        "total_tokens": 1903,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 602,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "sinn_10_38_29.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:38:31",
+    "anchor_offset_seconds": 2,
+    "truth_hms": "10:38:29",
+    "raw_response": "10:38:29",
+    "parsed_hms": "10:38:29",
+    "error_seconds": 0,
+    "mmss_error_seconds": 0,
+    "latency_ms": 10833,
+    "tokens_in": 1287,
+    "tokens_out": 508,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0XoPpwpenOPiBLohURsRk34ONt9",
+      "object": "chat.completion",
+      "created": 1777474272,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:38:29",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 508,
+        "total_tokens": 1795,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 494,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "sinn_10_38_29.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 2,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:38:39",
+    "anchor_offset_seconds": 10,
+    "truth_hms": "10:38:29",
+    "raw_response": "10:36:30",
+    "parsed_hms": "10:36:30",
+    "error_seconds": -119,
+    "mmss_error_seconds": -119,
+    "latency_ms": 17235,
+    "tokens_in": 1287,
+    "tokens_out": 694,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0Xztkg5uwe6CdiDxS2B33PJw47i",
+      "object": "chat.completion",
+      "created": 1777474283,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:36:30",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 694,
+        "total_tokens": 1981,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 680,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "sinn_10_38_29.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 3,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:38:33",
+    "anchor_offset_seconds": 4,
+    "truth_hms": "10:38:29",
+    "raw_response": "10:38:28",
+    "parsed_hms": "10:38:28",
+    "error_seconds": -1,
+    "mmss_error_seconds": -1,
+    "latency_ms": 22906,
+    "tokens_in": 1287,
+    "tokens_out": 593,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0YGNFVfBFSI8iByifNmBc0DESSm",
+      "object": "chat.completion",
+      "created": 1777474300,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:38:28",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 593,
+        "total_tokens": 1880,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 579,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_01_07_20.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "anchor",
+    "anchor_hms": "01:07:20",
+    "anchor_offset_seconds": 0,
+    "truth_hms": "01:07:20",
+    "raw_response": "01:07:20",
+    "parsed_hms": "01:07:20",
+    "error_seconds": 0,
+    "mmss_error_seconds": 0,
+    "latency_ms": 14964,
+    "tokens_in": 1287,
+    "tokens_out": 254,
+    "cost_usd": 0.0070385000000000005,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0Yjl7oztgji2QHG7ASEEDlZa8Xz",
+      "object": "chat.completion",
+      "created": 1777474329,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "01:07:20",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 254,
+        "total_tokens": 1541,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 240,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_01_07_20.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 2,
+    "anchor_mode": "anchor",
+    "anchor_hms": "01:07:22",
+    "anchor_offset_seconds": 2,
+    "truth_hms": "01:07:20",
+    "raw_response": "01:07:21",
+    "parsed_hms": "01:07:21",
+    "error_seconds": 1,
+    "mmss_error_seconds": 1,
+    "latency_ms": 22531,
+    "tokens_in": 1287,
+    "tokens_out": 472,
+    "cost_usd": 0.0070385000000000005,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0Z3ITgnAYD90I9WP3pflh8kXTM1",
+      "object": "chat.completion",
+      "created": 1777474349,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "01:07:21",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 472,
+        "total_tokens": 1759,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 458,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_01_07_20.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 3,
+    "anchor_mode": "anchor",
+    "anchor_hms": "01:07:21",
+    "anchor_offset_seconds": 1,
+    "truth_hms": "01:07:20",
+    "raw_response": "01:08:20",
+    "parsed_hms": "01:08:20",
+    "error_seconds": 60,
+    "mmss_error_seconds": 60,
+    "latency_ms": 7000,
+    "tokens_in": 1287,
+    "tokens_out": 302,
+    "cost_usd": 0.0070385000000000005,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0ZF4kCJW3v1vhhYEzCLVNfqFjF0",
+      "object": "chat.completion",
+      "created": 1777474361,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "01:08:20",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 302,
+        "total_tokens": 1589,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 288,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_10_15_40.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:15:43",
+    "anchor_offset_seconds": 3,
+    "truth_hms": "10:15:40",
+    "raw_response": "10:15:40",
+    "parsed_hms": "10:15:40",
+    "error_seconds": 0,
+    "mmss_error_seconds": 0,
+    "latency_ms": 14251,
+    "tokens_in": 1287,
+    "tokens_out": 537,
+    "cost_usd": 0.00571375,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0ZM3NNbDflc0PeGaWjRPvCeszIK",
+      "object": "chat.completion",
+      "created": 1777474368,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:15:40",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 537,
+        "total_tokens": 1824,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 523,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_10_15_40.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 2,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:15:42",
+    "anchor_offset_seconds": 2,
+    "truth_hms": "10:15:40",
+    "raw_response": "10:15:42",
+    "parsed_hms": "10:15:42",
+    "error_seconds": 2,
+    "mmss_error_seconds": 2,
+    "latency_ms": 9914,
+    "tokens_in": 1287,
+    "tokens_out": 413,
+    "cost_usd": 0.00571375,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0Zbnrp5dl3NiSsTx6bLsb0IXwx6",
+      "object": "chat.completion",
+      "created": 1777474383,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:15:42",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 413,
+        "total_tokens": 1700,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 399,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_10_15_40.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 3,
+    "anchor_mode": "anchor",
+    "anchor_hms": "10:15:46",
+    "anchor_offset_seconds": 6,
+    "truth_hms": "10:15:40",
+    "raw_response": "10:15:40",
+    "parsed_hms": "10:15:40",
+    "error_seconds": 0,
+    "mmss_error_seconds": 0,
+    "latency_ms": 15903,
+    "tokens_in": 1287,
+    "tokens_out": 548,
+    "cost_usd": 0.00571375,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0Zk44k3Vm2FV54xgwRXOF0YJ2gQ",
+      "object": "chat.completion",
+      "created": 1777474392,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:15:40",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 548,
+        "total_tokens": 1835,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 534,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "waterbury_02_38_16.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "anchor",
+    "anchor_hms": "02:38:14",
+    "anchor_offset_seconds": -2,
+    "truth_hms": "02:38:16",
+    "raw_response": "",
+    "parsed_hms": null,
+    "error_seconds": null,
+    "mmss_error_seconds": null,
+    "latency_ms": 13112,
+    "tokens_in": 1860,
+    "tokens_out": 8,
+    "cost_usd": 0.003367,
+    "success": false,
+    "http_status": 502,
+    "error_message": "<!DOCTYPE html>\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 7]>    <html class=\"no-js ie7 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 8]>    <html class=\"no-",
+    "full_response_json": null
+  },
+  {
+    "fixture": "waterbury_02_38_16.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 2,
+    "anchor_mode": "anchor",
+    "anchor_hms": "02:38:14",
+    "anchor_offset_seconds": -2,
+    "truth_hms": "02:38:16",
+    "raw_response": "02:38:14",
+    "parsed_hms": "02:38:14",
+    "error_seconds": -2,
+    "mmss_error_seconds": -2,
+    "latency_ms": 19593,
+    "tokens_in": 1287,
+    "tokens_out": 586,
+    "cost_usd": 0.003367,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0aJdzAjL6CiZ8fLCxKv20ZRIbFx",
+      "object": "chat.completion",
+      "created": 1777474427,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "02:38:14",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 586,
+        "total_tokens": 1873,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 572,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "waterbury_02_38_16.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 3,
+    "anchor_mode": "anchor",
+    "anchor_hms": "02:38:14",
+    "anchor_offset_seconds": -2,
+    "truth_hms": "02:38:16",
+    "raw_response": "02:38:45",
+    "parsed_hms": "02:38:45",
+    "error_seconds": 29,
+    "mmss_error_seconds": 29,
+    "latency_ms": 13338,
+    "tokens_in": 1287,
+    "tokens_out": 526,
+    "cost_usd": 0.0009478,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0aZohX0aMsTXjKLkPIaQljWF4Sk",
+      "object": "chat.completion",
+      "created": 1777474443,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "02:38:45",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1287,
+        "completion_tokens": 526,
+        "total_tokens": 1813,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 512,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "bambino_10_19_34.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "robustness_anchor",
+    "anchor_hms": "10:18:04",
+    "anchor_offset_seconds": -90,
+    "truth_hms": "10:19:34",
+    "raw_response": "10:18:34",
+    "parsed_hms": "10:18:34",
+    "error_seconds": -60,
+    "mmss_error_seconds": -60,
+    "latency_ms": 22858,
+    "tokens_in": 4037,
+    "tokens_out": 533,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0avth7d8ijDGXts74Y1xNdEFbMg",
+      "object": "chat.completion",
+      "created": 1777474465,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:18:34",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 4037,
+        "completion_tokens": 533,
+        "total_tokens": 4570,
+        "prompt_tokens_details": {
+          "cached_tokens": 3584,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 519,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "bambino_10_19_34.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "robustness_anchor",
+    "anchor_hms": "10:21:04",
+    "anchor_offset_seconds": 90,
+    "truth_hms": "10:19:34",
+    "raw_response": "10:21:31",
+    "parsed_hms": "10:21:31",
+    "error_seconds": 117,
+    "mmss_error_seconds": 117,
+    "latency_ms": 21055,
+    "tokens_in": 4037,
+    "tokens_out": 643,
+    "cost_usd": 0.00717675,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0bD8HjOEtLIDWUdFYBUFSXlOmbZ",
+      "object": "chat.completion",
+      "created": 1777474483,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:21:31",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 4037,
+        "completion_tokens": 643,
+        "total_tokens": 4680,
+        "prompt_tokens_details": {
+          "cached_tokens": 3584,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 629,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_10_15_40.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "robustness_anchor",
+    "anchor_hms": "10:14:10",
+    "anchor_offset_seconds": -90,
+    "truth_hms": "10:15:40",
+    "raw_response": "10:15:40",
+    "parsed_hms": "10:15:40",
+    "error_seconds": 0,
+    "mmss_error_seconds": 0,
+    "latency_ms": 13341,
+    "tokens_in": 3201,
+    "tokens_out": 451,
+    "cost_usd": 0.00571375,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0bWkhDj3TQshCemaeAJYRUxYukH",
+      "object": "chat.completion",
+      "created": 1777474502,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:15:40",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 3201,
+        "completion_tokens": 451,
+        "total_tokens": 3652,
+        "prompt_tokens_details": {
+          "cached_tokens": 2560,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 437,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  },
+  {
+    "fixture": "snk803_10_15_40.jpeg",
+    "model": "openai/gpt-5.2",
+    "run": 1,
+    "anchor_mode": "robustness_anchor",
+    "anchor_hms": "10:17:10",
+    "anchor_offset_seconds": 90,
+    "truth_hms": "10:15:40",
+    "raw_response": "10:15:40",
+    "parsed_hms": "10:15:40",
+    "error_seconds": 0,
+    "mmss_error_seconds": 0,
+    "latency_ms": 17279,
+    "tokens_in": 3201,
+    "tokens_out": 511,
+    "cost_usd": 0.00571375,
+    "success": true,
+    "http_status": 200,
+    "error_message": null,
+    "full_response_json": {
+      "id": "chatcmpl-Da0bjdQko0M4bdfV3LoQJST7IMBVH",
+      "object": "chat.completion",
+      "created": 1777474515,
+      "model": "gpt-5.2-2025-12-11",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "10:15:40",
+            "refusal": null,
+            "annotations": []
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 3201,
+        "completion_tokens": 511,
+        "total_tokens": 3712,
+        "prompt_tokens_details": {
+          "cached_tokens": 2560,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 497,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": null
+    }
+  }
+]
