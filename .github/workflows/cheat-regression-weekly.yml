@@ -1,0 +1,63 @@
+name: Cheat-detection regression (weekly)
+
+# Weekly model-drift canary for the VLM dial-reader. Slice 8 of PRD #99
+# (issue #107).
+#
+# The PR-time `cheat-regression` job in ci.yml catches anchor-echo
+# regressions that land via a code change. THIS job catches the orthogonal
+# failure mode: the model itself drifts (silent provider-side update,
+# safety-policy change, etc.) without any code change. Running once a
+# week against `main` keeps that risk surfaced before someone tries to
+# flip the verified_reading_cv flag back on.
+#
+# Cost: ~$0.02 per run × 4 weeks ≈ $0.08/month. Trivial.
+#
+# Schedule: Monday 08:00 UTC — early-week, post-weekend, when an alert
+# is most actionable. Also exposes a `workflow_dispatch` trigger so an
+# operator can run the canary on demand.
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+# Run against `main` only. We deliberately don't fan out to other refs;
+# the per-PR job in ci.yml covers branch-level diffs.
+concurrency:
+  group: cheat-regression-weekly
+  cancel-in-progress: false
+
+jobs:
+  cheat-regression:
+    name: Cheat-detection regression
+    # `environment: preview` unlocks the CLOUDFLARE_API_TOKEN +
+    # CLOUDFLARE_ACCOUNT_ID secrets which are scoped to that environment
+    # (the only env-scoped secrets in this repo). Without this the test
+    # silently skips (see comment in ci.yml::cheat-regression).
+    environment: preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same test, same gating env vars as the per-PR job in ci.yml. If
+      # this fails we want a noisy GitHub notification, so we don't
+      # `continue-on-error`.
+      - name: Run cheat-detection regression
+        run: npx vitest run --project=node src/domain/dial-reader-vlm/__tests__/cheat-regression.node.test.ts
+        env:
+          CHEAT_REGRESSION_AI_GATEWAY: dial-reader-bakeoff
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
