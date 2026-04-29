@@ -24,30 +24,14 @@
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import type { DB } from "@/db";
-import { maybeIngest } from "@/domain/corpus";
-import type { DialReaderEnv } from "@/domain/dial-reader";
 import {
   computeSessionStats,
   type Reading,
   type SessionStats,
 } from "@/domain/drift-calc";
-import { isEnabled, type FeatureFlagsEnv } from "@/domain/feature-flags";
-import { resolveReferenceTimestamp } from "@/domain/reading-verifier/reference-timestamp";
-import {
-  checkVerifiedReadingLimit,
-  createRateLimitDb,
-  DAILY_WINDOW_MS,
-  type RateLimitEnv,
-} from "@/domain/rate-limit/verified-reading";
-import {
-  computeVerifiedDeviation,
-  verifyReading,
-  type VerifyReadingErrorCode,
-} from "@/domain/reading-verifier/verifier";
 import { assertWatchOwnership } from "@/domain/watches/ownership";
 import { logEvent } from "@/observability/events";
 import {
-  createManualWithPhotoSchema,
   createReadingSchema,
   createTapReadingSchema,
   formatReadingErrors,
@@ -57,49 +41,15 @@ import { getAuth, type AuthEnv } from "@/server/auth";
 import { purgeLeaderboardUrls } from "@/server/lib/purge-cache";
 import { requireAuth, type RequireAuthVariables } from "@/server/middleware/require-auth";
 
-type Bindings = AuthEnv &
-  DialReaderEnv &
-  RateLimitEnv & {
-    DB: D1Database;
-    IMAGES: R2Bucket;
-    // Slice #81 (PRD #73): training-corpus bucket. The
-    // verified-reading route writes here via
-    // `corpus.maybeIngest`. Optional in the type so legacy tests
-    // / callers without the binding still compile; production
-    // wrangler.jsonc always has it.
-    R2_CORPUS?: R2Bucket;
-    FLAGS: KVNamespace;
-    // Analytics Engine (slice #19). Optional because logEvent
-    // defaults to a silent no-op when unbound.
-    ANALYTICS?: AnalyticsEngineDataset;
-    [key: string]: unknown;
-  };
-
-// Feature flag gating the verified-reading endpoint. Default-off in
-// prod; the operator enables it per-user (or globally) via
-// `npm run flags:set`. The flag was renamed in slice #11 of PRD #73
-// from the earlier `ai_reading_v2` (a name from the AI-runner era)
-// to `verified_reading_cv` because there is no AI involved any more.
-// A backward-compat fallback that read the legacy key during the
-// rollover window was removed in the post-cutover cleanup PR; the
-// stale `ai_reading_v2` KV entry was deleted at the same time.
-//
-// `verified_reading_cv = mode:never` means the verified-reading
-// endpoint is disabled — the route returns 503 and clients fall
-// back to the manual-entry flow. `mode:always` (or `mode:users` /
-// `mode:rollout` matching the caller) enables the CV pipeline.
-const FLAG_VERIFIED_READING_CV = "verified_reading_cv";
-
-async function isVerifiedReadingEnabled(
-  userId: string,
-  env: FeatureFlagsEnv,
-): Promise<boolean> {
-  return isEnabled(FLAG_VERIFIED_READING_CV, { userId }, env);
-}
-// 10 MB cap on the uploaded image. Workers already enforce a body-size
-// limit but the cap here is the product contract — anything larger
-// gets a clean 413 rather than a generic workerd abort.
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+type Bindings = AuthEnv & {
+  DB: D1Database;
+  IMAGES: R2Bucket;
+  FLAGS: KVNamespace;
+  // Analytics Engine (slice #19). Optional because logEvent
+  // defaults to a silent no-op when unbound.
+  ANALYTICS?: AnalyticsEngineDataset;
+  [key: string]: unknown;
+};
 
 // ---- Shared mappers ------------------------------------------------
 
@@ -412,492 +362,76 @@ readingsByWatchRoute.post("/tap", async (c) => {
 /**
  * POST /verified — log a verified (camera-captured, CV-read) reading.
  *
- * Multipart body:
- *   * `image` (file, required, max 10 MB, image/jpeg)
- *   * `is_baseline` (string "true"/"false", optional, default false)
+ * **Currently a 503 stub.** The Python dial-reader container that used
+ * to back this route was decommissioned in slice #1 of PRD #99 (issue
+ * #100). The new VLM-backed Worker-side pipeline lands in slice #4 of
+ * PRD #99 (issue #103); until then this route returns the same
+ * `error_code: "verified_readings_disabled"` shape the feature-flag
+ * gate used to emit, so the SPA's existing `verifiedReadingErrors.ts`
+ * mapper renders a friendly "Verified readings aren't enabled for
+ * your account yet" alert.
  *
- * The dial reader is the CV container (`@/domain/dial-reader`).
- * Slice #11 of PRD #73 deleted the legacy Workers AI runner; this
- * route now has a single backend.
- *
- * The `verified_reading_cv` feature flag gates whether
- * verified-reading is available at all. When the flag is OFF we
- * return 503 so the SPA can fall back to the manual-entry flow.
- *
- * On success: 201 with the inserted reading.
- * On rejection: 422 with `{ error_code, ux_hint }`.
- * On a transport-layer failure to the CV container: 502 (the
- *   container ran but did not return a CV decision; retryable).
+ * The same stub is applied to `/manual_with_photo` (the photo-bearing
+ * fallback flow) — both are part of the same dial-reader subsystem
+ * being rebuilt.
  */
 readingsByWatchRoute.post("/verified", async (c) => {
-  // Capture the wall-clock at handler entry, BEFORE any await. This
-  // is the fallback reference timestamp the verifier uses when EXIF
-  // is missing and the bounds anchor when EXIF is present. Capturing
-  // here — rather than inside `verifyReading` after `formData()` has
-  // resolved — sidesteps the upload-latency phantom drift that
-  // motivated this slice: a 2 MB photo on cellular bakes 2-8 s of
-  // body-parse delay into a `Date.now()` placed any later in the
-  // handler.
-  const serverArrivalMs = Date.now();
-
   const user = c.get("user");
   const watchId = getWatchIdParam(c);
   if (!watchId) return c.json({ error: "not_found" }, 404);
 
-  // Event: attempt counter. Fires regardless of flag state / outcome
-  // so funnel analysis can see how many users are bouncing off the
-  // feature-flagged gate vs the CV step.
+  // Keep emitting the attempt event so funnel analytics survive the
+  // rebuild. The decline event below uses the same code the SPA's
+  // verifiedReadingErrors.ts mapper already understands, so the UX
+  // copy ("Verified readings aren't enabled for your account yet")
+  // stays correct without any client changes.
   await logEvent("verified_reading_attempted", { userId: user.id, watchId }, c.env);
-
-  // Feature flag gate. When verified-reading is disabled we surface
-  // a 503 — the SPA's slice-#80 error mapper handles this as
-  // "verified-reading temporarily unavailable; please log
-  // manually". Reads the new key first, falls back to the legacy
-  // key during the slice-#11 rollover window.
-  const verifiedReadingEnabled = await isVerifiedReadingEnabled(user.id, c.env);
-  if (!verifiedReadingEnabled) {
-    // The SPA's slice-#80 error mapper keys on `error_code:
-    // "verified_readings_disabled"` (plural — see
-    // src/app/watches/verifiedReadingErrors.ts) so it can render
-    // "Verified readings aren't enabled for your account yet"
-    // without leaking raw status codes.
-    return c.json(
-      {
-        error_code: "verified_readings_disabled",
-        ux_hint:
-          "Verified-reading is temporarily unavailable. Please log this reading manually.",
-      },
-      503,
-    );
-  }
-
-  const db = createDb(c.env);
-  const ownership = await assertWatchOwnership(db, watchId, user.id);
-  if (ownership.status === "not_found") {
-    return c.json({ error: "not_found" }, 404);
-  }
-  if (ownership.status === "forbidden") {
-    return c.json({ error: "forbidden" }, 403);
-  }
-
-  // Rate-limit gate (slice #82). Fires AFTER ownership checks (we
-  // don't want to leak quota state to callers who don't even own
-  // the resource) but BEFORE the multipart body parse so a denied
-  // request doesn't burn upload bandwidth. Pure manual readings
-  // (no photo) skip this — they go through `POST /readings`, not
-  // here.
-  const limitDecision = await checkVerifiedReadingLimit({
-    env: c.env,
-    db: createRateLimitDb(db),
-    userId: user.id,
-  });
-  if (!limitDecision.allowed) {
-    await logEvent(
-      "verified_reading_rate_limited",
-      { userId: user.id, watchId, reason: limitDecision.reason },
-      c.env,
-    );
-    return rateLimitResponse(c);
-  }
-
-  let form: FormData;
-  try {
-    form = await c.req.formData();
-  } catch {
-    return c.json({ error: "invalid_multipart" }, 400);
-  }
-
-  const image = form.get("image");
-  if (!(image instanceof File) || image.size === 0) {
-    return c.json({ error: "image_required" }, 400);
-  }
-  if (image.size > MAX_IMAGE_BYTES) {
-    return c.json({ error: "image_too_large", max_bytes: MAX_IMAGE_BYTES }, 413);
-  }
-
-  const isBaselineRaw = form.get("is_baseline");
-  const isBaseline =
-    typeof isBaselineRaw === "string" && isBaselineRaw.toLowerCase() === "true";
-
-  const imageBuffer = await image.arrayBuffer();
-  const imageContentType =
-    image.type && image.type.length > 0 ? image.type : "image/jpeg";
-
-  const result = await verifyReading({
-    watchId,
-    userId: user.id,
-    imageBuffer,
-    isBaseline,
-    serverArrivalMs,
-    env: c.env,
-  });
-
-  // Slice #81 (PRD #73): corpus collection. Look up the caller's
-  // `consent_corpus` flag once and queue a fire-and-forget ingest
-  // attempt that runs only when the gate (consent + low-margin
-  // confidence OR rejection) is satisfied. Wrapping the entire
-  // sub-pipeline in `waitUntil` so neither the DB lookup nor the
-  // R2 writes block the user-facing response. The gate logic
-  // itself lives in `corpus.maybeIngest` — this layer only feeds
-  // the right inputs in.
-  if (c.env.R2_CORPUS) {
-    const corpusEnv = { R2_CORPUS: c.env.R2_CORPUS };
-    const photoBytes = new Uint8Array(imageBuffer);
-    const verified = result.ok ? result.reading.verified : false;
-    const confidence = result.ok
-      ? result.reading.dial_reader_confidence
-      : (result.dial_reader_confidence ?? null);
-    const dialReaderVersion = result.ok
-      ? result.reading.dial_reader_version
-      : (result.dial_reader_version ?? null);
-    const rejectionReason = result.ok ? null : result.error;
-    const readingId = result.ok ? result.reading.id : crypto.randomUUID();
-
-    const work = (async () => {
-      try {
-        const db = createDb(c.env);
-        const userRow = await db
-          .selectFrom("user")
-          .select("consent_corpus")
-          .where("id", "=", user.id)
-          .executeTakeFirst();
-        const consentCorpus = (userRow?.consent_corpus ?? 0) === 1;
-        await maybeIngest({
-          readingId,
-          photoBytes,
-          imageContentType,
-          consentCorpus,
-          verified,
-          confidence,
-          rejectionReason,
-          dialReaderVersion,
-          env: corpusEnv,
-        });
-      } catch (err) {
-        // Swallow — corpus collection is opportunistic and must
-        // never affect the user-facing response. Logged so an
-        // operator tail can spot systemic failures.
-        console.warn("verified-reading: corpus ingest queue failed:", err);
-      }
-    })();
-    c.executionCtx.waitUntil(work);
-  }
-
-  if (!result.ok) {
-    await logEvent(
-      "verified_reading_failed",
-      { userId: user.id, watchId, error: result.error },
-      c.env,
-    );
-    return errorResponse(c, result.error, result.raw_response);
-  }
-
-  // Map the verifier's row shape into the existing wire format.
-  const body: ReadingResponse = {
-    id: result.reading.id,
-    watch_id: result.reading.watch_id,
-    user_id: result.reading.user_id,
-    reference_timestamp: result.reading.reference_timestamp,
-    deviation_seconds: result.reading.deviation_seconds,
-    is_baseline: result.reading.is_baseline,
-    verified: result.reading.verified,
-    notes: result.reading.notes,
-    created_at: result.reading.created_at,
-  };
   await logEvent(
-    "verified_reading_succeeded",
-    { userId: user.id, watchId, is_baseline: result.reading.is_baseline },
+    "verified_reading_failed",
+    { userId: user.id, watchId, error: "verified_readings_disabled" },
     c.env,
   );
-  return c.json(body, 201);
+
+  return c.json(
+    {
+      error_code: "verified_readings_disabled",
+      ux_hint:
+        "Verified-reading is being rebuilt — please log this reading manually. See PRD #99.",
+    },
+    503,
+  );
 });
 
 /**
- * POST /manual_with_photo — fallback flow for slice #80 (PRD #73
- * User Story #10).
+ * POST /manual_with_photo — fallback flow for slice #80 (PRD #73).
  *
- * The SPA calls this when the dial-reader rejected the photo and
- * the user clicked "Enter manually". The user types HH:MM:SS, and
- * the SPA re-uploads the SAME photo it already captured alongside
- * the typed time. We persist a manual reading row (verified=0,
- * dial_reader_confidence=NULL, dial_reader_version=NULL) plus the
- * photo at the same R2 path the verified-reading flow uses
- * (`readings/{id}/photo.{ext}`), so the operator can later audit
- * "what did this watch's dial actually look like?" against the
- * user's typed deviation.
- *
- * Multipart body:
- *   * `image` (file, required, max 10 MB)
- *   * `hh`, `mm`, `ss` (string-encoded integers, required)
- *   * `is_baseline` (string "true"/"false", optional, default false)
- *   * `notes` (string, optional)
- *
- * Reference timestamp resolution mirrors the verified-reading flow
- * exactly — EXIF DateTimeOriginal preferred (bounded), server
- * arrival fallback when EXIF is missing — so a manual_with_photo
- * row is comparable on the timeline to a verified one.
- *
- * Slice #82 wires this endpoint to the same rate-limit gate as
- * `/verified` because both consume the photo-upload resource. A
- * user who hits the cap on `/verified` cannot bypass it by
- * switching to `/manual_with_photo` — the limiter keys on userId
- * and the D1 row-count counts every photo-bearing reading, not
- * just the verified ones.
+ * **Currently a 503 stub.** Same rebuild as `/verified`: the Python
+ * dial-reader container was decommissioned in slice #1 of PRD #99
+ * (issue #100). The reference-timestamp + deviation pipeline this
+ * route shared with `/verified` is unwired pending slice #4 of PRD
+ * #99. Returns the same `verified_readings_disabled` shape so the
+ * SPA's existing 503 handling renders cleanly.
  */
 readingsByWatchRoute.post("/manual_with_photo", async (c) => {
-  // Same upload-latency-immune capture as /verified — see that route's
-  // comment for the rationale.
-  const serverArrivalMs = Date.now();
   const user = c.get("user");
   const watchId = getWatchIdParam(c);
   if (!watchId) return c.json({ error: "not_found" }, 404);
-
-  const db = createDb(c.env);
-  const ownership = await assertWatchOwnership(db, watchId, user.id);
-  if (ownership.status === "not_found") {
-    return c.json({ error: "not_found" }, 404);
-  }
-  if (ownership.status === "forbidden") {
-    return c.json({ error: "forbidden" }, 403);
-  }
-
-  // Rate-limit gate. Same shared quota as /verified — see that
-  // route's comment for the layer breakdown.
-  const limitDecision = await checkVerifiedReadingLimit({
-    env: c.env,
-    db: createRateLimitDb(db),
-    userId: user.id,
-  });
-  if (!limitDecision.allowed) {
-    await logEvent(
-      "manual_with_photo_rate_limited",
-      { userId: user.id, watchId, reason: limitDecision.reason },
-      c.env,
-    );
-    return rateLimitResponse(c);
-  }
-
-  let form: FormData;
-  try {
-    form = await c.req.formData();
-  } catch {
-    return c.json({ error: "invalid_multipart" }, 400);
-  }
-
-  const image = form.get("image");
-  if (!(image instanceof File) || image.size === 0) {
-    return c.json({ error: "image_required" }, 400);
-  }
-  if (image.size > MAX_IMAGE_BYTES) {
-    return c.json({ error: "image_too_large", max_bytes: MAX_IMAGE_BYTES }, 413);
-  }
-
-  // Multipart fields arrive as strings; coerce to numbers before
-  // Zod validation so the schema's `int` constraint catches non-
-  // integer input rather than the type check rejecting raw strings.
-  const hh = Number(form.get("hh"));
-  const mm = Number(form.get("mm"));
-  const ss = Number(form.get("ss"));
-  const isBaselineRaw = form.get("is_baseline");
-  const isBaseline =
-    typeof isBaselineRaw === "string" && isBaselineRaw.toLowerCase() === "true";
-  const notesRaw = form.get("notes");
-  const notes = typeof notesRaw === "string" ? notesRaw : undefined;
-
-  const parsed = createManualWithPhotoSchema.safeParse({
-    hh,
-    mm,
-    ss,
-    is_baseline: isBaseline,
-    ...(notes !== undefined ? { notes } : {}),
-  });
-  if (!parsed.success) {
-    return c.json(
-      { error: "invalid_input", fieldErrors: formatReadingErrors(parsed.error) },
-      422,
-    );
-  }
-  const input = parsed.data;
-
-  // Resolve reference timestamp the same way the verifier does.
-  const imageBuffer = await image.arrayBuffer();
-  const refResult = await resolveReferenceTimestamp(imageBuffer, serverArrivalMs);
-  if (!refResult.ok) {
-    return c.json(
-      { error: "exif_clock_skew", raw_response: `delta=${refResult.deltaMs}ms` },
-      422,
-    );
-  }
-  const referenceTimestamp = refResult.referenceTimestamp;
-
-  // Compute deviation MM:SS-only against the reference clock,
-  // wrapped into [-1800, +1800]. Uses the same helper as the
-  // verifier so a manual_with_photo and a verified row are
-  // commensurable on the timeline.
-  let deviation = computeVerifiedDeviation(
-    { minutes: input.mm, seconds: input.ss },
-    referenceTimestamp,
-  );
-  if (input.is_baseline) {
-    deviation = 0;
-  }
-
-  const id = crypto.randomUUID();
-  await db
-    .insertInto("readings")
-    .values({
-      id,
-      watch_id: watchId,
-      user_id: user.id,
-      reference_timestamp: referenceTimestamp,
-      deviation_seconds: deviation,
-      is_baseline: input.is_baseline ? 1 : 0,
-      // verified=0 by default. Manual_with_photo is NOT verified —
-      // the typed time is still user-authored. We just keep the
-      // photo for evidence.
-      notes: input.notes ?? null,
-    })
-    .execute();
-
-  // Best-effort photo upload at the same R2 path the verified flow
-  // uses. A failure here doesn't roll back the row — see the same
-  // pattern in verifier.ts.
-  const photoKey = `readings/${id}/photo.jpg`;
-  let storedPhotoKey: string | null = null;
-  try {
-    await c.env.IMAGES.put(photoKey, imageBuffer, {
-      httpMetadata: { contentType: image.type || "image/jpeg" },
-    });
-    storedPhotoKey = photoKey;
-    await db
-      .updateTable("readings")
-      .set({ photo_r2_key: photoKey })
-      .where("id", "=", id)
-      .execute();
-  } catch (err) {
-    console.warn(
-      `manual_with_photo: R2 upload failed for reading ${id}, continuing:`,
-      err,
-    );
-  }
-
-  const created = (await db
-    .selectFrom("readings")
-    .selectAll()
-    .where("id", "=", id)
-    .executeTakeFirstOrThrow()) as DbReadingRow & {
-    photo_r2_key: string | null;
-  };
-
-  // Reuse the existing toResponse mapper so the wire shape matches
-  // the rest of the readings surface — clients can render this row
-  // through the same React component as a tap or manual reading.
-  const body = toResponse(created);
-  // Ensure the response surfaces storedPhotoKey even when the
-  // SELECT raced the UPDATE (it shouldn't, but defensive).
-  void storedPhotoKey;
-
-  // Cache purge — same set of public URLs depends on this row.
-  const username = await lookupUsername(db, user.id);
-  await purgeLeaderboardUrls({
-    requestUrl: new URL(c.req.url),
-    movementId: ownership.watch.movement_id,
-    username,
-    watchId,
-  });
 
   await logEvent(
     "manual_with_photo_submitted",
-    { userId: user.id, watchId, is_baseline: input.is_baseline },
+    { userId: user.id, watchId, decommissioned: true },
     c.env,
   );
 
-  return c.json(body, 201);
-});
-
-// ---- Error-code → HTTP response mapping ---------------------------
-//
-// PRD #73 User Stories #7-#11 spell out the SPA-facing UX for each
-// rejection class. Keeping the wording in one place here means the
-// SPA (slice #80) can switch on the `error_code` without ever
-// having to read the human-facing string — but the string IS the
-// fallback for any client that hasn't shipped the dedicated UX yet.
-//
-// Hint copy is intentionally short and action-oriented. Verbatim
-// from the PRD where possible so QA can grep the SPA / API for
-// drift in a single PR review.
-//
-// HTTP status choices:
-//   * 422 for any "your photo can't be processed" rejection — the
-//     request was well-formed, the verifier had a chance to look
-//     at it, but the content fails business validation. This is
-//     the same 422 the AI path uses today.
-//   * 502 for `dial_reader_transport_error` — the container did
-//     not have a chance to make a CV decision (5xx, network) so
-//     retrying might succeed. 502 is the conventional "upstream
-//     gave up" signal.
-const DIAL_READER_UX_HINTS: Record<string, string> = {
-  dial_reader_unsupported_dial:
-    "this watch type isn't supported by verified-reading yet — please log manually",
-  dial_reader_low_confidence:
-    "we couldn't read this dial confidently — please try a sharper photo, or log manually",
-  dial_reader_no_dial_found:
-    "we couldn't find a watch dial in this photo. Make sure the dial is centered and well-lit",
-  dial_reader_malformed_image:
-    "we couldn't decode this image. Please try again with a JPEG, PNG, WebP, or HEIC photo",
-  dial_reader_transport_error:
-    "the dial reader is temporarily unavailable. Please try again in a moment",
-};
-
-/**
- * Structured 429 body shared by `/verified` and `/manual_with_photo`
- * (slice #82, PRD #73 user story #25). The SPA's slice-#80 error
- * mapper renders any 429 as "you've hit your daily verified-reading
- * cap, please try again tomorrow" — see
- * src/app/watches/verifiedReadingErrors.ts.
- *
- * Fields:
- *   * `error_code: "rate_limit"` — the SPA's discriminator. Stable
- *     across the burst-gate vs daily-cap distinction; the SPA does
- *     not need to differentiate. Future tooling may want to look at
- *     the per-event `reason` field in observability events.
- *   * `retry_after_seconds: 86400` — pessimistic. The actual reset
- *     for the daily cap is whenever the oldest of the user's last
- *     50 photo-bearing readings ages out, which is bounded by 24h.
- *   * `ux_hint` — fallback text for clients that haven't shipped
- *     the structured handler yet.
- */
-function rateLimitResponse(c: {
-  json: (body: unknown, status: number) => Response;
-}): Response {
   return c.json(
     {
-      error_code: "rate_limit",
-      retry_after_seconds: Math.floor(DAILY_WINDOW_MS / 1000),
-      ux_hint: "You've hit your daily verified-reading cap. Try again tomorrow.",
+      error_code: "verified_readings_disabled",
+      ux_hint:
+        "Verified-reading is being rebuilt — please log this reading manually without a photo. See PRD #99.",
     },
-    429,
+    503,
   );
-}
-
-function errorResponse(
-  c: {
-    json: (body: unknown, status: number) => Response;
-  },
-  code: VerifyReadingErrorCode,
-  rawResponse: string | undefined,
-): Response {
-  // EXIF clock-skew keeps the legacy `{ error, raw_response }`
-  // wire shape so the SPA's existing handling stays valid; the
-  // structured `error_code` + `ux_hint` shape is reserved for the
-  // CV pipeline rejections (per the slice #75 issue body).
-  if (code === "exif_clock_skew") {
-    return c.json({ error: code, raw_response: rawResponse }, 422);
-  }
-  const hint = DIAL_READER_UX_HINTS[code] ?? "verified reading rejected";
-  const status = code === "dial_reader_transport_error" ? 502 : 422;
-  return c.json({ error_code: code, ux_hint: hint }, status);
-}
+});
 
 // ---- /api/v1/readings/:id -----------------------------------------
 

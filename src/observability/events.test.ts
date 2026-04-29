@@ -69,12 +69,11 @@ describe("logEvent", () => {
       "verified_reading_exif_clock_skew",
       // Slice #80 manual_with_photo fallback funnel.
       "manual_with_photo_submitted",
-      // Slice #83 dial-reader telemetry quintet.
-      "dial_reader_attempt",
-      "dial_reader_success",
-      "dial_reader_rejection",
-      "dial_reader_error",
-      "dial_reader_cold_start",
+      // Note: the slice #83 dial-reader telemetry quintet
+      // (dial_reader_attempt / _success / _rejection / _error /
+      // _cold_start) was retired in slice #1 of PRD #99 alongside
+      // the Python container. Slice #4 will reintroduce VLM-pipeline
+      // event kinds.
       "movement_suggested",
       "chrono24_click",
       "leaderboard_filter_changed",
