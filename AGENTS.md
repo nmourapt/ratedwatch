@@ -68,6 +68,72 @@ Full product spec: see the `product-requirements` issue labelled `prd` on GitHub
 - Husky + `lint-staged` wired from day one.
 - When adding an E2E test, put it under `tests/e2e/` (own `tsconfig.e2e.json`; uses `@playwright/test` + DOM). Keep specs few — use integration tests for single-route behaviour.
 
+## AI Gateway operator runbook
+
+Two Cloudflare AI Gateways live in the Babybites account:
+
+- **`ratedwatch-vlm`** (production) — Terraform-managed, defined in `infra/terraform/ai-gateway.tf`. Used by `wrangler deploy --env=production` (the `npm run deploy` script).
+- **`dial-reader-bakeoff`** (everything else) — created by hand during the PRD #99 bake-off, intentionally NOT in Terraform. Used by local dev, integration tests, and CI preview deploys (`wrangler versions upload --preview-alias=pr-<N>` without `--env`).
+
+Both gateways share the same Cloudflare-account unified-billing credit pool, so credits loaded once cover both. The split exists so log volume, cache stats, and future per-gateway policies can diverge between dev and prod without touching the bake-off sandbox.
+
+### Initial provisioning of `ratedwatch-vlm`
+
+1. From `infra/terraform/`:
+   ```bash
+   terraform init
+   terraform plan    # review the cloudflare_ai_gateway.ratedwatch_vlm resource
+   terraform apply   # creates the gateway with authentication=true, collect_logs=true, etc.
+   ```
+2. The provider at version `5.19.0-beta.5` (pinned in `main.tf`) does NOT expose the `wholesale` attribute. Operator must flip the flag manually after `terraform apply`:
+   ```bash
+   curl -X PUT \
+     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai-gateway/gateways/ratedwatch-vlm" \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+     -H "Content-Type: application/json" \
+     --data '{
+       "id": "ratedwatch-vlm",
+       "cache_invalidate_on_update": true,
+       "cache_ttl": 0,
+       "collect_logs": true,
+       "rate_limiting_interval": 0,
+       "rate_limiting_limit": 0,
+       "authentication": true,
+       "wholesale": true
+     }'
+   ```
+3. Verify both critical flags are set:
+   ```bash
+   curl -s \
+     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai-gateway/gateways/ratedwatch-vlm" \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+     | jq '.result | {authentication, wholesale, collect_logs}'
+   ```
+   Expected: `{ "authentication": true, "wholesale": true, "collect_logs": true }`. The bake-off discovered that without `authentication = true` the gateway forwards requests without injecting upstream credentials and the model returns "Missing or invalid Authorization header" — non-obvious and easy to miss.
+4. Load credits via the dashboard at <https://dash.cloudflare.com/?to=/:account/ai/ai-gateway>. Recommended initial budget: **$50**. Set an auto-top-up alert at **$10 remaining** (also via the dashboard — there's no API for this).
+
+### Verifying production after deploy
+
+After `npm run deploy` (which runs `wrangler deploy --env=production`):
+
+```bash
+curl -s https://rated.watch/api/v1/_health      # smoke the deploy itself
+# Then check AI Gateway logs in the dashboard for a successful Workers-AI run
+# tagged with the ratedwatch-vlm gateway slug.
+```
+
+### Rotating the gateway slug
+
+If the slug is compromised (e.g. published in a screenshot, used in a leaked Worker secret-by-mistake):
+
+1. Create a new gateway slug via Terraform — change `id` in `ai-gateway.tf` (this triggers `RequiresReplace`, so Terraform will destroy the old gateway and create a fresh one).
+2. Update `env.production.vars.AI_GATEWAY_ID` in `wrangler.jsonc` to match.
+3. `npm run deploy`.
+4. Re-run the manual `wholesale = true` flip on the new gateway.
+5. Re-load credits + auto-top-up alert (credits are per-account, not per-gateway, so this step is usually a no-op).
+
+The bake-off gateway (`dial-reader-bakeoff`) is unaffected by the rotation — keep it as-is unless you also need to rotate it (in which case do it via the dashboard, since it's not in Terraform).
+
 ## How to work in this repo
 
 1. Read this file AND the PRD issue before starting anything.
