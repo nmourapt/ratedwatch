@@ -1,44 +1,61 @@
 // Worker-side VLM dial reader — public types.
 //
-// Slice #3 of PRD #99 (issue #102). Replaces the decommissioned Python
-// container reader with a single VLM call to GPT-5.2 via Cloudflare's
-// AI Gateway (unified billing).
+// Slice #3 of PRD #99 (issue #102) introduced the single-call shape
+// (`success | unparseable | transport_error`). Slice #5 (issue #104)
+// rebuilds the reader as a parallel median-of-3 pipeline guarded by
+// the anchor-disagreement check, and replaces the single `unparseable`
+// variant with a more granular `rejection` variant that distinguishes:
 //
-// This slice ships the bare minimum result shape: success, unparseable
-// model output, and transport error. The two anchor-related variants
-// (`anchor_disagreement`, `anchor_echo_suspicious`) are added in
-// slice #5 once the median-of-3 + anchor-guard pipeline is in place.
+//   * `anchor_disagreement`     — median MM:SS diverges > 60 s from
+//                                 the EXIF anchor on the wrap-aware
+//                                 MM:SS circle.
+//   * `anchor_echo_suspicious`  — all 3 reads byte-identical to the
+//                                 anchor (Claude-style cheat).
+//   * `unparseable_majority`    — 2 of 3 (or 1 of 1) reads were
+//                                 unparseable. The remaining read(s)
+//                                 are not enough signal for a median.
+//   * `all_runs_failed`         — all 3 reads were unparseable. The
+//                                 model is fundamentally refusing to
+//                                 emit HH:MM:SS for this image.
+//
+// The `transport_error` variant remains unchanged (network /
+// gateway failures still surface as transport errors).
 
 /**
- * Outcome of a single `readDial` call.
+ * Outcome of a `readDial` call (median-of-3).
  *
- * The kind discriminator means call-sites must exhaustively branch on
- * the result, which is the whole point — we don't want a `success` row
- * to silently leak `unparseable`-shaped data into the verified-reading
- * persistence layer.
+ * Call-sites must exhaustively branch on the `kind` discriminator;
+ * we don't want a `success` row to silently leak rejection-shaped
+ * data into the verified-reading persistence layer.
  *
- *   * `success` — the model returned a parseable HH:MM:SS and we have
- *     a `{ m, s }` for the verifier. The hour is dropped: the server
- *     clock owns the hour because verified readings are always within
- *     a session whose hour is known from the EXIF anchor / server time.
- *   * `unparseable` — the model returned, but the response did not
- *     contain an HH:MM:SS-shaped substring. Caller should reject the
- *     reading with a "we couldn't read the dial — please retake" UX.
- *   * `transport_error` — the AI binding (or the underlying gateway)
- *     threw before producing a response. Caller should retry once or
- *     surface a generic "service unavailable" message.
+ *   * `success` — the median MM:SS is trustworthy. `mm_ss` is the
+ *     median; `raw_responses` is the array of all three model
+ *     responses (kept for log/debug, never surfaced to users); token
+ *     totals are summed across the three calls.
+ *   * `rejection` — the median couldn't be trusted. `reason` tells
+ *     the caller which specific check failed; `details.delta_seconds`
+ *     is populated when `reason = "anchor_disagreement"` so the
+ *     caller can log how far off we were.
+ *   * `transport_error` — every parallel call threw before
+ *     producing a response. Caller should retry once or surface a
+ *     generic "service unavailable" message.
  */
 export type DialReadResult =
   | {
       kind: "success";
       mm_ss: { m: number; s: number };
-      raw_response: string;
-      tokens_in?: number;
-      tokens_out?: number;
+      raw_responses: string[];
+      tokens_in_total?: number;
+      tokens_out_total?: number;
     }
   | {
-      kind: "unparseable";
-      raw_response: string;
+      kind: "rejection";
+      reason:
+        | "anchor_disagreement"
+        | "all_runs_failed"
+        | "unparseable_majority"
+        | "anchor_echo_suspicious";
+      details?: { delta_seconds?: number };
     }
   | {
       kind: "transport_error";

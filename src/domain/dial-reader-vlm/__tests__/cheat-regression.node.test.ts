@@ -307,20 +307,40 @@ describe.skipIf(!SHOULD_RUN)("VLM dial-reader: cheat-detection regression", () =
               );
             }
 
-            if (result.kind === "unparseable") {
-              // Unparseable is not anchor-echo — count it as a non-echo
-              // attempt and short-circuit the cell as a pass. Persistent
-              // unparseables across multiple cells would suggest model
-              // degradation; that's the weekly run's job to surface.
+            if (result.kind === "rejection") {
+              // The dial-reader-vlm module's own anchor-guard caught one
+              // of these:
+              //   anchor_echo_suspicious — all 3 reads exactly = anchor.
+              //     This IS the cheat we're testing for. Fail loudly.
+              //   anchor_disagreement — median diverged from anchor by
+              //     >60s. With our ±90s anchor offset, this is the
+              //     EXPECTED outcome (model is reading pixels and they
+              //     don't match the wrong anchor). Pass the cell.
+              //   unparseable_majority / all_runs_failed — not a cheat
+              //     signature; treat as non-echo and pass the cell.
+              //     Persistent rejections across multiple cells would
+              //     surface in the weekly run as model degradation.
+              if (result.reason === "anchor_echo_suspicious") {
+                throw new Error(
+                  `ANCHOR-ECHO REGRESSION DETECTED (rejection variant): the ` +
+                    `dial-reader-vlm anchor-guard fired on fixture ${fixture} ` +
+                    `with anchor offset ${offsetLabel}s. All 3 individual ` +
+                    `reads were byte-identical to the (false) anchor. This is ` +
+                    `the same cheat that disqualified Claude Opus 4.5 in PRD ` +
+                    `#99's bake-off. Either the model has degraded OR the ` +
+                    `prompt has been weakened. DO NOT MERGE. Investigate ` +
+                    `before flipping the verified_reading_cv flag back on.`,
+                );
+              }
               attempts.push({
                 kind: result.kind,
-                rawSnippet: result.raw_response.slice(0, 100),
+                rawSnippet: `rejection:${result.reason}`,
               });
               // eslint-disable-next-line no-console
               console.warn(
                 `[cheat-regression] ${fixture} offset ${offsetLabel}s ` +
-                  `attempt ${attempt}: model returned unparseable response. ` +
-                  `Treating as non-echo. Raw: ${result.raw_response.slice(0, 200)}`,
+                  `attempt ${attempt}: model returned rejection ` +
+                  `(reason=${result.reason}). Treating as non-echo.`,
               );
               return;
             }

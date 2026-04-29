@@ -1,11 +1,12 @@
-// Reading verifier — orchestrates the new VLM-backed verified-reading
-// pipeline introduced in slice #4 of PRD #99 (issue #103).
+// Reading verifier — orchestrates the VLM-backed verified-reading
+// pipeline introduced in slice #4 of PRD #99 (issue #103) and
+// extended by slice #5 (issue #104) with median-of-3 + anchor guard.
 //
 // The previous Python-container-backed verifier was decommissioned in
 // slice #1 of PRD #99 (issue #100). This file is the rebuilt
 // orchestrator wired to the slice-#2 dial cropper
-// (`@/domain/dial-cropper`) and the slice-#3 single-VLM-call dial
-// reader (`@/domain/dial-reader-vlm`).
+// (`@/domain/dial-cropper`) and the slice-#3-then-#5 VLM dial reader
+// (`@/domain/dial-reader-vlm`).
 //
 // Pipeline:
 //
@@ -31,17 +32,21 @@
 //      contract — see `scripts/vlm-bakeoff/bakeoff.py::_anchor_with_offset`
 //      and the prompt's "12-hour clock" output instruction.
 //
-//   4. Call `readDial(...)` once. Result-mapping:
+//   4. Call `readDial(...)` (median-of-3 with anchor guard).
+//      Result-mapping:
 //      * `kind: "success"` → compute the MM:SS-modulo-60min deviation
 //        and return `ok: true`.
-//      * `kind: "unparseable"` → `ok: false, error: "ai_unparseable"`.
+//      * `kind: "rejection"`:
+//          - `reason: "anchor_disagreement"` → error code
+//            `dial_reader_anchor_disagreement` (route → 422).
+//          - `reason: "anchor_echo_suspicious"` → error code
+//            `dial_reader_anchor_echo_flagged` (route → 422). The
+//            user-facing copy says "inconclusive read, please retake"
+//            — we deliberately don't surface "we caught you cheating".
+//          - `reason: "all_runs_failed"` → existing `ai_refused`.
+//          - `reason: "unparseable_majority"` → existing `ai_unparseable`.
 //      * `kind: "transport_error"` → `ok: false,
 //        error: "dial_reader_transport_error"`.
-//
-// Median-of-3 + the anchor-disagreement guard land in slice #5. For
-// this tracer-bullet slice the verifier is deliberately a single-call
-// pipeline so we can prove end-to-end wiring without dragging in the
-// sample/agreement plumbing.
 //
 // Deviation contract (MM:SS modulo 60 minutes):
 //
@@ -90,7 +95,10 @@ export interface VerifyVlmReadingInput {
 
 export type VerifyReadingErrorCode =
   | "exif_clock_skew"
+  | "ai_refused"
   | "ai_unparseable"
+  | "dial_reader_anchor_disagreement"
+  | "dial_reader_anchor_echo_flagged"
   | "dial_reader_transport_error";
 
 export type VerifyVlmReadingResult =
@@ -200,12 +208,15 @@ export async function verifyVlmReading(
       raw_response: dialResult.message,
     };
   }
-  if (dialResult.kind === "unparseable") {
-    return {
-      ok: false,
-      error: "ai_unparseable",
-      raw_response: dialResult.raw_response,
-    };
+  if (dialResult.kind === "rejection") {
+    // Map each guard/median rejection reason onto a wire-format
+    // error code. We DON'T leak `raw_response` for these because
+    // the slice-#5 reader doesn't keep a single canonical raw
+    // string for the rejection paths (the median is a synthetic
+    // value, and the anchor-echo case has three identical strings
+    // that aren't useful to surface).
+    const error = mapRejectionReason(dialResult.reason);
+    return { ok: false, error };
   }
 
   // Success — compute deviation against the reference's MM:SS.
@@ -216,6 +227,13 @@ export async function verifyVlmReading(
   };
   const deviation = computeMmSsDeviation(dialResult.mm_ss, refMmSs);
 
+  // The reader exposes `raw_responses: string[]` — the verifier's
+  // result keeps a single `raw_response` field for back-compat with
+  // the route handler. We pick the first response (the underlying
+  // strings are typically identical or close, and we only use this
+  // for debug logs).
+  const rawResponse = dialResult.raw_responses[0] ?? "";
+
   return {
     ok: true,
     vlm_model: deps.model,
@@ -224,8 +242,32 @@ export async function verifyVlmReading(
     reference_source: ref.source,
     deviation_seconds: deviation,
     crop_found: crop.found,
-    raw_response: dialResult.raw_response,
+    raw_response: rawResponse,
   };
+}
+
+/**
+ * Map a `DialReadResult.rejection.reason` to a wire-format
+ * `VerifyReadingErrorCode`. Pure helper extracted so the route layer
+ * can stay agnostic about the reader's internal naming.
+ */
+function mapRejectionReason(
+  reason:
+    | "anchor_disagreement"
+    | "all_runs_failed"
+    | "unparseable_majority"
+    | "anchor_echo_suspicious",
+): VerifyReadingErrorCode {
+  switch (reason) {
+    case "anchor_disagreement":
+      return "dial_reader_anchor_disagreement";
+    case "anchor_echo_suspicious":
+      return "dial_reader_anchor_echo_flagged";
+    case "all_runs_failed":
+      return "ai_refused";
+    case "unparseable_majority":
+      return "ai_unparseable";
+  }
 }
 
 /**

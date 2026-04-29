@@ -45,12 +45,16 @@ function fakeCropResult(): CropToDialResult {
 }
 
 function vlmSuccess(m: number, s: number, model = "openai/gpt-5.2"): DialReadResult {
+  // The slice-#5 reader returns `raw_responses: string[]` (one entry
+  // per parallel call) plus aggregated token totals. The verifier
+  // collapses this into a single `raw_response` for the route layer.
+  const raw = `10:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return {
     kind: "success",
     mm_ss: { m, s },
-    raw_response: `10:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`,
-    tokens_in: 100,
-    tokens_out: 5,
+    raw_responses: [raw, raw, raw],
+    tokens_in_total: 300,
+    tokens_out_total: 15,
   };
   // (model is captured by the deps below, not the result — kept here
   // for prose clarity.)
@@ -177,9 +181,9 @@ describe("verifyVlmReading", () => {
     expect(result.error).toBe("exif_clock_skew");
   });
 
-  it("maps VLM unparseable to error: ai_unparseable with raw_response", async () => {
+  it("maps VLM rejection (unparseable_majority) to error: ai_unparseable", async () => {
     const deps = makeDeps({
-      readDial: async () => ({ kind: "unparseable", raw_response: "huh?" }),
+      readDial: async () => ({ kind: "rejection", reason: "unparseable_majority" }),
     });
     const result = await verifyVlmReading(
       {
@@ -193,7 +197,67 @@ describe("verifyVlmReading", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toBe("ai_unparseable");
-    expect(result.raw_response).toBe("huh?");
+  });
+
+  it("maps VLM rejection (all_runs_failed) to error: ai_refused", async () => {
+    const deps = makeDeps({
+      readDial: async () => ({ kind: "rejection", reason: "all_runs_failed" }),
+    });
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "w",
+        userId: "u",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+      },
+      deps,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe("ai_refused");
+  });
+
+  it("maps VLM rejection (anchor_disagreement) to error: dial_reader_anchor_disagreement", async () => {
+    const deps = makeDeps({
+      readDial: async () => ({
+        kind: "rejection",
+        reason: "anchor_disagreement",
+        details: { delta_seconds: 90 },
+      }),
+    });
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "w",
+        userId: "u",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+      },
+      deps,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe("dial_reader_anchor_disagreement");
+  });
+
+  it("maps VLM rejection (anchor_echo_suspicious) to error: dial_reader_anchor_echo_flagged", async () => {
+    const deps = makeDeps({
+      readDial: async () => ({
+        kind: "rejection",
+        reason: "anchor_echo_suspicious",
+      }),
+    });
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "w",
+        userId: "u",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+      },
+      deps,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe("dial_reader_anchor_echo_flagged");
   });
 
   it("maps VLM transport_error to error: dial_reader_transport_error", async () => {
