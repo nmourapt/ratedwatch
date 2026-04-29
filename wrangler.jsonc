@@ -63,8 +63,14 @@
     }
   ],
   "r2_buckets": [
+    // User-uploaded watch profile photos. Renamed from `IMAGES` to
+    // `WATCH_IMAGES` in slice #2 of PRD #99 (this PR) so the
+    // `IMAGES` name could be re-used for the new Cloudflare Images
+    // binding (`env.IMAGES.input(...).transform(...)`). The bucket
+    // itself (`rated-watch-images`) is unchanged — only the Worker-
+    // side binding name moved.
     {
-      "binding": "IMAGES",
+      "binding": "WATCH_IMAGES",
       "bucket_name": "rated-watch-images"
     },
     {
@@ -109,6 +115,19 @@
     // false` (vitest.config.ts) keeps the binding from contacting
     // the gateway during integration tests.
     "remote": true
+  },
+
+  // Cloudflare Images binding — the dial-cropper module
+  // (src/domain/dial-cropper/) uses `env.IMAGES.input(bytes)
+  // .transform(...).output(...)` for HEIC decode, EXIF auto-rotation,
+  // 1024-px-long-edge downsampling, and the final 768×768 crop. Sharp
+  // runs at the edge in C++; the JS HoughCircles + jpeg-js decode
+  // step inside dial-cropper handles the actual circle detection.
+  // Slice #2 of PRD #99 introduces this binding; slice #4 wires the
+  // verified-reading endpoint through it. Per Cloudflare docs every
+  // call to env.IMAGES counts as a billable transformation.
+  "images": {
+    "binding": "IMAGES"
   },
 
   // AI Gateway slug to route VLM calls through. Per-environment

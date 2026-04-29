@@ -43,7 +43,7 @@ import { requireAuth, type RequireAuthVariables } from "@/server/middleware/requ
 
 type Bindings = AuthEnv & {
   DB: D1Database;
-  IMAGES: R2Bucket;
+  WATCH_IMAGES: R2Bucket;
   FLAGS: KVNamespace;
   // Analytics Engine (slice #19). Optional because logEvent
   // defaults to a silent no-op when unbound.
