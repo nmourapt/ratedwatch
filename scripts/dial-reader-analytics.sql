@@ -1,8 +1,32 @@
--- Dial-reader operator analytics queries.
+-- ⚠ DEPRECATED — kept for reference only.
 --
--- Slice #83 of PRD #73. The dial-reader pipeline emits five
--- domain events into the Analytics Engine `rw_events` dataset
--- (binding: ANALYTICS, see wrangler.jsonc):
+-- The five `dial_reader_*` Analytics Engine events these queries
+-- depend on (`dial_reader_attempt`, `_success`, `_rejection`,
+-- `_error`, `_cold_start`) were retired in slice #1 of PRD #99 (issue
+-- #100) when the Python dial-reader container was decommissioned.
+-- Running any of the queries below against `rw_events` today will
+-- return zero rows.
+--
+-- The replacement Worker-side VLM dial reader (slice #4 of PRD #99,
+-- issue #103) will introduce its own observability event names. When
+-- that lands, this file will either be replaced with the new query
+-- pack or removed outright. Until then the queries are wrapped in a
+-- block-comment so they cannot be accidentally pasted into the
+-- Analytics Engine SQL API.
+--
+-- Schema reminder for AE (still applies to whatever events replace
+-- these):
+--   - blob1   = event kind (string)
+--   - blob2   = JSON payload (string)
+--   - index1  = event kind (string, used as the sample key)
+--   - dataset = `rw_events` per wrangler.jsonc.
+
+/*
+-- Dial-reader operator analytics queries (DEPRECATED — see header).
+--
+-- Slice #83 of PRD #73 introduced these. The dial-reader pipeline
+-- emitted five domain events into the Analytics Engine `rw_events`
+-- dataset (binding: ANALYTICS, see wrangler.jsonc):
 --
 --   * dial_reader_attempt    fired before each call. Fields:
 --                            reading_id, image_format, image_bytes
@@ -17,30 +41,9 @@
 --                            reading_id, error_type, error_message
 --   * dial_reader_cold_start when the binding fetch took >1s.
 --                            Fields: reading_id, wait_ms
---
--- Schema reminder for AE:
---   - blob1   = event kind (string)
---   - blob2   = JSON payload (string)
---   - index1  = event kind (string, used as the sample key)
---   - The dataset is `rw_events` per wrangler.jsonc.
---
--- Run these via the SQL API:
---
---   curl "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/analytics_engine/sql" \
---     -H "Authorization: Bearer ${API_TOKEN}" \
---     --data "$(<scripts/dial-reader-analytics.sql)"
---
--- Each query is independent — pick the one you want, copy-paste,
--- and fire. They are deliberately not rolled into a single SELECT
--- because AE doesn't support stored procedures and the operator
--- usually wants one answer at a time.
 
 -- ------------------------------------------------------------------
 -- 1. Daily success rate.
---
--- Counts attempts vs successes across the last 7 days, broken down
--- by day. `_sample_interval` is multiplied in so the count is
--- stable under AE sampling.
 -- ------------------------------------------------------------------
 
 SELECT
@@ -49,9 +52,6 @@ SELECT
   SUM(IF(index1 = 'dial_reader_success', _sample_interval, 0)) AS successes,
   SUM(IF(index1 = 'dial_reader_rejection', _sample_interval, 0)) AS rejections,
   SUM(IF(index1 = 'dial_reader_error', _sample_interval, 0)) AS errors,
-  -- Success rate is computed as successes / attempts. The IF guard
-  -- handles the edge case of zero attempts cleanly (returns 0
-  -- rather than NaN).
   IF(
     SUM(IF(index1 = 'dial_reader_attempt', _sample_interval, 0)) > 0,
     SUM(IF(index1 = 'dial_reader_success', _sample_interval, 0))
@@ -70,12 +70,7 @@ GROUP BY day
 ORDER BY day DESC;
 
 -- ------------------------------------------------------------------
--- 2. Rejection breakdown by reason (last 7 days).
---
--- Slice #76 ships `unsupported_format`. Subsequent slices add
--- `low_confidence`, `no_dial_found`, `malformed_image`. This
--- query lets the operator see which class is dominant — the
--- threshold tuning signal for slice #80.
+-- 2. Rejection breakdown by reason.
 -- ------------------------------------------------------------------
 
 SELECT
@@ -88,14 +83,7 @@ GROUP BY reason
 ORDER BY count DESC;
 
 -- ------------------------------------------------------------------
--- 3. Confidence histogram (last 7 days, 0.05-wide buckets).
---
--- floor(confidence * 20) / 20 puts each value in a 0.05 bucket.
--- Useful for seeing where the population sits relative to the
--- 0.7 verifier-side trust threshold (DIAL_READER_CONFIDENCE_THRESHOLD
--- in src/domain/reading-verifier/verifier.ts) — the operator can
--- check whether a threshold change would buy meaningful pass-rate
--- without overshooting into low-quality territory.
+-- 3. Confidence histogram (0.05-wide buckets).
 -- ------------------------------------------------------------------
 
 SELECT
@@ -109,11 +97,6 @@ ORDER BY confidence_bucket ASC;
 
 -- ------------------------------------------------------------------
 -- 4. Latency percentiles for processing_ms (container-side).
---
--- p50 / p95 / p99 over the last 24 hours. quantileExactWeighted
--- accepts the sample interval as the third argument to keep the
--- answer accurate under sampling. The container reports
--- processing_ms as a JSON number in the success-event payload.
 -- ------------------------------------------------------------------
 
 SELECT
@@ -136,13 +119,6 @@ WHERE timestamp >= NOW() - INTERVAL '1' DAY
 
 -- ------------------------------------------------------------------
 -- 5. Cold-start frequency.
---
--- Cold-start events fire only when the binding fetch took >1s, so
--- the rate of this event divided by the rate of attempt is the
--- cold-start fraction. Useful for tuning the Container class's
--- sleepAfter (currently 15m in src/worker/index.tsx) — if the
--- fraction is high the operator can either lengthen sleepAfter or
--- raise max_instances for warm capacity.
 -- ------------------------------------------------------------------
 
 SELECT
@@ -155,9 +131,6 @@ SELECT
       / SUM(IF(index1 = 'dial_reader_attempt', _sample_interval, 0)),
     0
   ) AS cold_start_rate,
-  -- p95 of the wait-time on cold-start hits — when this trends up,
-  -- the container is starting slower (image-pull / dependency-load
-  -- regression) rather than just being cold more often.
   quantileExactWeighted(0.95)(
     JSONExtractFloat(blob2, 'wait_ms'),
     _sample_interval
@@ -169,11 +142,7 @@ GROUP BY day
 ORDER BY day DESC;
 
 -- ------------------------------------------------------------------
--- 6. Image-format distribution (last 7 days).
---
--- Sanity-check what users are actually uploading. Disproportionate
--- HEIC traffic = iOS-heavy week. Disproportionate "unknown" = a
--- new client / scraping / a bug in the format sniffer.
+-- 6. Image-format distribution.
 -- ------------------------------------------------------------------
 
 SELECT
@@ -184,3 +153,5 @@ WHERE timestamp >= NOW() - INTERVAL '7' DAY
   AND index1 = 'dial_reader_attempt'
 GROUP BY format
 ORDER BY attempts DESC;
+
+*/
