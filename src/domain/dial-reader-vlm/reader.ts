@@ -59,6 +59,33 @@ export interface ReadDialDeps {
   gatewayId?: string;
 }
 
+// ---------------------------------------------------------------------
+// Test override hook
+// ---------------------------------------------------------------------
+//
+// Mirrors the `__setTestExifReader` / `__setTestRateLimiter` pattern
+// already in the codebase. The slice-#4 integration tests (issue
+// #103) need a way to drive `readDial` deterministically without
+// making real AI Gateway calls — `vitest.config.ts` sets
+// `remoteBindings: false`, so the production env.AI path can't reach
+// the gateway from miniflare anyway.
+//
+// Pass `null` in a teardown hook to clear.
+
+type ReadDialFn = (input: ReadDialInput, deps: ReadDialDeps) => Promise<DialReadResult>;
+
+let testReadDial: ReadDialFn | null = null;
+
+/**
+ * TEST-ONLY. Install a fake `readDial`. Subsequent calls route
+ * through `fn` until cleared. Used by integration tests in
+ * `tests/integration/readings.verified.test.ts` to drive the route
+ * deterministically with the bake-off-validated answers.
+ */
+export function __setTestReadDial(fn: ReadDialFn | null): void {
+  testReadDial = fn;
+}
+
 /**
  * Run a single VLM dial-read.
  *
@@ -69,6 +96,9 @@ export async function readDial(
   input: ReadDialInput,
   deps: ReadDialDeps,
 ): Promise<DialReadResult> {
+  if (testReadDial) {
+    return testReadDial(input, deps);
+  }
   const prompt = buildPrompt(input.exifAnchor);
   const dataUrl = encodeAsJpegDataUrl(input.croppedImage);
 
