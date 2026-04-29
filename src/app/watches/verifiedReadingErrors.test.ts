@@ -117,6 +117,30 @@ describe("mapVerifiedReadingError", () => {
     expect(mapped.manualFallback).toBe(false);
   });
 
+  // Slice #5 of PRD #99 (issue #104) — median-of-3 + anchor-guard
+  // rejections.
+
+  it("maps dial_reader_anchor_disagreement (422) to a retake hint mentioning the phone clock", () => {
+    const mapped = mapVerifiedReadingError(422, "dial_reader_anchor_disagreement");
+    expect(mapped.code).toBe("dial_reader_anchor_disagreement");
+    expect(mapped.message).toMatch(/clock|reconcile/i);
+    expect(mapped.message).toMatch(/retake/i);
+    expect(mapped.canRetake).toBe(true);
+    expect(mapped.canRetry).toBe(false);
+    expect(mapped.manualFallback).toBe(false);
+  });
+
+  it("maps dial_reader_anchor_echo_flagged (422) to a neutral retake hint (does not leak cheat detection)", () => {
+    const mapped = mapVerifiedReadingError(422, "dial_reader_anchor_echo_flagged");
+    expect(mapped.code).toBe("dial_reader_anchor_echo_flagged");
+    expect(mapped.message).toMatch(/inconclusive|retake/i);
+    // Don't expose internal cheat-detection vocabulary.
+    expect(mapped.message).not.toMatch(/cheat|echo|suspicious/i);
+    expect(mapped.canRetake).toBe(true);
+    expect(mapped.canRetry).toBe(false);
+    expect(mapped.manualFallback).toBe(false);
+  });
+
   it("maps 429 to a daily-cap message with no retry/retake", () => {
     const mapped = mapVerifiedReadingError(429);
     expect(mapped.code).toBe("rate_limited");

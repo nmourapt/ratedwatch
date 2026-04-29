@@ -568,6 +568,17 @@ readingsByWatchRoute.post("/verified", async (c) => {
  * leak `raw_response` for the AI errors (it can include the full
  * model output, which is excessive for the SPA) but we keep it on
  * the EXIF-skew branch where the legacy shape carries a debug hint.
+ *
+ * Slice #5 of PRD #99 (issue #104) added the median-of-3 + anchor
+ * guard error codes:
+ *   * `dial_reader_anchor_disagreement` — median MM:SS diverges
+ *     > 60 s from the EXIF anchor. 422; user retakes.
+ *   * `dial_reader_anchor_echo_flagged` — all 3 reads echoed the
+ *     anchor (suspicious cheat pattern). 422; copy says
+ *     "inconclusive read, please retake" — we deliberately don't
+ *     surface "we caught you cheating".
+ *   * `ai_refused` — all 3 reads were unparseable (model fully
+ *     refused). 422; same retake UX.
  */
 function verifiedReadingErrorResponse(
   c: {
@@ -586,6 +597,35 @@ function verifiedReadingErrorResponse(
         ux_hint: "Connection failed while reading dial. Please try again.",
       },
       502,
+    );
+  }
+  if (code === "dial_reader_anchor_disagreement") {
+    return c.json(
+      {
+        error_code: code,
+        ux_hint:
+          "We couldn't reconcile the dial with your phone's clock. Please retake the photo.",
+      },
+      422,
+    );
+  }
+  if (code === "dial_reader_anchor_echo_flagged") {
+    return c.json(
+      {
+        error_code: code,
+        ux_hint: "Inconclusive read — please retake the photo.",
+      },
+      422,
+    );
+  }
+  if (code === "ai_refused") {
+    return c.json(
+      {
+        error_code: code,
+        ux_hint:
+          "We couldn't read the dial in your photo — try a clearer shot or log manually.",
+      },
+      422,
     );
   }
   // ai_unparseable

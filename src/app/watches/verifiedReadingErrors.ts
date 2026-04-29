@@ -52,6 +52,8 @@ export type VerifiedReadingErrorCode =
   | "dial_reader_no_dial_found"
   | "dial_reader_malformed_image"
   | "dial_reader_transport_error"
+  | "dial_reader_anchor_disagreement"
+  | "dial_reader_anchor_echo_flagged"
   | "rate_limited"
   | "unknown";
 
@@ -153,6 +155,31 @@ export function mapVerifiedReadingError(
       manualFallback: false,
       canRetake: false,
       canRetry: true,
+    };
+  }
+
+  // Slice #5 of PRD #99 (issue #104) — median-of-3 + anchor-guard
+  // rejections. These both render as 422s with a retake nudge. The
+  // anchor-echo path deliberately uses neutral copy ("inconclusive
+  // read") rather than telling the user "we caught the model
+  // cheating" — that's an internal-only signal.
+  if (status === 422 && serverCode === "dial_reader_anchor_disagreement") {
+    return {
+      code: "dial_reader_anchor_disagreement",
+      message:
+        "We couldn't reconcile the dial with your phone's clock. Please retake the photo.",
+      manualFallback: false,
+      canRetake: true,
+      canRetry: false,
+    };
+  }
+  if (status === 422 && serverCode === "dial_reader_anchor_echo_flagged") {
+    return {
+      code: "dial_reader_anchor_echo_flagged",
+      message: "Inconclusive read — please retake the photo.",
+      manualFallback: false,
+      canRetake: true,
+      canRetry: false,
     };
   }
 
