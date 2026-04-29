@@ -80,44 +80,21 @@ type Bindings = AuthEnv &
 // `npm run flags:set`. The flag was renamed in slice #11 of PRD #73
 // from the earlier `ai_reading_v2` (a name from the AI-runner era)
 // to `verified_reading_cv` because there is no AI involved any more.
+// A backward-compat fallback that read the legacy key during the
+// rollover window was removed in the post-cutover cleanup PR; the
+// stale `ai_reading_v2` KV entry was deleted at the same time.
 //
 // `verified_reading_cv = mode:never` means the verified-reading
 // endpoint is disabled — the route returns 503 and clients fall
 // back to the manual-entry flow. `mode:always` (or `mode:users` /
 // `mode:rollout` matching the caller) enables the CV pipeline.
 const FLAG_VERIFIED_READING_CV = "verified_reading_cv";
-// Legacy KV key kept as a backward-compat fallback during the
-// rollover window. After ~30 days of stable operation a follow-up
-// PR removes the fallback and the operator deletes the stale key.
-// See the PR body for slice #11 (PRD #73) for the cutover runbook.
-const FLAG_VERIFIED_READING_CV_LEGACY = "ai_reading_v2";
 
-/**
- * Read the verified-reading flag, preferring the new key name and
- * falling back to the legacy key during the rollover window.
- *
- * Why two reads instead of one OR'd lookup at the KV level: the
- * `isEnabled` helper already encapsulates JSON parse + zod schema
- * validation + default-off semantics. We want both keys to go
- * through that pipeline so a stale-but-still-present legacy value
- * (e.g. `{"mode":"users","users":[…]}`) keeps working for the same
- * user set the operator originally rolled out to. Querying both
- * keys in series costs one extra KV `get` per request when the new
- * key is absent — acceptable for the few-day cutover window.
- *
- * After the operator copies the value to the new key the new-key
- * read short-circuits and the legacy fallback is never touched.
- */
 async function isVerifiedReadingEnabled(
   userId: string,
   env: FeatureFlagsEnv,
 ): Promise<boolean> {
-  const fresh = await isEnabled(FLAG_VERIFIED_READING_CV, { userId }, env);
-  if (fresh) return true;
-  // Backward-compat fallback. Slice #11 of PRD #73; the follow-up
-  // cleanup PR removes this once the operator confirms the new key
-  // is the source of truth.
-  return isEnabled(FLAG_VERIFIED_READING_CV_LEGACY, { userId }, env);
+  return isEnabled(FLAG_VERIFIED_READING_CV, { userId }, env);
 }
 // 10 MB cap on the uploaded image. Workers already enforce a body-size
 // limit but the cap here is the product contract — anything larger
@@ -443,10 +420,9 @@ readingsByWatchRoute.post("/tap", async (c) => {
  * Slice #11 of PRD #73 deleted the legacy Workers AI runner; this
  * route now has a single backend.
  *
- * The `verified_reading_cv` feature flag (renamed from the legacy
- * `ai_reading_v2`) gates whether verified-reading is available at
- * all. When the flag is OFF we return 503 so the SPA can fall back
- * to the manual-entry flow.
+ * The `verified_reading_cv` feature flag gates whether
+ * verified-reading is available at all. When the flag is OFF we
+ * return 503 so the SPA can fall back to the manual-entry flow.
  *
  * On success: 201 with the inserted reading.
  * On rejection: 422 with `{ error_code, ux_hint }`.

@@ -49,10 +49,7 @@ afterEach(async () => {
   __setTestExifReader(null);
   vi.useRealTimers();
   // Ensure no stale flag value bleeds across tests. Using delete is
-  // idempotent — KV silently no-ops when the key is missing. We
-  // clear both the new and legacy keys because tests pin the new
-  // one via `setVerifiedFlagForUser` but the legacy fallback could
-  // bleed in if a previous test wrote it.
+  // idempotent — KV silently no-ops when the key is missing.
   await unsetVerifiedFlag();
 });
 
@@ -125,18 +122,9 @@ async function setVerifiedFlagForUser(userId: string): Promise<void> {
   );
 }
 
-async function setLegacyFlagForUser(userId: string): Promise<void> {
-  // Pins the backward-compat fallback. Used by the legacy-key
-  // coverage test below so we can prove the rollover window keeps
-  // the feature live for users still on the old KV key.
-  const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
-  await FLAGS.put("ai_reading_v2", JSON.stringify({ mode: "users", users: [userId] }));
-}
-
 async function unsetVerifiedFlag(): Promise<void> {
   const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
   await FLAGS.delete("verified_reading_cv");
-  await FLAGS.delete("ai_reading_v2");
 }
 
 /** Minimal JPEG bytes — SOI + EOI. Enough for the route; the dial
@@ -236,34 +224,6 @@ describe("POST /api/v1/watches/:id/readings/verified — feature-flag gate", () 
     // short-circuits before the handler runs.
     const res = await postVerifiedReading("whatever", undefined);
     expect(res.status).toBe(401);
-  });
-
-  it("falls back to the legacy ai_reading_v2 key during the rollover window", async () => {
-    // Slice #11 of PRD #73 renamed the flag from `ai_reading_v2`
-    // to `verified_reading_cv` and added a backward-compat
-    // fallback so the operator can keep the legacy key live during
-    // the rollover. Pin the contract so a future cleanup PR
-    // removing the fallback has to delete this test too — we don't
-    // want it silently disappearing.
-    const user = await registerAndGetCookie();
-    const { id: watchId } = await createWatch(
-      { name: "Legacy", movement_id: movementId },
-      user.cookie,
-    );
-    await setLegacyFlagForUser(user.userId);
-
-    vi.useFakeTimers();
-    vi.setSystemTime(Date.UTC(2024, 0, 15, 14, 32, 5));
-    installFakeDialReaderSuccess({ m: 32, s: 7, confidence: 0.92 });
-
-    const res = await postVerifiedReading(watchId, user.cookie);
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as {
-      verified: boolean;
-      deviation_seconds: number;
-    };
-    expect(body.verified).toBe(true);
-    expect(body.deviation_seconds).toBe(2);
   });
 });
 

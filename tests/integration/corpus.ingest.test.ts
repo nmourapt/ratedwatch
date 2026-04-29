@@ -126,7 +126,6 @@ async function setVerifiedFlagForUser(userId: string): Promise<void> {
 async function unsetVerifiedFlag(): Promise<void> {
   const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
   await FLAGS.delete("verified_reading_cv");
-  await FLAGS.delete("ai_reading_v2");
 }
 
 async function drainCorpus(): Promise<void> {
