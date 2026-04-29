@@ -326,6 +326,13 @@ jobs:
   #   - CLOUDFLARE_ACCOUNT_ID — Babybites account
   cheat-regression:
     name: Cheat-detection regression
+    # `environment: preview` unlocks the CLOUDFLARE_API_TOKEN +
+    # CLOUDFLARE_ACCOUNT_ID secrets which are scoped to that environment
+    # (the only env-scoped secrets in this repo). Without this, the
+    # `secrets.CLOUDFLARE_*` references resolve to empty strings and the
+    # describe.skipIf in cheat-regression.node.test.ts skips the test —
+    # which would silently pass CI without actually running the regression.
+    environment: preview
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10

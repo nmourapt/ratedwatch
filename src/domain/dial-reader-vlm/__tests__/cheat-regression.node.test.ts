@@ -58,12 +58,21 @@ import type { DialReadResult, ExifAnchor } from "../types";
 //   - CHEAT_REGRESSION_AI_GATEWAY  — gateway slug (typically "dial-reader-bakeoff")
 //   - CLOUDFLARE_API_TOKEN         — token with AI Gateway access
 //   - CLOUDFLARE_ACCOUNT_ID        — the Babybites account
-// Missing any one → the whole describe block is skipped. CI sets all
-// three; local devs leave them unset and pay nothing.
+//
+// Local dev: leave all three unset; the describe block is skipped and
+// nothing is billed.
+//
+// CI: `CHEAT_REGRESSION_AI_GATEWAY` is the explicit "you meant to run
+// this" signal. If it's set but the CF secrets are empty, that's
+// almost certainly a CI misconfiguration (e.g. the job didn't claim
+// the right `environment:` for the secrets to be in scope) — we want
+// that to fail LOUDLY in a separate guard test below, not silently
+// skip the regression.
 
 const GATEWAY_ID = process.env.CHEAT_REGRESSION_AI_GATEWAY;
 const CF_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
+const REGRESSION_REQUESTED = !!GATEWAY_ID;
 const SHOULD_RUN = !!(GATEWAY_ID && CF_TOKEN && CF_ACCOUNT);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -190,6 +199,42 @@ function loadFixture(name: string): ArrayBuffer {
   new Uint8Array(ab).set(buf);
   return ab;
 }
+
+// ---------------------------------------------------------------------
+// CI misconfiguration guard
+// ---------------------------------------------------------------------
+//
+// If CHEAT_REGRESSION_AI_GATEWAY is set, someone explicitly asked for
+// the live test to run. If the CF credential env vars are empty in
+// that scenario, the live tests would silently skip (because
+// `SHOULD_RUN` falls back to false) — which would be a CI false-pass.
+// This describe runs only in that misconfiguration window and fails
+// loudly so the job turns red instead of green.
+
+describe.skipIf(!REGRESSION_REQUESTED || SHOULD_RUN)("cheat-regression CI guard", () => {
+  it("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set when CHEAT_REGRESSION_AI_GATEWAY is set", () => {
+    const missing: string[] = [];
+    if (!CF_TOKEN) missing.push("CLOUDFLARE_API_TOKEN");
+    if (!CF_ACCOUNT) missing.push("CLOUDFLARE_ACCOUNT_ID");
+    throw new Error(
+      [
+        "",
+        "CHEAT_REGRESSION_AI_GATEWAY is set but the following required env",
+        "vars are empty:",
+        ...missing.map((v) => `  - ${v}`),
+        "",
+        "This is almost certainly a CI misconfiguration. The CF secrets",
+        "in this repo are scoped to the `preview` environment — the job",
+        "must declare `environment: preview` in the workflow YAML or the",
+        "secret references resolve to empty strings.",
+        "",
+        "If you intended to skip the live test, unset",
+        "CHEAT_REGRESSION_AI_GATEWAY entirely (don't half-configure it).",
+        "",
+      ].join("\n"),
+    );
+  });
+});
 
 // ---------------------------------------------------------------------
 // The actual test

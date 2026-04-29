@@ -30,6 +30,11 @@ concurrency:
 jobs:
   cheat-regression:
     name: Cheat-detection regression
+    # `environment: preview` unlocks the CLOUDFLARE_API_TOKEN +
+    # CLOUDFLARE_ACCOUNT_ID secrets which are scoped to that environment
+    # (the only env-scoped secrets in this repo). Without this the test
+    # silently skips (see comment in ci.yml::cheat-regression).
+    environment: preview
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
