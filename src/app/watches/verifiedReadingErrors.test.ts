@@ -149,4 +149,24 @@ describe("mapVerifiedReadingError", () => {
     expect(mapped.canRetake).toBe(false);
     expect(mapped.manualFallback).toBe(false);
   });
+
+  // Slice #6 of PRD #99 (issue #105): /confirm-only error codes,
+  // surfaced from the SPA confirmation page (slice #7).
+  it("maps invalid_token (401) to an expired-session hint that nudges retake", () => {
+    const mapped = mapVerifiedReadingError(401, "invalid_token");
+    expect(mapped.code).toBe("invalid_token");
+    expect(mapped.message).toMatch(/expired|retake/i);
+    expect(mapped.canRetake).toBe(true);
+    expect(mapped.canRetry).toBe(false);
+    expect(mapped.manualFallback).toBe(false);
+  });
+
+  it("maps adjustment_too_large (422) to a retake hint", () => {
+    const mapped = mapVerifiedReadingError(422, "adjustment_too_large");
+    expect(mapped.code).toBe("adjustment_too_large");
+    expect(mapped.message).toMatch(/exceed|retake/i);
+    expect(mapped.canRetake).toBe(true);
+    expect(mapped.canRetry).toBe(false);
+    expect(mapped.manualFallback).toBe(false);
+  });
 });
