@@ -1,45 +1,32 @@
-// Integration tests for POST /api/v1/watches/:id/readings/verified.
+// Integration tests for the verified-reading two-step API.
 //
-// Slice #4 of PRD #99 (issue #103). The route was a 503 stub before
-// this slice; this test exercises the new VLM-backed pipeline
-// end-to-end:
+// Slice #6 of PRD #99 (issue #105) split the synchronous
+// `POST /api/v1/watches/:id/readings/verified` into:
 //
-//   * Better Auth signup + sign-in (real flow under miniflare)
-//   * watch creation
-//   * multipart upload of a real smoke fixture (from
-//     scripts/vlm-bakeoff/fixtures/smoke/)
-//   * route handler → reading-verifier → dial-cropper → dial-reader-vlm
-//   * D1 INSERT of the resulting `readings` row with vlm_model + photo_r2_key
-//   * R2 PUT for the photo at verified/{userId}/{readingId}.jpg
+//   1. `POST .../verified/draft`   — runs the VLM pipeline, returns
+//      a signed reading_token + predicted MM:SS + photo URL. Does
+//      NOT save a reading.
+//   2. `POST .../verified/confirm` — accepts { reading_token,
+//      final_mm_ss, is_baseline? }, validates token + adjustment
+//      cap (±30s on the [0, 3600) MM:SS circle), saves the row,
+//      moves the photo from drafts/ to verified/.
 //
-// The VLM call itself is intercepted via `__setTestReadDial` rather
-// than hitting the real AI Gateway. Three reasons:
+// Anti-cheat property: /draft never returns the deviation; the SPA
+// confirmation page (slice #7) lets the user adjust ± seconds
+// without seeing the deviation. The server enforces the same ±30s
+// adjustment limit so a malicious client can't bypass the UI.
 //
-//   1. The vitest pool is configured with `remoteBindings: false`
-//      (vitest.config.ts), so env.AI in tests cannot reach the
-//      gateway from miniflare anyway.
-//   2. CI cost — the bake-off proved the model behaviour; we don't
-//      need to re-prove it on every PR. Slice #4's job is wiring,
-//      not VLM accuracy.
-//   3. Determinism — model variance ±0-5s is fine in production
-//      (the deviation_seconds ends up correct within tolerance) but
-//      flaky on the test boundary.
-//
-// The mock returns the bake-off-validated MM:SS for each fixture
-// (drawn from scripts/vlm-bakeoff/fixtures/smoke/manifest.json),
-// which matches what GPT-5.2 produced in the bake-off. The
-// reading-verifier code path executed is identical to production
-// — only the network egress is short-circuited.
-//
-// A separate, opt-in `.live.test.ts` file (added in a later slice
-// alongside the rest of the live-tests suite) can re-enable the
-// real-API path for canary runs against a deployed preview.
+// We mock the VLM call via `__setTestReadDial` (slice #4 pattern):
+// the dial-reader-vlm tests already cover model behaviour, and
+// `vitest.config.ts` sets `remoteBindings: false` so env.AI in the
+// pool can't reach the gateway anyway.
 
 import { env } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { __setTestReadDial } from "@/domain/dial-reader-vlm/reader";
 import { __setTestExifReader } from "@/domain/reading-verifier/exif";
+import { signReadingToken, type ReadingTokenPayload } from "@/domain/reading-token/token";
 import type { DialReadResult, ReadDialInput } from "@/domain/dial-reader-vlm/types";
 
 // ---- Test fixture setup --------------------------------------------
@@ -70,7 +57,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// ---- Auth + watch helpers (mirror tests/integration/readings.test.ts) ----
+// ---- Auth + watch helpers -----------------------------------------
 
 function makeEmail(): string {
   return `verified-${crypto.randomUUID()}@ratedwatch.test`;
@@ -135,6 +122,7 @@ interface TestEnv {
   readonly TEST_FIXTURES: Record<string, string>;
   readonly DB: D1Database;
   readonly WATCH_IMAGES: R2Bucket;
+  readonly READING_TOKEN_SECRET: string;
 }
 
 function fixtureBytes(name: string): ArrayBuffer {
@@ -149,34 +137,60 @@ function fixtureBytes(name: string): ArrayBuffer {
   return ab;
 }
 
-/**
- * Bake-off-validated truth for the smoke fixtures. Mirrors
- * `scripts/vlm-bakeoff/fixtures/smoke/manifest.json` (the `.mm` and
- * `.ss` columns) — the ±5s tolerance the test asserts against.
- */
 const SMOKE_TRUTH: Record<string, { hh: number; mm: number; ss: number }> = {
   "bambino_10_19_34.jpeg": { hh: 10, mm: 19, ss: 34 },
   "snk803_10_15_40.jpeg": { hh: 10, mm: 15, ss: 40 },
 };
 
-async function postVerifiedReading(
+async function postDraft(
   watchId: string,
   fixtureName: string,
   cookie: string,
-  isBaseline = false,
 ): Promise<Response> {
   const bytes = fixtureBytes(fixtureName);
   const form = new FormData();
   const file = new File([bytes], fixtureName, { type: "image/jpeg" });
   form.append("image", file);
-  form.append("is_baseline", isBaseline ? "true" : "false");
   return exports.default.fetch(
-    new Request(`https://ratedwatch.test/api/v1/watches/${watchId}/readings/verified`, {
-      method: "POST",
-      headers: { cookie },
-      body: form,
-    }),
+    new Request(
+      `https://ratedwatch.test/api/v1/watches/${watchId}/readings/verified/draft`,
+      {
+        method: "POST",
+        headers: { cookie },
+        body: form,
+      },
+    ),
   );
+}
+
+async function postConfirm(
+  watchId: string,
+  body: {
+    reading_token: string;
+    final_mm_ss: { m: number; s: number };
+    is_baseline?: boolean;
+  },
+  cookie: string,
+): Promise<Response> {
+  return exports.default.fetch(
+    new Request(
+      `https://ratedwatch.test/api/v1/watches/${watchId}/readings/verified/confirm`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(body),
+      },
+    ),
+  );
+}
+
+interface DraftResponse {
+  reading_token: string;
+  predicted_mm_ss: { m: number; s: number };
+  photo_url: string;
+  hour_from_server_clock: number;
+  reference_source: "exif" | "server";
+  expires_at_unix: number;
 }
 
 interface ReadingResponseBody {
@@ -200,22 +214,6 @@ interface PersistedRow {
   deviation_seconds: number;
 }
 
-/**
- * Install a deterministic VLM mock that returns the bake-off truth
- * for whichever fixture got cropped through the pipeline. The
- * matcher works on the cropped image's *byte length* against the
- * `expected` map — admittedly hacky, but the alternative (peeking
- * at the input bytes pre-crop) would force us to re-decode the
- * image inside the test. The cropped JPEG sizes are stable enough
- * across miniflare runs that an exact match is fine for two
- * fixtures; if this becomes flaky we'll switch to a single-fixture
- * test that does NOT need the matcher.
- *
- * Simpler alternative: drive each test through one fixture only,
- * setting the mock to return that fixture's truth unconditionally.
- * That's what we actually do below — no matcher, just a fresh mock
- * per test.
- */
 function installVlmMock(answer: { m: number; s: number }): void {
   __setTestReadDial(async (_input: ReadDialInput) => {
     // Slice #5 reader returns `raw_responses: string[]` (one per
@@ -234,27 +232,15 @@ function installVlmMock(answer: { m: number; s: number }): void {
   });
 }
 
-// ---- Tests ---------------------------------------------------------
-
 const VERIFIED_TIMEOUT = 30_000;
 
-describe("POST /api/v1/watches/:id/readings/verified", () => {
+// ---- Tests ---------------------------------------------------------
+
+describe("POST /api/v1/watches/:id/readings/verified/draft", () => {
   it.each([["bambino_10_19_34.jpeg"], ["snk803_10_15_40.jpeg"]])(
-    "creates a verified reading from %s end-to-end",
+    "returns reading_token + predicted_mm_ss for %s",
     async (fixtureName) => {
       const truth = SMOKE_TRUTH[fixtureName]!;
-      // Pin the reference timestamp so the deviation calc is
-      // deterministic. We pick a moment whose UTC MM:SS match the
-      // fixture truth — that way the dial-vs-reference deviation
-      // is exactly 0s and the ±5s tolerance is on the model side
-      // alone.
-      //
-      // Both the EXIF reader and the server clock have to align
-      // (the verifier rejects EXIF with a > 5min delta vs server),
-      // so we vi.setSystemTime + __setTestExifReader to the same
-      // value. Better Auth's getSession does its own JWT verify on
-      // a frozen clock, so we keep `shouldAdvanceTime: true` to
-      // avoid stalling the cookie roundtrip.
       const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
       vi.useFakeTimers({ shouldAdvanceTime: true });
       vi.setSystemTime(refMs);
@@ -267,51 +253,39 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
         owner.cookie,
       );
 
-      const res = await postVerifiedReading(watchId, fixtureName, owner.cookie);
-      expect(res.status).toBe(201);
-      const body = (await res.json()) as ReadingResponseBody;
-      expect(body.watch_id).toBe(watchId);
-      expect(body.user_id).toBe(owner.userId);
-      expect(body.verified).toBe(true);
-      expect(body.is_baseline).toBe(false);
+      const res = await postDraft(watchId, fixtureName, owner.cookie);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
 
-      // Deviation should be within ±5s of zero (exact zero on this
-      // mock; tolerance left for the real-API live tests). We
-      // assert the wider window so a future tweak to either side
-      // doesn't create a false negative.
-      expect(body.deviation_seconds).toBeGreaterThanOrEqual(-5);
-      expect(body.deviation_seconds).toBeLessThanOrEqual(5);
+      // Token shape: <payload>.<sig>
+      expect(body.reading_token).toContain(".");
+      expect(body.predicted_mm_ss).toEqual({ m: truth.mm, s: truth.ss });
+      expect(body.hour_from_server_clock).toBe(truth.hh);
+      expect(body.photo_url).toContain("/images/drafts/");
+      expect(body.photo_url).toContain(owner.userId);
+      expect(body.expires_at_unix).toBeGreaterThan(Math.floor(refMs / 1000));
 
-      // Persisted-row checks: vlm_model recorded, photo R2 key set.
+      // Critically: NO deviation field on the response. The whole
+      // anti-cheat point is that the user can adjust ± seconds
+      // without seeing the deviation it would produce.
+      expect(body).not.toHaveProperty("deviation_seconds");
+
+      // No reading row should have been written yet.
       const db = (env as unknown as TestEnv).DB;
-      const row = (await db
-        .prepare(
-          "SELECT id, vlm_model, photo_r2_key, verified, reference_timestamp, deviation_seconds FROM readings WHERE id = ?",
-        )
-        .bind(body.id)
-        .first()) as PersistedRow | null;
-      expect(row).not.toBeNull();
-      expect(row!.vlm_model).toBe("openai/gpt-5.2");
-      expect(row!.verified).toBe(1);
-      expect(row!.reference_timestamp).toBe(refMs);
-      expect(row!.photo_r2_key).toBe(`verified/${owner.userId}/${body.id}.jpg`);
-
-      // R2 verification: the photo bytes round-tripped.
-      const r2 = (env as unknown as TestEnv).WATCH_IMAGES;
-      const stored = await r2.get(row!.photo_r2_key!);
-      expect(stored).not.toBeNull();
+      const rows = await db
+        .prepare("SELECT id FROM readings WHERE watch_id = ?")
+        .bind(watchId)
+        .all();
+      expect(rows.results.length).toBe(0);
     },
     VERIFIED_TIMEOUT,
   );
 
   it(
-    "forces deviation to 0 when is_baseline=true",
+    "writes the photo to the drafts/ R2 prefix",
     async () => {
       const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
-      // Pick a reference time 10s OFF the fixture so the verifier
-      // would normally compute a non-zero deviation. With
-      // is_baseline=true the route must override it to 0.
-      const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss + 10, 0);
+      const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
       vi.useFakeTimers({ shouldAdvanceTime: true });
       vi.setSystemTime(refMs);
       __setTestExifReader(async () => refMs);
@@ -319,26 +293,49 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
 
       const owner = await registerAndGetCookie();
       const { id: watchId } = await createWatch(
-        { name: "Baseline test", movement_id: movementId },
+        { name: "Drafts prefix", movement_id: movementId },
         owner.cookie,
       );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
 
-      const res = await postVerifiedReading(
-        watchId,
-        "bambino_10_19_34.jpeg",
-        owner.cookie,
-        /* isBaseline */ true,
-      );
-      expect(res.status).toBe(201);
-      const body = (await res.json()) as ReadingResponseBody;
-      expect(body.is_baseline).toBe(true);
-      expect(body.deviation_seconds).toBe(0);
+      // The photo_url ends with the R2 key — extract and verify.
+      const r2Key = new URL(body.photo_url).pathname.replace(/^\/images\//, "");
+      expect(r2Key.startsWith(`drafts/${owner.userId}/`)).toBe(true);
+      const r2 = (env as unknown as TestEnv).WATCH_IMAGES;
+      const stored = await r2.get(r2Key);
+      expect(stored).not.toBeNull();
     },
     VERIFIED_TIMEOUT,
   );
 
   it(
-    "returns 422 ai_unparseable when the VLM returns gibberish",
+    "falls back to server-arrival timestamp when EXIF is missing",
+    async () => {
+      // Pin server time; return null EXIF.
+      const refMs = Date.UTC(2026, 3, 29, 14, 30, 15, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 15 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "No EXIF", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
+      expect(body.reference_source).toBe("server");
+      expect(body.hour_from_server_clock).toBe(14);
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "returns 422 with retake reason on VLM unparseable",
     async () => {
       __setTestExifReader(async () => Date.now());
       // Slice #5: 2-or-more unparseable reads collapse into a
@@ -351,53 +348,29 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
 
       const owner = await registerAndGetCookie();
       const { id: watchId } = await createWatch(
-        { name: "Unparseable test", movement_id: movementId },
+        { name: "Unparseable", movement_id: movementId },
         owner.cookie,
       );
-      const res = await postVerifiedReading(
-        watchId,
-        "bambino_10_19_34.jpeg",
-        owner.cookie,
-      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
       expect(res.status).toBe(422);
-      const body = (await res.json()) as { error_code?: string; ux_hint?: string };
+      const body = (await res.json()) as {
+        error_code?: string;
+        retake?: boolean;
+        reason?: string;
+      };
       expect(body.error_code).toBe("ai_unparseable");
-    },
-    VERIFIED_TIMEOUT,
-  );
-
-  it(
-    "returns 502 dial_reader_transport_error on VLM transport failure",
-    async () => {
-      __setTestExifReader(async () => Date.now());
-      __setTestReadDial(async () => ({
-        kind: "transport_error",
-        message: "AI Gateway timeout",
-      }));
-
-      const owner = await registerAndGetCookie();
-      const { id: watchId } = await createWatch(
-        { name: "Transport test", movement_id: movementId },
-        owner.cookie,
-      );
-      const res = await postVerifiedReading(
-        watchId,
-        "bambino_10_19_34.jpeg",
-        owner.cookie,
-      );
-      expect(res.status).toBe(502);
-      const body = (await res.json()) as { error_code?: string };
-      expect(body.error_code).toBe("dial_reader_transport_error");
+      expect(body.retake).toBe(true);
+      expect(body.reason).toBe("unreadable_photo");
     },
     VERIFIED_TIMEOUT,
   );
 
   it("returns 401 when unauthenticated", async () => {
     const res = await exports.default.fetch(
-      new Request("https://ratedwatch.test/api/v1/watches/whatever/readings/verified", {
-        method: "POST",
-        body: new FormData(),
-      }),
+      new Request(
+        "https://ratedwatch.test/api/v1/watches/whatever/readings/verified/draft",
+        { method: "POST", body: new FormData() },
+      ),
     );
     expect(res.status).toBe(401);
   });
@@ -413,7 +386,7 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
       const form = new FormData();
       const res = await exports.default.fetch(
         new Request(
-          `https://ratedwatch.test/api/v1/watches/${watchId}/readings/verified`,
+          `https://ratedwatch.test/api/v1/watches/${watchId}/readings/verified/draft`,
           {
             method: "POST",
             headers: { cookie: owner.cookie },
@@ -424,6 +397,319 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe("image_required");
+    },
+    VERIFIED_TIMEOUT,
+  );
+});
+
+describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
+  it(
+    "saves a verified reading with the user's final_mm_ss",
+    async () => {
+      const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
+      const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => refMs);
+      installVlmMock({ m: truth.mm, s: truth.ss });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Confirm happy", movement_id: movementId },
+        owner.cookie,
+      );
+
+      const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      expect(draftRes.status).toBe(200);
+      const draftBody = (await draftRes.json()) as DraftResponse;
+
+      // User adjusts +5s from the prediction. That's well within
+      // the ±30s cap, so confirm should accept.
+      const finalMmSs = { m: truth.mm, s: truth.ss + 5 };
+      const confirmRes = await postConfirm(
+        watchId,
+        { reading_token: draftBody.reading_token, final_mm_ss: finalMmSs },
+        owner.cookie,
+      );
+      expect(confirmRes.status).toBe(201);
+      const reading = (await confirmRes.json()) as ReadingResponseBody;
+      expect(reading.watch_id).toBe(watchId);
+      expect(reading.user_id).toBe(owner.userId);
+      expect(reading.verified).toBe(true);
+      expect(reading.is_baseline).toBe(false);
+      // Final user-submitted mm:ss matches the anchor + 5s, so
+      // deviation should be +5.
+      expect(reading.deviation_seconds).toBe(5);
+
+      // Persisted-row checks.
+      const db = (env as unknown as TestEnv).DB;
+      const row = (await db
+        .prepare(
+          "SELECT id, vlm_model, photo_r2_key, verified, reference_timestamp, deviation_seconds FROM readings WHERE id = ?",
+        )
+        .bind(reading.id)
+        .first()) as PersistedRow | null;
+      expect(row).not.toBeNull();
+      expect(row!.vlm_model).toBe("openai/gpt-5.2");
+      expect(row!.verified).toBe(1);
+      expect(row!.photo_r2_key).toBe(`verified/${owner.userId}/${reading.id}.jpg`);
+
+      // Photo moved from drafts/ to verified/.
+      const r2 = (env as unknown as TestEnv).WATCH_IMAGES;
+      const verifiedPhoto = await r2.get(row!.photo_r2_key!);
+      expect(verifiedPhoto).not.toBeNull();
+      // Draft key should no longer exist.
+      const draftKey = new URL(draftBody.photo_url).pathname.replace(/^\/images\//, "");
+      const draftPhoto = await r2.get(draftKey);
+      expect(draftPhoto).toBeNull();
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "forces deviation to 0 when is_baseline=true",
+    async () => {
+      const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
+      const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => refMs);
+      installVlmMock({ m: truth.mm, s: truth.ss });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Baseline", movement_id: movementId },
+        owner.cookie,
+      );
+      const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      const draftBody = (await draftRes.json()) as DraftResponse;
+      const confirmRes = await postConfirm(
+        watchId,
+        {
+          reading_token: draftBody.reading_token,
+          // User adjusts to +10s but baseline overrides → 0.
+          final_mm_ss: { m: truth.mm, s: truth.ss + 10 },
+          is_baseline: true,
+        },
+        owner.cookie,
+      );
+      expect(confirmRes.status).toBe(201);
+      const reading = (await confirmRes.json()) as ReadingResponseBody;
+      expect(reading.is_baseline).toBe(true);
+      expect(reading.deviation_seconds).toBe(0);
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "accepts a final_mm_ss exactly 30s from predicted",
+    async () => {
+      const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
+      const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => refMs);
+      installVlmMock({ m: truth.mm, s: truth.ss });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "30s boundary", movement_id: movementId },
+        owner.cookie,
+      );
+      const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      const draftBody = (await draftRes.json()) as DraftResponse;
+      // truth.ss = 34, +30 = 64 → wraps to m+1 / s=4
+      const finalSs = (truth.ss + 30) % 60;
+      const finalMm = truth.mm + Math.floor((truth.ss + 30) / 60);
+      const confirmRes = await postConfirm(
+        watchId,
+        {
+          reading_token: draftBody.reading_token,
+          final_mm_ss: { m: finalMm, s: finalSs },
+        },
+        owner.cookie,
+      );
+      expect(confirmRes.status).toBe(201);
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "rejects a final_mm_ss 31s from predicted as adjustment_too_large",
+    async () => {
+      const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
+      const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => refMs);
+      installVlmMock({ m: truth.mm, s: truth.ss });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "31s exceed", movement_id: movementId },
+        owner.cookie,
+      );
+      const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      const draftBody = (await draftRes.json()) as DraftResponse;
+      const finalSs = (truth.ss + 31) % 60;
+      const finalMm = truth.mm + Math.floor((truth.ss + 31) / 60);
+      const confirmRes = await postConfirm(
+        watchId,
+        {
+          reading_token: draftBody.reading_token,
+          final_mm_ss: { m: finalMm, s: finalSs },
+        },
+        owner.cookie,
+      );
+      expect(confirmRes.status).toBe(422);
+      const body = (await confirmRes.json()) as {
+        error: string;
+        max_seconds: number;
+      };
+      expect(body.error).toBe("adjustment_too_large");
+      expect(body.max_seconds).toBe(30);
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "rejects an expired token with 401",
+    async () => {
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Expired token", movement_id: movementId },
+        owner.cookie,
+      );
+      // Mint an already-expired token directly. We use the same
+      // secret the worker has via miniflare bindings.
+      const secret = (env as unknown as TestEnv).READING_TOKEN_SECRET;
+      const expiredPayload: ReadingTokenPayload = {
+        photo_r2_key: `drafts/${owner.userId}/fake.jpg`,
+        anchor_hms: "10:00:00",
+        predicted_mm_ss: { m: 0, s: 30 },
+        user_id: owner.userId,
+        watch_id: watchId,
+        expires_at_unix: Math.floor(Date.now() / 1000) - 1,
+        vlm_model: "openai/gpt-5.2",
+      };
+      const expiredToken = await signReadingToken(expiredPayload, secret);
+      const res = await postConfirm(
+        watchId,
+        { reading_token: expiredToken, final_mm_ss: { m: 0, s: 30 } },
+        owner.cookie,
+      );
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("invalid_token");
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "rejects a token with a flipped signature byte as 401",
+    async () => {
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Bad sig", movement_id: movementId },
+        owner.cookie,
+      );
+      const secret = (env as unknown as TestEnv).READING_TOKEN_SECRET;
+      const validToken = await signReadingToken(
+        {
+          photo_r2_key: `drafts/${owner.userId}/fake.jpg`,
+          anchor_hms: "10:00:00",
+          predicted_mm_ss: { m: 0, s: 30 },
+          user_id: owner.userId,
+          watch_id: watchId,
+          expires_at_unix: Math.floor(Date.now() / 1000) + 60,
+          vlm_model: "openai/gpt-5.2",
+        },
+        secret,
+      );
+      const dot = validToken.indexOf(".");
+      const tampered = `${validToken.slice(0, dot)}.${
+        validToken[dot + 1] === "A"
+          ? "B" + validToken.slice(dot + 2)
+          : "A" + validToken.slice(dot + 2)
+      }`;
+      const res = await postConfirm(
+        watchId,
+        { reading_token: tampered, final_mm_ss: { m: 0, s: 30 } },
+        owner.cookie,
+      );
+      expect(res.status).toBe(401);
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "rejects a token signed for a different watch with 403",
+    async () => {
+      const owner = await registerAndGetCookie();
+      const { id: watchA } = await createWatch(
+        { name: "Watch A", movement_id: movementId },
+        owner.cookie,
+      );
+      const { id: watchB } = await createWatch(
+        { name: "Watch B", movement_id: movementId },
+        owner.cookie,
+      );
+      const secret = (env as unknown as TestEnv).READING_TOKEN_SECRET;
+      // Token signed for watchA but submitted to watchB.
+      const tokenForA = await signReadingToken(
+        {
+          photo_r2_key: `drafts/${owner.userId}/fake.jpg`,
+          anchor_hms: "10:00:00",
+          predicted_mm_ss: { m: 0, s: 30 },
+          user_id: owner.userId,
+          watch_id: watchA,
+          expires_at_unix: Math.floor(Date.now() / 1000) + 60,
+          vlm_model: "openai/gpt-5.2",
+        },
+        secret,
+      );
+      const res = await postConfirm(
+        watchB,
+        { reading_token: tokenForA, final_mm_ss: { m: 0, s: 30 } },
+        owner.cookie,
+      );
+      expect(res.status).toBe(403);
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await exports.default.fetch(
+      new Request(
+        "https://ratedwatch.test/api/v1/watches/whatever/readings/verified/confirm",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            reading_token: "x.y",
+            final_mm_ss: { m: 0, s: 0 },
+          }),
+        },
+      ),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it(
+    "returns 400 invalid_input on bad request body",
+    async () => {
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Bad body", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postConfirm(
+        watchId,
+        // @ts-expect-error — deliberately bad shape
+        { reading_token: 42, final_mm_ss: "nope" },
+        owner.cookie,
+      );
+      expect(res.status).toBe(400);
     },
     VERIFIED_TIMEOUT,
   );

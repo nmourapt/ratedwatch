@@ -42,6 +42,47 @@ resource "cloudflare_r2_bucket_lifecycle" "images" {
           max_age = 60 * 60 * 24 * 90
         }
       }
+    },
+    # Slice #6 of PRD #99 (issue #105): the verified-reading two-step
+    # API split. `POST /readings/verified/draft` writes the photo to
+    # `drafts/{user_id}/{uuid}.jpg` and returns a signed reading_token
+    # with a 5-minute lifetime. `POST /readings/verified/confirm`
+    # moves the photo to `verified/{user_id}/{reading_id}.jpg` on
+    # success.
+    #
+    # Drafts that the user never confirms (closed the tab, network
+    # blip after the upload, etc.) accumulate at this prefix.
+    # Lifecycle expires them after 24h: well past the 5-minute token
+    # window so we don't compete with a slow user, and short enough
+    # that the prefix doesn't grow unboundedly.
+    #
+    # 60 * 60 * 24 = 24 hours.
+    {
+      id      = "expire-draft-photos"
+      enabled = true
+
+      conditions = {
+        prefix = "drafts/"
+      }
+
+      delete_objects_transition = {
+        condition = {
+          type    = "Age"
+          max_age = 60 * 60 * 24
+        }
+      }
+
+      # Multipart uploads to draft photos almost never happen — the
+      # SPA pre-resizes and POSTs as a single-part body — but if a
+      # client somehow starts a multipart and abandons it, we don't
+      # want orphaned parts hanging around. 1 day matches the
+      # main-object expiry.
+      abort_multipart_uploads_transition = {
+        condition = {
+          type    = "Age"
+          max_age = 60 * 60 * 24
+        }
+      }
     }
   ]
 }

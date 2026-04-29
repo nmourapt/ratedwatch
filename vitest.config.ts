@@ -107,6 +107,15 @@ export default defineConfig(async (_env): Promise<ViteUserConfig> => {
                   // JWTs. The Worker treats this as opt-in — see the env
                   // plumbing in src/server/auth.ts.
                   OAUTH_TEST_SKIP_VERIFY: "1",
+                  // Slice #6 of PRD #99: HMAC secret used to sign the
+                  // reading-token envelope exchanged between
+                  // /readings/verified/draft and
+                  // /readings/verified/confirm. Production sets this
+                  // via `wrangler secret put READING_TOKEN_SECRET`;
+                  // the test value is deterministic so token
+                  // round-trip tests are reproducible.
+                  READING_TOKEN_SECRET:
+                    "test-reading-token-secret-please-change-in-prod-32+chars",
                   TEST_MIGRATIONS: migrations,
                   // Smoke fixtures for the dial-cropper integration test,
                   // base64-encoded so they survive miniflare's

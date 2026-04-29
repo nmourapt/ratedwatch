@@ -24,6 +24,16 @@ export type EventKind =
   | "verified_reading_attempted"
   | "verified_reading_succeeded"
   | "verified_reading_failed"
+  // Slice #6 of PRD #99 (issue #105): two-step API split. `_drafted`
+  // fires after a successful `/draft` mints a reading-token (no row
+  // saved yet). `_confirm_rejected` fires when `/confirm` rejects a
+  // request — for any of `invalid_token` (bad signature/expiry),
+  // `token_subject_mismatch` (token signed for a different user/watch),
+  // or `adjustment_too_large` (final_mm_ss > ±30s from predicted).
+  // Tracked separately so an operator can monitor draft → confirm
+  // funnel attrition vs malicious-token rates.
+  | "verified_reading_drafted"
+  | "verified_reading_confirm_rejected"
   // Slice #82 (PRD #73 user story #25): rate-limit telemetry. Fired
   // when the verified-reading or manual_with_photo route blocked a
   // user because they hit either the per-minute burst gate or the
