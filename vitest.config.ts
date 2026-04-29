@@ -1,9 +1,32 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { defineConfig, type ViteUserConfig } from "vitest/config";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const srcDir = path.resolve(process.cwd(), "./src");
 const migrationsDir = path.resolve(process.cwd(), "./migrations");
+const fixturesDir = path.resolve(
+  process.cwd(),
+  "./src/domain/dial-cropper/__tests__/fixtures",
+);
+
+// Read each smoke fixture once at config-load time, encode as base64
+// so it survives miniflare's JSON-serialised binding bridge, and
+// expose under `TEST_FIXTURES`. The dial-cropper integration test
+// inside the workers pool decodes these to ArrayBuffers and feeds
+// them into `cropToDial(env)`. See src/domain/dial-cropper/cropper.test.ts.
+const fixtureNames = [
+  "bambino_10_19_34.jpeg",
+  "greenseiko_07_56_06.jpeg",
+  "sinn_10_38_29.jpeg",
+  "snk803_01_07_20.jpeg",
+  "snk803_10_15_40.jpeg",
+  "waterbury_02_38_16.jpeg",
+] as const;
+const fixtureBytesB64: Record<string, string> = {};
+for (const name of fixtureNames) {
+  fixtureBytesB64[name] = readFileSync(path.join(fixturesDir, name)).toString("base64");
+}
 
 // Vitest is configured with two projects:
 //
@@ -85,6 +108,11 @@ export default defineConfig(async (_env): Promise<ViteUserConfig> => {
                   // plumbing in src/server/auth.ts.
                   OAUTH_TEST_SKIP_VERIFY: "1",
                   TEST_MIGRATIONS: migrations,
+                  // Smoke fixtures for the dial-cropper integration test,
+                  // base64-encoded so they survive miniflare's
+                  // JSON-serialising binding bridge. Decode in the test
+                  // via Uint8Array.from(atob(...), c => c.charCodeAt(0)).
+                  TEST_FIXTURES: fixtureBytesB64,
                 },
               },
             }),
