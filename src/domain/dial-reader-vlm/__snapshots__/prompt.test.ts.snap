@@ -1,0 +1,97 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildPrompt > snapshots a midnight-adjacent anchor (hour 12) 1`] = `
+"This is a photograph of an analog wristwatch. Read the EXACT time shown on the dial as precisely as possible.
+
+EXIF ANCHOR: this photograph's EXIF DateTimeOriginal is 12:00:00. The user's phone captured this timestamp at the moment of the photo. The watch should read CLOSE to this time but may be drifting by seconds. Treat the anchor as a sanity-check, NOT as your answer.
+
+REQUIRED PROCESS — work through these steps before answering:
+
+1. IDENTIFY THE THREE HANDS. The watch has three centre-mounted hands. For each visible hand, observe:
+   - LENGTH (how far the hand reaches toward the dial edge)
+   - THICKNESS (thin needle vs. broad)
+   - COLOR / contrast against the dial
+
+2. CLASSIFY each hand:
+   - SECOND HAND: thinnest needle. Often the longest. Often a different colour from the others (red, orange, blue, lume). Reads the seconds scale (the outer ring of 60 tick marks).
+   - MINUTE HAND: medium length, thicker than the second hand, similar in length to (or slightly shorter than) the second hand. Reads the minutes on the same outer 60-tick ring. THIS IS THE MOST IMPORTANT HAND FOR YOUR ANSWER.
+   - HOUR HAND: SHORTEST. Reaches only about half-way to the dial edge. Often thicker than the minute hand. Less critical for precision.
+
+3. READ EACH HAND'S POSITION:
+   - Second hand → reads 0-59 directly off the outer minute scale.
+   - Minute hand → reads 0-59 directly off the same scale.
+   - Hour hand → falls between two hour numerals (e.g. between 10 and 11 means the hour is 10).
+
+4. SANITY-CHECK against the anchor (if provided):
+   - The anchor is the camera's EXIF capture time. The watch may be off by seconds or even minutes due to drift, but it should NOT be off by hours.
+   - If your minute reading differs from the anchor's minute by more than ~10 minutes, you've probably misclassified the hands. Look again: did you confuse the minute and second hand? Are you reading the wrong end of a hand (the tail vs the tip)?
+   - DO NOT just echo the anchor. Read the actual pixels.
+
+5. ROLLOVER AMBIGUITY: when the minute hand is near :00 (between :58 and :02), the hour hand visually points right at a numeral and could be the previous or next hour. Use the anchor's hour to disambiguate.
+
+OUTPUT — respond with ONLY a single line in the EXACT format HH:MM:SS using a 12-hour clock (no AM/PM, no extra text, no explanation, no Markdown). Two digits for each component. Example output: 04:37:21"
+`;
+
+exports[`buildPrompt > snapshots a single-digit hour anchor 1`] = `
+"This is a photograph of an analog wristwatch. Read the EXACT time shown on the dial as precisely as possible.
+
+EXIF ANCHOR: this photograph's EXIF DateTimeOriginal is 09:05:01. The user's phone captured this timestamp at the moment of the photo. The watch should read CLOSE to this time but may be drifting by seconds. Treat the anchor as a sanity-check, NOT as your answer.
+
+REQUIRED PROCESS — work through these steps before answering:
+
+1. IDENTIFY THE THREE HANDS. The watch has three centre-mounted hands. For each visible hand, observe:
+   - LENGTH (how far the hand reaches toward the dial edge)
+   - THICKNESS (thin needle vs. broad)
+   - COLOR / contrast against the dial
+
+2. CLASSIFY each hand:
+   - SECOND HAND: thinnest needle. Often the longest. Often a different colour from the others (red, orange, blue, lume). Reads the seconds scale (the outer ring of 60 tick marks).
+   - MINUTE HAND: medium length, thicker than the second hand, similar in length to (or slightly shorter than) the second hand. Reads the minutes on the same outer 60-tick ring. THIS IS THE MOST IMPORTANT HAND FOR YOUR ANSWER.
+   - HOUR HAND: SHORTEST. Reaches only about half-way to the dial edge. Often thicker than the minute hand. Less critical for precision.
+
+3. READ EACH HAND'S POSITION:
+   - Second hand → reads 0-59 directly off the outer minute scale.
+   - Minute hand → reads 0-59 directly off the same scale.
+   - Hour hand → falls between two hour numerals (e.g. between 10 and 11 means the hour is 10).
+
+4. SANITY-CHECK against the anchor (if provided):
+   - The anchor is the camera's EXIF capture time. The watch may be off by seconds or even minutes due to drift, but it should NOT be off by hours.
+   - If your minute reading differs from the anchor's minute by more than ~10 minutes, you've probably misclassified the hands. Look again: did you confuse the minute and second hand? Are you reading the wrong end of a hand (the tail vs the tip)?
+   - DO NOT just echo the anchor. Read the actual pixels.
+
+5. ROLLOVER AMBIGUITY: when the minute hand is near :00 (between :58 and :02), the hour hand visually points right at a numeral and could be the previous or next hour. Use the anchor's hour to disambiguate.
+
+OUTPUT — respond with ONLY a single line in the EXACT format HH:MM:SS using a 12-hour clock (no AM/PM, no extra text, no explanation, no Markdown). Two digits for each component. Example output: 04:37:21"
+`;
+
+exports[`buildPrompt > snapshots a typical anchor 1`] = `
+"This is a photograph of an analog wristwatch. Read the EXACT time shown on the dial as precisely as possible.
+
+EXIF ANCHOR: this photograph's EXIF DateTimeOriginal is 10:19:24. The user's phone captured this timestamp at the moment of the photo. The watch should read CLOSE to this time but may be drifting by seconds. Treat the anchor as a sanity-check, NOT as your answer.
+
+REQUIRED PROCESS — work through these steps before answering:
+
+1. IDENTIFY THE THREE HANDS. The watch has three centre-mounted hands. For each visible hand, observe:
+   - LENGTH (how far the hand reaches toward the dial edge)
+   - THICKNESS (thin needle vs. broad)
+   - COLOR / contrast against the dial
+
+2. CLASSIFY each hand:
+   - SECOND HAND: thinnest needle. Often the longest. Often a different colour from the others (red, orange, blue, lume). Reads the seconds scale (the outer ring of 60 tick marks).
+   - MINUTE HAND: medium length, thicker than the second hand, similar in length to (or slightly shorter than) the second hand. Reads the minutes on the same outer 60-tick ring. THIS IS THE MOST IMPORTANT HAND FOR YOUR ANSWER.
+   - HOUR HAND: SHORTEST. Reaches only about half-way to the dial edge. Often thicker than the minute hand. Less critical for precision.
+
+3. READ EACH HAND'S POSITION:
+   - Second hand → reads 0-59 directly off the outer minute scale.
+   - Minute hand → reads 0-59 directly off the same scale.
+   - Hour hand → falls between two hour numerals (e.g. between 10 and 11 means the hour is 10).
+
+4. SANITY-CHECK against the anchor (if provided):
+   - The anchor is the camera's EXIF capture time. The watch may be off by seconds or even minutes due to drift, but it should NOT be off by hours.
+   - If your minute reading differs from the anchor's minute by more than ~10 minutes, you've probably misclassified the hands. Look again: did you confuse the minute and second hand? Are you reading the wrong end of a hand (the tail vs the tip)?
+   - DO NOT just echo the anchor. Read the actual pixels.
+
+5. ROLLOVER AMBIGUITY: when the minute hand is near :00 (between :58 and :02), the hour hand visually points right at a numeral and could be the previous or next hour. Use the anchor's hour to disambiguate.
+
+OUTPUT — respond with ONLY a single line in the EXACT format HH:MM:SS using a 12-hour clock (no AM/PM, no extra text, no explanation, no Markdown). Two digits for each component. Example output: 04:37:21"
+`;
