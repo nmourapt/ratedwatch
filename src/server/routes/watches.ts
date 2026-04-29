@@ -39,7 +39,7 @@ type Bindings = AuthEnv & {
   // row so we don't leak orphans. Upload / serve live in
   // src/server/routes/images.ts. Typed as optional so tests can stand
   // up a Worker without an R2 binding if they ever need to.
-  IMAGES?: R2Bucket;
+  WATCH_IMAGES?: R2Bucket;
   // Analytics Engine binding (slice #19). Optional: logEvent treats an
   // absent binding as a no-op so early-preview environments don't break.
   ANALYTICS?: AnalyticsEngineDataset;
@@ -428,9 +428,9 @@ watchesRoute.delete("/:id", async (c) => {
   // the row gone — leaving an orphan object is a minor cost; leaving
   // a phantom watch visible to the user is not.
   const imageKey = ownership.watch.image_r2_key;
-  if (imageKey && c.env.IMAGES) {
+  if (imageKey && c.env.WATCH_IMAGES) {
     try {
-      await c.env.IMAGES.delete(imageKey);
+      await c.env.WATCH_IMAGES.delete(imageKey);
     } catch (err) {
       console.error("watches: R2 delete failed on watch delete", {
         key: imageKey,

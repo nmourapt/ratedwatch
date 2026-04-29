@@ -6,7 +6,7 @@
 // extended timeout to cover the slow scrypt path under miniflare.
 //
 // The R2 binding is the real miniflare R2 bucket (in-memory per worker
-// pool) so we can assert on `env.IMAGES.get(key)` directly.
+// pool) so we can assert on `env.WATCH_IMAGES.get(key)` directly.
 
 import { env } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
@@ -155,7 +155,9 @@ describe("PUT /api/v1/watches/:id/image", () => {
     expect(body.key).toBe(`watches/${watchId}/image`);
 
     // R2 object exists with the stored content-type.
-    const stored = await (env as unknown as { IMAGES: R2Bucket }).IMAGES.get(body.key);
+    const stored = await (env as unknown as { WATCH_IMAGES: R2Bucket }).WATCH_IMAGES.get(
+      body.key,
+    );
     expect(stored).not.toBeNull();
     expect(stored?.httpMetadata?.contentType).toBe("image/jpeg");
 
@@ -246,7 +248,7 @@ describe("DELETE /api/v1/watches/:id/image", () => {
     );
     expect(del.status).toBe(204);
 
-    const stored = await (env as unknown as { IMAGES: R2Bucket }).IMAGES.get(
+    const stored = await (env as unknown as { WATCH_IMAGES: R2Bucket }).WATCH_IMAGES.get(
       `watches/${watchId}/image`,
     );
     expect(stored).toBeNull();
@@ -391,7 +393,9 @@ describe("DELETE /api/v1/watches/:id cascades the image", () => {
     expect(up.status).toBe(200);
 
     const key = `watches/${watchId}/image`;
-    const before = await (env as unknown as { IMAGES: R2Bucket }).IMAGES.get(key);
+    const before = await (env as unknown as { WATCH_IMAGES: R2Bucket }).WATCH_IMAGES.get(
+      key,
+    );
     expect(before).not.toBeNull();
 
     const del = await exports.default.fetch(
@@ -402,7 +406,9 @@ describe("DELETE /api/v1/watches/:id cascades the image", () => {
     );
     expect(del.status).toBe(204);
 
-    const after = await (env as unknown as { IMAGES: R2Bucket }).IMAGES.get(key);
+    const after = await (env as unknown as { WATCH_IMAGES: R2Bucket }).WATCH_IMAGES.get(
+      key,
+    );
     expect(after).toBeNull();
   });
 });

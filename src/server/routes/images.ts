@@ -58,7 +58,7 @@ function keyForWatch(watchId: string): string {
 
 type Bindings = AuthEnv & {
   DB: D1Database;
-  IMAGES: R2Bucket;
+  WATCH_IMAGES: R2Bucket;
   [key: string]: unknown;
 };
 
@@ -116,7 +116,7 @@ watchImageRoute.put("/", async (c) => {
 
   const key = keyForWatch(watchId);
   const bytes = await file.arrayBuffer();
-  const put = await c.env.IMAGES.put(key, bytes, {
+  const put = await c.env.WATCH_IMAGES.put(key, bytes, {
     httpMetadata: { contentType },
   });
 
@@ -147,7 +147,7 @@ watchImageRoute.delete("/", async (c) => {
 
   const key = ownership.watch.image_r2_key ?? keyForWatch(watchId);
   try {
-    await c.env.IMAGES.delete(key);
+    await c.env.WATCH_IMAGES.delete(key);
   } catch (err) {
     // Non-fatal: the DB state is what the rest of the app keys off
     // of. Log and proceed. Swallowing keeps a transient R2 glitch
@@ -197,7 +197,7 @@ watchImagePublicRoute.get("/:id", async (c) => {
     return c.body(null, 404);
   }
 
-  const object = await c.env.IMAGES.get(watch.image_r2_key);
+  const object = await c.env.WATCH_IMAGES.get(watch.image_r2_key);
   if (!object) {
     return c.body(null, 404);
   }

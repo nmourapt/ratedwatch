@@ -16,13 +16,23 @@ describe("data layer bindings", () => {
     expect(result).toEqual({ one: 1 });
   });
 
-  it("R2.IMAGES round-trips a small object", async () => {
+  it("R2.WATCH_IMAGES round-trips a small object", async () => {
     const key = `test/${crypto.randomUUID()}`;
-    await env.IMAGES.put(key, "hello images");
-    const body = await env.IMAGES.get(key);
+    await env.WATCH_IMAGES.put(key, "hello images");
+    const body = await env.WATCH_IMAGES.get(key);
     expect(body).not.toBeNull();
     expect(await body!.text()).toBe("hello images");
-    await env.IMAGES.delete(key);
+    await env.WATCH_IMAGES.delete(key);
+  });
+
+  it("IMAGES (Workers Images binding) exposes input/info", () => {
+    // Slice #2 of PRD #99 introduces the Cloudflare Images binding.
+    // We don't run a real transform here (Sharp at the edge isn't
+    // exercised by miniflare's loopback in every CI environment) —
+    // just verify the binding shape so the dial-cropper module can
+    // depend on it.
+    expect(typeof env.IMAGES.input).toBe("function");
+    expect(typeof env.IMAGES.info).toBe("function");
   });
 
   it("R2.LOGS round-trips a small object", async () => {

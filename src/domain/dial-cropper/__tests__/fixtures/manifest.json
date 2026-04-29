@@ -1,0 +1,74 @@
+{
+  "bambino_10_19_34.jpeg": {
+    "hh": 10,
+    "mm": 19,
+    "ss": 34,
+    "watch_make": "orient",
+    "watch_model": "bambino",
+    "image_w": 3072,
+    "image_h": 4080,
+    "expected_cx": 1532,
+    "expected_cy": 2077,
+    "expected_r": 714
+  },
+  "greenseiko_07_56_06.jpeg": {
+    "hh": 7,
+    "mm": 56,
+    "ss": 6,
+    "watch_make": "seiko",
+    "watch_model": "unknown",
+    "image_w": 3072,
+    "image_h": 4080,
+    "expected_cx": 1336,
+    "expected_cy": 2048,
+    "expected_r": 511
+  },
+  "sinn_10_38_29.jpeg": {
+    "hh": 10,
+    "mm": 38,
+    "ss": 29,
+    "watch_make": "sinn",
+    "watch_model": "556",
+    "image_w": 3072,
+    "image_h": 4080,
+    "expected_cx": 1632,
+    "expected_cy": 2283,
+    "expected_r": 535
+  },
+  "snk803_01_07_20.jpeg": {
+    "hh": 1,
+    "mm": 7,
+    "ss": 20,
+    "watch_make": "seiko",
+    "watch_model": "snk803",
+    "image_w": 3000,
+    "image_h": 4000,
+    "expected_cx": 1427,
+    "expected_cy": 1966,
+    "expected_r": 547
+  },
+  "snk803_10_15_40.jpeg": {
+    "hh": 10,
+    "mm": 15,
+    "ss": 40,
+    "watch_make": "seiko",
+    "watch_model": "snk803",
+    "image_w": 1836,
+    "image_h": 3264,
+    "expected_cx": 954,
+    "expected_cy": 1512,
+    "expected_r": 531
+  },
+  "waterbury_02_38_16.jpeg": {
+    "hh": 2,
+    "mm": 38,
+    "ss": 16,
+    "watch_make": "timex",
+    "watch_model": "waterbury",
+    "image_w": 1067,
+    "image_h": 980,
+    "expected_cx": 523,
+    "expected_cy": 568,
+    "expected_r": 381
+  }
+}
