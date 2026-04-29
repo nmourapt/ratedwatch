@@ -218,12 +218,17 @@ interface PersistedRow {
  */
 function installVlmMock(answer: { m: number; s: number }): void {
   __setTestReadDial(async (_input: ReadDialInput) => {
+    // Slice #5 reader returns `raw_responses: string[]` (one per
+    // parallel call). The mock builds three identical entries —
+    // matches what the median-of-3 pipeline produces when the model
+    // is stable.
+    const raw = `10:${String(answer.m).padStart(2, "0")}:${String(answer.s).padStart(2, "0")}`;
     const result: DialReadResult = {
       kind: "success",
       mm_ss: answer,
-      raw_response: `10:${String(answer.m).padStart(2, "0")}:${String(answer.s).padStart(2, "0")}`,
-      tokens_in: 100,
-      tokens_out: 5,
+      raw_responses: [raw, raw, raw],
+      tokens_in_total: 300,
+      tokens_out_total: 15,
     };
     return result;
   });
@@ -336,9 +341,12 @@ describe("POST /api/v1/watches/:id/readings/verified", () => {
     "returns 422 ai_unparseable when the VLM returns gibberish",
     async () => {
       __setTestExifReader(async () => Date.now());
+      // Slice #5: 2-or-more unparseable reads collapse into a
+      // `rejection: unparseable_majority`. The verifier maps that to
+      // `ai_unparseable` for back-compat with the SPA.
       __setTestReadDial(async () => ({
-        kind: "unparseable",
-        raw_response: "what is a watch",
+        kind: "rejection",
+        reason: "unparseable_majority",
       }));
 
       const owner = await registerAndGetCookie();
