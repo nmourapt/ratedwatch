@@ -293,3 +293,84 @@ jobs:
           path: test-results/
           if-no-files-found: warn
           retention-days: 14
+
+  # Cheat-detection regression — Slice 8 of PRD #99 (issue #107).
+  #
+  # Calls the real `dial-reader-bakeoff` AI Gateway with anchor-shifted
+  # prompts on 2 smoke fixtures × 2 directions = 4 live model calls. Asserts
+  # the model does NOT byte-echo the (false) EXIF anchor — the cheat that
+  # disqualified Claude Opus 4.5 in PRD #99's bake-off. We chose GPT-5.2
+  # specifically because it passes this property today; this job makes that
+  # a CI-enforced invariant against future model regressions or prompt
+  # weakening.
+  #
+  # Cost: ~$0.02 per run (4 GPT-5.2 calls @ ~$0.005 each, billed against
+  # the Babybites unified-billing pool through the bake-off gateway). The
+  # weekly schedule (cheat-regression-weekly.yml) handles model drift
+  # outside our PRs; this job handles drift inside them.
+  #
+  # Path filter: we use dorny/paths-filter to compute a `relevant` flag
+  # against the PR's diff. The job runs only when the diff touches
+  # dial-reader-vlm, dial-cropper, the bake-off harness, or this workflow
+  # file itself (so changes to the workflow are validated). This keeps
+  # unrelated PRs free of gateway-credit burn. We picked dorny/paths-filter
+  # over a top-level `on.pull_request.paths` clause because the existing
+  # `verify` job must stay running on every PR — a workflow-level path
+  # filter would gate everything together, defeating the purpose.
+  #
+  # Depends on `verify` so we don't burn gateway credits on builds that
+  # already failed typecheck/test.
+  #
+  # Required repository secrets (already present from the preview job):
+  #   - CLOUDFLARE_API_TOKEN  — token with AI Gateway read+edit
+  #   - CLOUDFLARE_ACCOUNT_ID — Babybites account
+  cheat-regression:
+    name: Cheat-detection regression
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: verify
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute path filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant:
+              - 'src/domain/dial-reader-vlm/**'
+              - 'src/domain/dial-cropper/**'
+              - 'scripts/vlm-bakeoff/**'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/cheat-regression-weekly.yml'
+
+      - name: Setup Node.js
+        if: steps.filter.outputs.relevant == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        if: steps.filter.outputs.relevant == 'true'
+        run: npm ci
+
+      # Vitest's node-pool project picks up the `*.node.test.ts` suffix; we
+      # target the file directly to keep this job under a minute even if the
+      # broader test suite grows. The env vars below are what gate the
+      # describe.skipIf in cheat-regression.node.test.ts — without them the
+      # test silently skips, which would be a false-pass in CI. We
+      # deliberately set them only here.
+      - name: Run cheat-detection regression
+        if: steps.filter.outputs.relevant == 'true'
+        run: npx vitest run --project=node src/domain/dial-reader-vlm/__tests__/cheat-regression.node.test.ts
+        env:
+          CHEAT_REGRESSION_AI_GATEWAY: dial-reader-bakeoff
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Skip note
+        if: steps.filter.outputs.relevant != 'true'
+        run: echo "PR does not touch dial-reader-vlm/ or related modules — cheat-regression skipped."
