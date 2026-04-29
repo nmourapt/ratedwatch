@@ -308,6 +308,16 @@
   //                            to a passthrough so local dev and
   //                            freshly-provisioned previews boot
   //                            cleanly without the secret.
+  //   READING_TOKEN_SECRET  — HMAC-SHA256 secret for the verified-
+  //                            reading two-step flow's signed
+  //                            `reading_token` envelope (slice #6
+  //                            of PRD #99). 32+ bytes of entropy
+  //                            (`openssl rand -base64 32`). MISSING
+  //                            SECRET IS FATAL — every /confirm
+  //                            returns 401 because token
+  //                            verification can't compute the
+  //                            signature. The miniflare test config
+  //                            seeds a deterministic value.
   //
   // When the Google pair is unset the Worker still boots and
   // email+password flows work; only the Google social provider is
