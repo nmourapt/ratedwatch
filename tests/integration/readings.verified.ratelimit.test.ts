@@ -78,7 +78,6 @@ async function enableVerifiedReadingForAll(): Promise<void> {
 async function unsetVerifiedFlag(): Promise<void> {
   const FLAGS = (env as unknown as { FLAGS: KVNamespace }).FLAGS;
   await FLAGS.delete("verified_reading_cv");
-  await FLAGS.delete("ai_reading_v2");
 }
 
 // ---- Auth + watch helpers (mirror readings.verified.test.ts) ------

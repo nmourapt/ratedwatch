@@ -344,8 +344,9 @@ app.route("/out", outRoute);
 // verified-reading flow, and slice #11 (cutover) made it the sole
 // dial-reader backend. The CV pipeline is gated by the
 // `verified_reading_cv` feature flag (renamed from the legacy
-// `ai_reading_v2` in slice #11; reads via a backward-compat
-// fallback during the rollover window).
+// `ai_reading_v2` in slice #11; the backward-compat fallback that
+// read the legacy key during the rollover window was removed in
+// the post-cutover cleanup PR).
 //
 // Slice #83 of PRD #73 added the `envVars` block so the container
 // receives `SENTRY_DSN` at startup. We pull from the Worker's
