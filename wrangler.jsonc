@@ -130,13 +130,107 @@
     "binding": "IMAGES"
   },
 
-  // AI Gateway slug to route VLM calls through. Per-environment
-  // override is supported via wrangler `[env.<name>] vars`. The
-  // default value here is the bake-off gateway, which is what
-  // dev / test / preview deploys want until slice #9 creates the
-  // production gateway.
+  // AI Gateway slug to route VLM calls through. The top-level
+  // default is the bake-off gateway (`dial-reader-bakeoff`), which
+  // is what local dev, integration tests, and CI preview deploys
+  // share. The bake-off gateway was created by hand during PRD #99
+  // and is intentionally NOT managed by Terraform — it's the
+  // operator scratch sandbox.
+  //
+  // Production overrides this via `env.production.vars` below to
+  // point at `ratedwatch-vlm`, the dedicated production gateway
+  // provisioned by infra/terraform/ai-gateway.tf (slice #9 of
+  // PRD #99). The two gateways share the same Cloudflare account
+  // unified-billing credit pool, so operationally they're
+  // equivalent — the split exists so log volume, cache stats, and
+  // future per-gateway policies (rate limits, DLP, retry) can
+  // diverge between dev and prod.
   "vars": {
     "AI_GATEWAY_ID": "dial-reader-bakeoff"
+  },
+
+  // Per-environment overrides. `wrangler deploy --env production`
+  // and `wrangler versions upload --env production` pick up this
+  // block instead of the top-level config.
+  //
+  // IMPORTANT: wrangler v4 environments do NOT inherit top-level
+  // bindings (kv_namespaces, r2_buckets, d1_databases,
+  // analytics_engine_datasets, ai, images), and `vars` is also a
+  // non-inheritable key. Any binding or var that the production
+  // Worker needs MUST be repeated here verbatim. Forgetting to do
+  // so silently produces a Worker with missing bindings — wrangler
+  // emits a warning at deploy time, but the deploy still succeeds.
+  // See https://developers.cloudflare.com/workers/wrangler/configuration/#environments
+  // for the full inheritance table.
+  //
+  // The `name` field IS inheritable, but wrangler appends the
+  // environment name to it by default — i.e. `--env=production`
+  // would normally deploy to a Worker called `ratedwatch-production`.
+  // We override `name = "ratedwatch"` here to keep the production
+  // deploy targeting the same Worker script as before. This means
+  // the top-level config and the production env both produce a
+  // Worker named `ratedwatch`; they differ only in the
+  // AI_GATEWAY_ID var.
+  //
+  // The whole point of this block is the AI_GATEWAY_ID override —
+  // production traffic routes through the Terraform-managed
+  // `ratedwatch-vlm` gateway (infra/terraform/ai-gateway.tf) for
+  // unified billing, log collection, and per-gateway policy
+  // separation from the bake-off gateway.
+  //
+  // CI preview deploys (`wrangler versions upload
+  // --preview-alias=pr-N` in .github/workflows/ci.yml) deliberately
+  // do NOT pass `--env=production` — previews stay on the bake-off
+  // gateway via the top-level config, which is cheaper / safer for
+  // throwaway PR builds.
+  "env": {
+    "production": {
+      "name": "ratedwatch",
+      "vars": {
+        "AI_GATEWAY_ID": "ratedwatch-vlm"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "rated-watch-db",
+          "database_id": "476d116f-b684-4f23-bdfb-119ad08f1e55",
+          "migrations_dir": "./migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "WATCH_IMAGES",
+          "bucket_name": "rated-watch-images"
+        },
+        {
+          "binding": "LOGS",
+          "bucket_name": "rated-watch-logs"
+        },
+        {
+          "binding": "R2_CORPUS",
+          "bucket_name": "rated-watch-corpus"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "FLAGS",
+          "id": "b4298bd1887d4dae8d1c113ec99cea56"
+        }
+      ],
+      "ai": {
+        "binding": "AI",
+        "remote": true
+      },
+      "images": {
+        "binding": "IMAGES"
+      },
+      "analytics_engine_datasets": [
+        {
+          "binding": "ANALYTICS",
+          "dataset": "rw_events"
+        }
+      ]
+    }
   },
 
   // The verified-reading dial reader (Python container + Durable
