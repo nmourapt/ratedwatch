@@ -35,6 +35,18 @@
 //     POST /readings/manual_with_photo and persists a verified=0
 //     row with the photo as evidence.
 //
+// Slice #6 of PRD #99 (issue #105) replaced the synchronous
+// `POST /readings/verified` with a draft + confirm two-step API.
+// Slice #7 (issue #106) extended this component to render the new
+// `VerifiedReadingConfirmation` step inline once the draft returns:
+//
+//   chosen → submitting (draft) → confirming → submitting (confirm) → success
+//                                ↑
+//                            Retake bounces back to chosen / idle
+//
+// The confirmation step deliberately doesn't show the deviation —
+// see `VerifiedReadingConfirmation.tsx` for the anti-cheat note.
+//
 // Trust rules (matching slice #16):
 //   * Client-side EXIF / capture time is never sent. The server's
 //     `Date.now()` (or, post-#71, the photo's EXIF DateTimeOriginal
@@ -45,12 +57,13 @@
 //     upload "mobile vs desktop" flag.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { VerifiedReadingConfirmation } from "./VerifiedReadingConfirmation";
 import {
   createManualWithPhotoReading,
-  createVerifiedReading,
+  draftVerifiedReading,
   type ManualWithPhotoSubmission,
   type Reading,
-  type VerifiedReadingSubmission,
+  type VerifiedReadingDraft,
 } from "./readings";
 import { maybeResize } from "./resizePhoto";
 import type { VerifiedReadingErrorMessage } from "./verifiedReadingErrors";
@@ -83,6 +96,15 @@ type UiState =
       previewUrl: string;
       progress: SubmitProgress;
       mode: "verified" | "manual_with_photo";
+    }
+  // Slice #7 of PRD #99 (issue #106): /draft succeeded; render the
+  // confirmation page. The user nudges ± seconds and submits; on
+  // confirm-success we transition to `success`, on retake we bounce
+  // back to `idle`. The draft photo lives in R2 with a 24h TTL.
+  | {
+      kind: "confirming";
+      isBaseline: boolean;
+      draft: VerifiedReadingDraft;
     }
   | { kind: "success"; reading: Reading }
   | {
@@ -234,18 +256,16 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
     });
 
     const resized = await maybeResize(sourceFile);
-    const submission: VerifiedReadingSubmission = {
-      image: resized.file,
-      isBaseline,
-    };
 
-    // Network round-trip. We can't observe the server's CV step
-    // independently from this single fetch, but moving from
-    // "uploading" → "reading" the moment the request body is sent
-    // gives the user a sensible mental model of what's happening.
-    // We approximate by flipping to "reading" on the next tick
-    // after kicking off the fetch, then "saving" once the response
-    // resolves and we start parsing the JSON.
+    // Network round-trip to /draft. We can't observe the server's
+    // CV step independently from this single fetch, but moving
+    // from "uploading" → "reading" the moment the request body is
+    // sent gives the user a sensible mental model of what's
+    // happening. Slice #7 (issue #106): /draft does NOT save the
+    // reading — that comes from /confirm via the confirmation step.
+    // We still show "saving" briefly when the draft returns to
+    // mark "we got something back, the confirmation page is about
+    // to mount".
     const flipToReading = setTimeout(() => {
       setState((prev) =>
         prev.kind === "submitting" && prev.progress === "uploading"
@@ -254,33 +274,50 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
       );
     }, 200);
 
-    const result = await createVerifiedReading(watchId, submission);
+    const result = await draftVerifiedReading(watchId, { image: resized.file });
     clearTimeout(flipToReading);
 
     if (result.ok) {
-      // Briefly show "saving" before the success banner so the user
-      // sees the third checkpoint tick. This is honest UX — the
-      // server has already saved by the time we get here, but the
-      // CLIENT is now saving the result into its own state and
-      // re-rendering, which IS work.
       setState((prev) =>
         prev.kind === "submitting" ? { ...prev, progress: "saving" } : prev,
       );
-      // Wait one frame so the user actually perceives the transition.
+      // Wait one frame so the user perceives the transition before
+      // the confirmation page swaps in.
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      // The draft photo is now on R2 (drafts/<user>/<uuid>.jpg).
+      // We can free the local object URL: the confirmation page
+      // renders draft.photo_url, not our local preview.
       clearPreview();
-      setIsBaseline(false);
-      setState({ kind: "success", reading: result.reading });
-      onSubmitted(result.reading);
+      setState({
+        kind: "confirming",
+        isBaseline,
+        draft: result.draft,
+      });
       return;
     }
 
     setState({
       kind: "error",
-      file: submission.image,
+      file: resized.file,
       previewUrl: liveUrlRef.current ?? "",
       error: result.error,
     });
+  }
+
+  function handleConfirmed(reading: Reading) {
+    setIsBaseline(false);
+    setState({ kind: "success", reading });
+    onSubmitted(reading);
+  }
+
+  function handleRetakeFromConfirmation() {
+    // The draft photo on R2 expires via the 24h lifecycle rule —
+    // no client-side cleanup needed. We just bounce back to the
+    // capture step. `isBaseline` is preserved so the user doesn't
+    // re-tick the checkbox after a retake.
+    setState({ kind: "idle" });
+    // Trigger the file picker so retake is one tap, not two.
+    setTimeout(() => openFilePicker(), 0);
   }
 
   /**
@@ -381,11 +418,14 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
   const showIdle = state.kind === "idle";
   const showChosen = state.kind === "chosen";
   const showSubmitting = state.kind === "submitting";
+  const showConfirming = state.kind === "confirming";
   const showSuccess = state.kind === "success";
   const showError = state.kind === "error";
   const showManualEntry = state.kind === "manual_entry";
 
-  // preview URL for the <img> in chosen/submitting/error/manual_entry states
+  // preview URL for the <img> in chosen/submitting/error/manual_entry states.
+  // Confirming has its own <img> sourced from R2 (draft.photo_url) so it
+  // doesn't reuse the local object URL.
   const preview =
     state.kind === "chosen" ||
     state.kind === "submitting" ||
@@ -611,6 +651,16 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
 
       {showSubmitting && state.kind === "submitting" ? (
         <ProgressIndicator current={state.progress} />
+      ) : null}
+
+      {showConfirming && state.kind === "confirming" ? (
+        <VerifiedReadingConfirmation
+          watchId={watchId}
+          draft={state.draft}
+          isBaseline={state.isBaseline}
+          onConfirmed={handleConfirmed}
+          onRetake={handleRetakeFromConfirmation}
+        />
       ) : null}
 
       {showSuccess && state.kind === "success" ? (

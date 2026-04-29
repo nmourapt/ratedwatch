@@ -162,38 +162,86 @@ export async function deleteReading(
 }
 
 // -------------------------------------------------------------------
-// Slice #17 (issue #18): verified readings — camera-captured + CV-read.
+// Verified readings — two-step API.
 // -------------------------------------------------------------------
 //
-// The backend accepts a multipart body with an `image` file and an
-// optional `is_baseline` toggle. It returns 201 with the full
-// reading row on success, 422 on a structured CV rejection
-// (low_confidence / no_dial_found / unsupported_dial /
-// malformed_image), 502 on a dial-reader transport failure, 503
-// when the `verified_reading_cv` feature flag is off for the caller,
-// and the usual 4xx auth/ownership codes.
+// Slice #17 (issue #18) introduced the synchronous
+// `POST /readings/verified` route. Slice #6 of PRD #99 (issue #105)
+// split it in two for the anti-cheat UX:
+//
+//   1. POST /readings/verified/draft   — accepts the photo, runs
+//      the VLM pipeline, returns a signed `reading_token` + the
+//      predicted MM:SS + a photo URL + the server-clock hour.
+//      Does NOT save a reading row.
+//   2. POST /readings/verified/confirm — accepts
+//      { reading_token, final_mm_ss, is_baseline? }. Validates the
+//      token + the ±30s adjustment cap, saves the reading row,
+//      moves the photo from drafts/ to verified/.
+//
+// Anti-cheat property: /draft never returns the deviation. The SPA
+// confirmation page (slice #7 — issue #106) lets the user adjust ±
+// seconds without seeing what deviation it would produce, so an
+// honest read is the user's dominant strategy.
 //
 // We don't surface the verifier's raw_response to the SPA — the
 // mapped message in verifiedReadingErrors.ts is enough. If we ever
 // want debug info in the UI, we'll plumb it through separately.
 
-export interface VerifiedReadingSubmission {
+export interface VerifiedReadingDraftSubmission {
   image: File;
-  isBaseline: boolean;
 }
 
-export async function createVerifiedReading(
+/**
+ * Wire shape of the /draft 200 response. Mirrors the route handler
+ * in src/server/routes/readings.ts. Critically, this object does NOT
+ * include the deviation — see anti-cheat note above.
+ */
+export interface VerifiedReadingDraft {
+  reading_token: string;
+  predicted_mm_ss: { m: number; s: number };
+  photo_url: string;
+  hour_from_server_clock: number;
+  reference_source: "exif" | "server";
+  expires_at_unix: number;
+}
+
+async function readVerifiedError(
+  response: Response,
+): Promise<VerifiedReadingErrorMessage> {
+  let serverCode: string | undefined;
+  try {
+    // The CV pipeline emits `{ error_code, ux_hint }`; legacy errors
+    // (e.g. `image_required`) emit `{ error }`. Prefer error_code if
+    // both are present.
+    const parsed = (await response.json()) as {
+      error?: string;
+      error_code?: string;
+    };
+    serverCode = parsed.error_code ?? parsed.error;
+  } catch {
+    /* non-JSON body */
+  }
+  return mapVerifiedReadingError(response.status, serverCode);
+}
+
+/**
+ * POST /readings/verified/draft — upload the photo, get a signed
+ * token + predicted MM:SS back. The caller hands the result to the
+ * confirmation page; the user adjusts seconds and submits via
+ * `confirmVerifiedReading`.
+ */
+export async function draftVerifiedReading(
   watchId: string,
-  submission: VerifiedReadingSubmission,
+  submission: VerifiedReadingDraftSubmission,
 ): Promise<
-  { ok: true; reading: Reading } | { ok: false; error: VerifiedReadingErrorMessage }
+  | { ok: true; draft: VerifiedReadingDraft }
+  | { ok: false; error: VerifiedReadingErrorMessage }
 > {
   const form = new FormData();
   form.append("image", submission.image);
-  form.append("is_baseline", submission.isBaseline ? "true" : "false");
 
   const response = await fetch(
-    `/api/v1/watches/${encodeURIComponent(watchId)}/readings/verified`,
+    `/api/v1/watches/${encodeURIComponent(watchId)}/readings/verified/draft`,
     {
       method: "POST",
       body: form,
@@ -201,21 +249,40 @@ export async function createVerifiedReading(
     },
   );
   if (!response.ok) {
-    let serverCode: string | undefined;
-    try {
-      // Slice #75 introduced the `error_code` field on CV-pipeline
-      // rejections (alongside a `ux_hint`). Legacy AI-pipeline errors
-      // continue to use `error`. Read whichever is present, in that
-      // order — `error_code` wins if both somehow appear.
-      const parsed = (await response.json()) as {
-        error?: string;
-        error_code?: string;
-      };
-      serverCode = parsed.error_code ?? parsed.error;
-    } catch {
-      /* non-JSON body */
-    }
-    return { ok: false, error: mapVerifiedReadingError(response.status, serverCode) };
+    return { ok: false, error: await readVerifiedError(response) };
+  }
+  const draft = (await response.json()) as VerifiedReadingDraft;
+  return { ok: true, draft };
+}
+
+export interface ConfirmVerifiedReadingSubmission {
+  reading_token: string;
+  final_mm_ss: { m: number; s: number };
+  is_baseline?: boolean;
+}
+
+/**
+ * POST /readings/verified/confirm — submit the user's (possibly
+ * adjusted) MM:SS for saving. Server validates the token signature
+ * + ±30s adjustment cap and returns the saved reading row.
+ */
+export async function confirmVerifiedReading(
+  watchId: string,
+  submission: ConfirmVerifiedReadingSubmission,
+): Promise<
+  { ok: true; reading: Reading } | { ok: false; error: VerifiedReadingErrorMessage }
+> {
+  const response = await fetch(
+    `/api/v1/watches/${encodeURIComponent(watchId)}/readings/verified/confirm`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(submission),
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    return { ok: false, error: await readVerifiedError(response) };
   }
   const reading = (await response.json()) as Reading;
   return { ok: true, reading };

@@ -55,6 +55,12 @@ export type VerifiedReadingErrorCode =
   | "dial_reader_anchor_disagreement"
   | "dial_reader_anchor_echo_flagged"
   | "rate_limited"
+  // Slice #6 of PRD #99 (issue #105) — confirm-only error codes.
+  // `invalid_token`: signature, expiry, or missing
+  // READING_TOKEN_SECRET. `adjustment_too_large`: user nudged
+  // beyond ±30s of the prediction.
+  | "invalid_token"
+  | "adjustment_too_large"
   | "unknown";
 
 export interface VerifiedReadingErrorMessage {
@@ -250,6 +256,36 @@ export function mapVerifiedReadingError(
     return {
       code: "image_required",
       message: "Please choose a photo first",
+      manualFallback: false,
+      canRetake: true,
+      canRetry: false,
+    };
+  }
+
+  // Slice #6 of PRD #99 (issue #105) — /confirm-only errors.
+  //
+  //   invalid_token: signature mismatch, expiry, or missing
+  //   READING_TOKEN_SECRET. The draft photo on R2 may also have
+  //   expired (24h lifecycle). Either way, the user needs to start
+  //   from a fresh capture — the photo + token are inseparable.
+  //
+  //   adjustment_too_large: user somehow nudged > ±30s. Should be
+  //   impossible from the SPA UI (we disable the buttons at the
+  //   limit) but the server is the security boundary, so we map it
+  //   the same way the UI handles a rejected confirm — retake.
+  if (status === 401 && serverCode === "invalid_token") {
+    return {
+      code: "invalid_token",
+      message: "This reading session expired — please retake the photo.",
+      manualFallback: false,
+      canRetake: true,
+      canRetry: false,
+    };
+  }
+  if (status === 422 && serverCode === "adjustment_too_large") {
+    return {
+      code: "adjustment_too_large",
+      message: "Your adjustment exceeded the allowed range — please retake the photo.",
       manualFallback: false,
       canRetake: true,
       canRetry: false,
