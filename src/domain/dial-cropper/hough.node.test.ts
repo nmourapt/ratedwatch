@@ -140,6 +140,13 @@ function detect(filename: string) {
 
 describe("houghCircles + selectBestCircle on smoke fixtures", () => {
   for (const [filename, expected] of Object.entries(manifest)) {
+    // Per-test timeout of 240s is belt-and-braces. The vitest config
+    // sets testTimeout: 120_000 on the `node` project, but in practice
+    // the project-level value sometimes doesn't propagate correctly
+    // when invoked via `vitest run --coverage`. The waterbury fixture
+    // is the slowest (full-res 1067×980, the only fixture not down-
+    // sampled below 1024px before Hough), and on GitHub `ubuntu-latest`
+    // runners under coverage instrumentation it can take 60-90s.
     it(`detects the dial in ${filename} within tolerance`, () => {
       const result = detect(filename);
       expect(result, "expected a circle to be detected").not.toBeNull();
@@ -164,7 +171,7 @@ describe("houghCircles + selectBestCircle on smoke fixtures", () => {
         drFrac,
         `r ratio ${drFrac.toFixed(3)} (got ${result.r}, expected ${expected.expected_r})`,
       ).toBeLessThanOrEqual(0.2);
-    }, 60_000);
+    }, 240_000);
   }
 });
 
