@@ -3,8 +3,6 @@
 // Slice 4 adds the auth surface at /api/v1/auth/* (handed off to Better
 // Auth verbatim) and the `requireAuth`-gated /api/v1/me endpoint. The
 // landing page at `/` is unchanged from slice 3.
-import { Container } from "@cloudflare/containers";
-import { env as workerEnv } from "cloudflare:workers";
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import { queryLeaderboard } from "@/domain/leaderboard-query";
@@ -328,49 +326,12 @@ app.route("/images/watches", watchImagePublicRoute);
 // an Analytics Engine event before the 302.
 app.route("/out", outRoute);
 
-// CV-based dial reader container. Registered as a Durable Object
-// (container-enabled DOs are SQLite-backed — see
-// `migrations.new_sqlite_classes` in wrangler.jsonc). The Worker
-// reaches it via the `DIAL_READER` binding using
-// `getContainer(env.DIAL_READER, "global").fetch(req)` from
-// src/domain/dial-reader/.
-//
-// `defaultPort = 8080` matches the uvicorn `--port 8080` in the
-// container's CMD; `sleepAfter = "15m"` keeps a warm instance for
-// the 15-minute window where the verified-reading flow is most
-// likely to see repeat hits, then lets the runtime reclaim memory.
-//
-// Slice #74 scaffolded the container, slice #75 wired it into the
-// verified-reading flow, and slice #11 (cutover) made it the sole
-// dial-reader backend. The CV pipeline is gated by the
-// `verified_reading_cv` feature flag (renamed from the legacy
-// `ai_reading_v2` in slice #11; the backward-compat fallback that
-// read the legacy key during the rollover window was removed in
-// the post-cutover cleanup PR).
-//
-// Slice #83 of PRD #73 added the `envVars` block so the container
-// receives `SENTRY_DSN` at startup. We pull from the Worker's
-// process-level `env` (via `cloudflare:workers`) rather than from
-// the per-request `Bindings`-typed env because envVars must be
-// resolvable when the Container DO instantiates — which can happen
-// before the first fetch. When SENTRY_DSN is unset on the Worker
-// the field is `undefined`; `sentry_init.init(None)` handles that
-// as a no-op so the container still boots cleanly in previews
-// without the secret provisioned.
-export class DialReaderContainer extends Container {
-  override defaultPort = 8080;
-  override sleepAfter = "15m";
-  override envVars = {
-    // Reading the secret here lets the container init Sentry with
-    // the same DSN the Worker uses, so Worker errors and Python
-    // errors land in the same project (with `runtime` tags
-    // distinguishing them).
-    //
-    // ESLint forbids non-null assertion below; the literal `?? ""`
-    // is fine because `sentry_init.init` short-circuits on empty.
-    SENTRY_DSN: (workerEnv as { SENTRY_DSN?: string }).SENTRY_DSN ?? "",
-  };
-}
+// The Python CV dial-reader container and its `DialReaderContainer`
+// Durable Object class were decommissioned in slice #1 of PRD #99
+// (issue #100). The replacement Worker-side VLM pipeline lands in
+// slice #4 (issue #103). Until then the verified-reading endpoints
+// (`POST /readings/verified`, `POST /readings/manual_with_photo`)
+// return 503 — see `src/server/routes/readings.ts`.
 
 // Wrap the Hono app so Sentry auto-captures unhandled exceptions.
 // With SENTRY_DSN set as a Worker secret, every throw in any handler

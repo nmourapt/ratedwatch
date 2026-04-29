@@ -89,50 +89,18 @@
     }
   ],
 
-  // CV-based dial reader runs as a Cloudflare Container. The Worker
-  // calls it via the `DIAL_READER` Durable Object binding using
-  // `getContainer(env.DIAL_READER, "global").fetch(req)`. The
-  // verified-reading flow (POST /api/v1/watches/:id/readings/verified)
-  // is the sole consumer.
+  // The verified-reading dial reader (Python container + Durable
+  // Object plus its `DIAL_READER` binding and the `v1`
+  // new_sqlite_classes migration) was decommissioned in slice #1 of
+  // PRD #99 (issue #100). The replacement Worker-side VLM pipeline
+  // lands in slice #4 (issue #103). Until then `/readings/verified`
+  // and `/readings/manual_with_photo` return 503.
   //
-  // - image: Dockerfile path; wrangler builds and pushes during deploy.
-  // - class_name: matches the DurableObject class exported from
-  //   src/worker/index.tsx. The Container DO must be a SQLite-backed
-  //   DO (see migrations.new_sqlite_classes below).
-  // - instance_type: "basic" — adequate for the CV workload (OpenCV
-  //   needs more memory than "lite" provides). Reassess after
-  //   real-photo benchmarks.
-  // - max_instances: cap on simultaneously-running instances. Stopped
-  //   instances do not count.
-  "containers": [
-    {
-      "class_name": "DialReaderContainer",
-      "image": "./container/dial-reader/Dockerfile",
-      "instance_type": "basic",
-      "max_instances": 10
-    }
-  ],
-
-  // Durable Object bindings. The DialReaderContainer is the
-  // container-enabled DO that backs the `DIAL_READER` binding.
-  // Adding it here registers the binding; the SQLite-backed migration
-  // below tells the runtime that DialReaderContainer is a brand-new
-  // class (required for container-enabled DOs).
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "DIAL_READER",
-        "class_name": "DialReaderContainer"
-      }
-    ]
-  },
-
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["DialReaderContainer"]
-    }
-  ],
+  // Operator follow-up post-merge:
+  //   - Delete `ratedwatch-dialreadercontainer:*` images from
+  //     Cloudflare Container Registry.
+  //   - The next prod deploy will surface the `DialReaderContainer`
+  //     DO class as "deleted (no longer in code)" — that is expected.
 
   "observability": {
     "enabled": true,
@@ -152,63 +120,12 @@
     }
   ],
 
-  // Workers Rate Limiting binding — slice #82 of PRD #73 user story
-  // #25 ("50 verified-reading attempts per 24-hour rolling window
-  // per user").
-  //
-  // The verified-reading capture flow (POST /readings/verified) and
-  // its manual fallback (POST /readings/manual_with_photo) share a
-  // single quota. Both endpoints upload a 10 MB photo to R2 and (for
-  // /verified) round-trip the CV container; the cap exists to bound
-  // the cost of a runaway client / abusive user, not to throttle
-  // normal use.
-  //
-  // Why two layers (binding + D1 row-count)?
-  // ----------------------------------------
-  // The GA `ratelimits` binding's `simple.period` is fixed at 10 or
-  // 60 seconds — it cannot express a 24h window. We resolve this
-  // with two cooperating gates inside `src/domain/rate-limit/`:
-  //
-  //   1. **Per-minute burst guard** — this binding. A burst of >50
-  //      photo uploads in a single minute by one user is anomalous
-  //      and the binding catches it cheaply at the edge, before any
-  //      DB lookup. The local-to-Cloudflare-location semantics of
-  //      the GA binding are fine for this purpose: an abusive client
-  //      hammering one POP gets blocked there.
-  //
-  //   2. **Per-24h product cap** — a D1 row-count over the readings
-  //      table indexed on `(user_id, photo_r2_key, created_at)`
-  //      from migration 0007. This is the one that matches the
-  //      product spec exactly and is what end users see at the 51st
-  //      attempt of the day.
-  //
-  // Both gates emit the same structured 429 body so the SPA's slice
-  // #80 UX renders consistently regardless of which gate fired.
-  //
-  // Operator action: no `wrangler ratelimit` provisioning command
-  // exists; the binding auto-provisions on first deploy. The
-  // namespace_id is an opaque identifier unique within this account.
-  // See the operator note in PR #82's body.
-  //
-  // Test integration: miniflare under vitest-pool-workers DOES
-  // simulate this binding (good — the ratelimits validator accepts
-  // period 60), but counter state across test files is fragile.
-  // Tests inject a deterministic fake via `__setTestRateLimiter`
-  // (mirroring the existing `__setTestDialReader` /
-  // `__setTestAiRunner` patterns) so the per-minute behaviour is
-  // hermetic.
-  "ratelimits": [
-    {
-      "name": "VERIFIED_READING_LIMITER",
-      // Account-unique opaque integer identifier. The string form
-      // is intentional per the GA spec.
-      "namespace_id": "1001",
-      // 50 / 60s — burst guard layer. The 24h product cap is
-      // enforced separately in src/domain/rate-limit/, see the
-      // module-level comment for rationale.
-      "simple": { "limit": 50, "period": 60 }
-    }
-  ]
+  // The verified-reading rate-limit binding
+  // (`VERIFIED_READING_LIMITER`) was removed in slice #1 of PRD #99
+  // (issue #100) alongside the rest of the dial-reader plumbing.
+  // The replacement VLM pipeline (slice #4 — issue #103) will
+  // re-introduce a rate-limit binding when the verified-reading
+  // surface comes back online.
 
   // ---------------------------------------------------------------
   // Runtime secrets (NOT stored here — set via `wrangler secret put`)
@@ -219,18 +136,13 @@
   //   GOOGLE_CLIENT_ID      — Google OAuth 2.0 client ID from the
   //                            Google Cloud Console.
   //   GOOGLE_CLIENT_SECRET  — matching OAuth client secret.
-  //   SENTRY_DSN            — shared Sentry DSN used by both the
-  //                            Worker and the dial-reader Python
-  //                            container (slice #83 of PRD #73).
-  //                            The container reads the DSN via
-  //                            envVars on `DialReaderContainer`
-  //                            (see src/worker/index.tsx), which
-  //                            forwards `env.SENTRY_DSN` into the
-  //                            container at startup. Missing DSN is
-  //                            a no-op on both sides — the Worker's
-  //                            withSentry wrapper degrades to a
-  //                            passthrough, the container's
-  //                            sentry_init.init() short-circuits.
+  //   SENTRY_DSN            — Sentry DSN for the Worker
+  //                            (`withSentry` in
+  //                            src/observability/sentry.ts). Missing
+  //                            DSN is a no-op — the wrapper degrades
+  //                            to a passthrough so local dev and
+  //                            freshly-provisioned previews boot
+  //                            cleanly without the secret.
   //
   // When the Google pair is unset the Worker still boots and
   // email+password flows work; only the Google social provider is
