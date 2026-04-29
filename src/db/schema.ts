@@ -140,6 +140,12 @@ export interface ReadingsTable {
   photo_r2_key: string | null;
   dial_reader_confidence: number | null;
   dial_reader_version: string | null;
+  // Slice 4 of PRD #99 (issue #103): the VLM model slug that
+  // produced this verified reading (e.g. `openai/gpt-5.2`). NOT
+  // NULL with default `'unknown'` so historical rows / manual
+  // rows get a sentinel without a backfill. See
+  // migrations/0008_vlm_dial_reader.sql.
+  vlm_model: Generated<string>;
 }
 
 export interface Database {

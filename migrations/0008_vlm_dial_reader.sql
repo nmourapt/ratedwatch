@@ -1,0 +1,21 @@
+-- Slice 4 (issue #103) of PRD #99: wire the new VLM dial-reader pipeline
+-- into the verified-reading flow. The previous (Python container) reader
+-- recorded `dial_reader_version` on each verified row; we keep that column
+-- for legacy rows and add `vlm_model` so the new pipeline can record the
+-- exact model slug that produced the reading (e.g. `openai/gpt-5.2`).
+--
+-- A separate column — rather than overloading `dial_reader_version` —
+-- gives operators a clean break between the "Python container vN.N.N"
+-- regime and the "VLM model slug" regime. Future audits can group by
+-- `vlm_model` to spot which model is producing borderline reads.
+--
+-- The default `'unknown'` keeps the column NOT NULL without forcing a
+-- backfill on historical rows (manual readings, AI-era readings, the
+-- short-lived Python container readings). New verified readings written
+-- by the slice-#4 pipeline always set the real model slug.
+--
+-- The issue body specified `verified_readings` as the table name, but
+-- this codebase has always stored verified rows in the unified `readings`
+-- table (with `verified=1`). The column lands there to match.
+
+ALTER TABLE readings ADD COLUMN vlm_model TEXT NOT NULL DEFAULT 'unknown';
