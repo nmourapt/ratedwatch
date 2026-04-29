@@ -24,11 +24,19 @@
 import { Hono } from "hono";
 import { createDb } from "@/db";
 import type { DB } from "@/db";
+import { cropToDial } from "@/domain/dial-cropper/cropper";
+import { createWorkersAiClient } from "@/domain/dial-reader-vlm/ai-client";
+import { readDial } from "@/domain/dial-reader-vlm/reader";
 import {
   computeSessionStats,
   type Reading,
   type SessionStats,
 } from "@/domain/drift-calc";
+import {
+  DEFAULT_VLM_MODEL,
+  verifyVlmReadingFromEnv,
+  type VerifyReadingErrorCode,
+} from "@/domain/reading-verifier/verifier";
 import { assertWatchOwnership } from "@/domain/watches/ownership";
 import { logEvent } from "@/observability/events";
 import {
@@ -45,11 +53,31 @@ type Bindings = AuthEnv & {
   DB: D1Database;
   WATCH_IMAGES: R2Bucket;
   FLAGS: KVNamespace;
+  // Workers AI binding — added back in slice #3 of PRD #99 (issue
+  // #102) for the new VLM dial reader. The verified-reading route
+  // calls into `dial-reader-vlm/reader.ts` which goes
+  // `env.AI.run("openai/gpt-5.2", body, { gateway: { id } })`.
+  AI: Ai;
+  // AI Gateway slug for the VLM call. Defaults to the bake-off
+  // gateway in wrangler.jsonc; production gateway lands in slice #9.
+  AI_GATEWAY_ID?: string;
+  // Cloudflare Images binding for the dial cropper (slice #2 of
+  // PRD #99). Used for HEIC decode + 1024-px-long-edge resize +
+  // final 768×768 crop.
+  IMAGES: ImagesBinding;
   // Analytics Engine (slice #19). Optional because logEvent
   // defaults to a silent no-op when unbound.
   ANALYTICS?: AnalyticsEngineDataset;
   [key: string]: unknown;
 };
+
+/**
+ * Verified-reading photo size cap. 10 MB is generous for a phone
+ * snapshot — the SPA-side `resizePhoto` already shrinks captures to
+ * ~1-2 MB, so this is mostly here to deflect a misuse / stuck
+ * client rather than a normal-flow constraint.
+ */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 // ---- Shared mappers ------------------------------------------------
 
@@ -360,47 +388,216 @@ readingsByWatchRoute.post("/tap", async (c) => {
 });
 
 /**
- * POST /verified — log a verified (camera-captured, CV-read) reading.
+ * POST /verified — log a verified (camera-captured, VLM-read) reading.
  *
- * **Currently a 503 stub.** The Python dial-reader container that used
- * to back this route was decommissioned in slice #1 of PRD #99 (issue
- * #100). The new VLM-backed Worker-side pipeline lands in slice #4 of
- * PRD #99 (issue #103); until then this route returns the same
- * `error_code: "verified_readings_disabled"` shape the feature-flag
- * gate used to emit, so the SPA's existing `verifiedReadingErrors.ts`
- * mapper renders a friendly "Verified readings aren't enabled for
- * your account yet" alert.
+ * Slice #4 of PRD #99 (issue #103) wired this route to the new
+ * Worker-side hybrid pipeline:
  *
- * The same stub is applied to `/manual_with_photo` (the photo-bearing
- * fallback flow) — both are part of the same dial-reader subsystem
- * being rebuilt.
+ *   1. Capture `serverArrivalMs` BEFORE the multipart parse so
+ *      upload latency does not leak into the reference timestamp.
+ *   2. Auth + ownership checks (existing patterns).
+ *   3. Parse the multipart body — `image` File + optional
+ *      `is_baseline` flag.
+ *   4. Call `verifyVlmReadingFromEnv` which crops the photo
+ *      (`@/domain/dial-cropper`), reads the dial via a single VLM
+ *      call (`@/domain/dial-reader-vlm`), and produces a deviation.
+ *   5. INSERT into `readings` with verified=1 and the new
+ *      `vlm_model` column (migrations/0008_vlm_dial_reader.sql).
+ *   6. Best-effort R2 upload of the photo at
+ *      `verified/{userId}/{readingId}.jpg`. A failed upload is
+ *      logged but does NOT roll back the reading — the row is the
+ *      canonical record, the photo is provenance.
+ *
+ * Median-of-3 + the anchor-disagreement guard land in slice #5.
+ * Rate-limit gating (the `VERIFIED_READING_LIMITER` binding +
+ * 50/24h cap) is being re-introduced in a later slice — explicitly
+ * out of scope for this tracer bullet per the issue body.
+ *
+ * Error mapping (matches the SPA's verifiedReadingErrors.ts mapper):
+ *   * 400 + error: "image_required"               — no image on form
+ *   * 413 + error: "image_too_large"               — > 10 MB
+ *   * 422 + error: "exif_clock_skew"               — EXIF outside bounds
+ *   * 422 + error_code: "ai_unparseable"           — VLM didn't emit HH:MM:SS
+ *   * 502 + error_code: "dial_reader_transport_error" — upstream blew up
  */
 readingsByWatchRoute.post("/verified", async (c) => {
+  // Capture wall-clock immediately. The multipart parse below can
+  // take seconds on cellular; `Date.now()` after the parse would
+  // bake that latency into the reference timestamp. See AGENTS.md
+  // and the verifier docstring.
+  const serverArrivalMs = Date.now();
+
   const user = c.get("user");
   const watchId = getWatchIdParam(c);
   if (!watchId) return c.json({ error: "not_found" }, 404);
 
-  // Keep emitting the attempt event so funnel analytics survive the
-  // rebuild. The decline event below uses the same code the SPA's
-  // verifiedReadingErrors.ts mapper already understands, so the UX
-  // copy ("Verified readings aren't enabled for your account yet")
-  // stays correct without any client changes.
   await logEvent("verified_reading_attempted", { userId: user.id, watchId }, c.env);
+
+  const db = createDb(c.env);
+  const ownership = await assertWatchOwnership(db, watchId, user.id);
+  if (ownership.status === "not_found") {
+    return c.json({ error: "not_found" }, 404);
+  }
+  if (ownership.status === "forbidden") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  let form: FormData;
+  try {
+    form = await c.req.formData();
+  } catch {
+    return c.json({ error: "invalid_multipart" }, 400);
+  }
+
+  const image = form.get("image");
+  if (!(image instanceof File) || image.size === 0) {
+    return c.json({ error: "image_required" }, 400);
+  }
+  if (image.size > MAX_IMAGE_BYTES) {
+    return c.json({ error: "image_too_large", max_bytes: MAX_IMAGE_BYTES }, 413);
+  }
+
+  const isBaselineRaw = form.get("is_baseline");
+  const isBaseline =
+    typeof isBaselineRaw === "string" && isBaselineRaw.toLowerCase() === "true";
+
+  const imageBuffer = await image.arrayBuffer();
+
+  const aiGatewayId = c.env.AI_GATEWAY_ID ?? "dial-reader-bakeoff";
+  const result = await verifyVlmReadingFromEnv(
+    {
+      photoBytes: imageBuffer,
+      watchId,
+      userId: user.id,
+      serverArrivalAtMs: serverArrivalMs,
+    },
+    {
+      env: { IMAGES: c.env.IMAGES },
+      readDialDeps: {
+        ai: createWorkersAiClient(c.env.AI),
+        gatewayId: aiGatewayId,
+      },
+      cropper: cropToDial,
+      reader: readDial,
+      model: DEFAULT_VLM_MODEL,
+    },
+  );
+
+  if (!result.ok) {
+    await logEvent(
+      "verified_reading_failed",
+      { userId: user.id, watchId, error: result.error },
+      c.env,
+    );
+    return verifiedReadingErrorResponse(c, result.error, result.raw_response);
+  }
+
+  // Success — persist the row. Baseline overrides deviation to 0
+  // (matches the existing `is_baseline => deviation_seconds = 0`
+  // contract from the manual flow).
+  const deviation = isBaseline ? 0 : result.deviation_seconds;
+  const id = crypto.randomUUID();
+  await db
+    .insertInto("readings")
+    .values({
+      id,
+      watch_id: watchId,
+      user_id: user.id,
+      reference_timestamp: result.reference_timestamp_ms,
+      deviation_seconds: deviation,
+      is_baseline: isBaseline ? 1 : 0,
+      verified: 1,
+      notes: null,
+      vlm_model: result.vlm_model,
+    })
+    .execute();
+
+  // Best-effort R2 upload. Failure does NOT roll back — the DB row
+  // is the canonical record. Permanent prefix `verified/{userId}/{id}.jpg`
+  // — slice #6 will introduce the draft/confirm split where photos
+  // live under a draft prefix until confirmed.
+  const photoKey = `verified/${user.id}/${id}.jpg`;
+  let storedPhotoKey: string | null = null;
+  try {
+    await c.env.WATCH_IMAGES.put(photoKey, imageBuffer, {
+      httpMetadata: { contentType: image.type || "image/jpeg" },
+    });
+    storedPhotoKey = photoKey;
+    await db
+      .updateTable("readings")
+      .set({ photo_r2_key: photoKey })
+      .where("id", "=", id)
+      .execute();
+  } catch (err) {
+    console.warn(
+      `verified-reading: R2 upload failed for reading ${id}, continuing:`,
+      err,
+    );
+  }
+  void storedPhotoKey; // tracked for symmetry; not surfaced on the response
+
+  const created = (await db
+    .selectFrom("readings")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirstOrThrow()) as DbReadingRow;
+
+  // Fire-and-forget cache purge — same scope as the manual POST.
+  const username = await lookupUsername(db, user.id);
+  await purgeLeaderboardUrls({
+    requestUrl: new URL(c.req.url),
+    movementId: ownership.watch.movement_id,
+    username,
+    watchId,
+  });
+
   await logEvent(
-    "verified_reading_failed",
-    { userId: user.id, watchId, error: "verified_readings_disabled" },
+    "verified_reading_succeeded",
+    { userId: user.id, watchId, is_baseline: isBaseline },
     c.env,
   );
 
+  return c.json(toResponse(created), 201);
+});
+
+/**
+ * Map a verifier error code to the wire-format error response.
+ * Mirrors the wording/shape the SPA's
+ * `verifiedReadingErrors.ts::mapVerifiedReadingError` already
+ * understands — see the comments there for the matrix. We do NOT
+ * leak `raw_response` for the AI errors (it can include the full
+ * model output, which is excessive for the SPA) but we keep it on
+ * the EXIF-skew branch where the legacy shape carries a debug hint.
+ */
+function verifiedReadingErrorResponse(
+  c: {
+    json: (body: unknown, status: number) => Response;
+  },
+  code: VerifyReadingErrorCode,
+  rawResponse: string | undefined,
+): Response {
+  if (code === "exif_clock_skew") {
+    return c.json({ error: code, raw_response: rawResponse }, 422);
+  }
+  if (code === "dial_reader_transport_error") {
+    return c.json(
+      {
+        error_code: code,
+        ux_hint: "Connection failed while reading dial. Please try again.",
+      },
+      502,
+    );
+  }
+  // ai_unparseable
   return c.json(
     {
-      error_code: "verified_readings_disabled",
+      error_code: code,
       ux_hint:
-        "Verified-reading is being rebuilt — please log this reading manually. See PRD #99.",
+        "We couldn't read the dial in your photo — try a clearer shot or log manually.",
     },
-    503,
+    422,
   );
-});
+}
 
 /**
  * POST /manual_with_photo — fallback flow for slice #80 (PRD #73).
