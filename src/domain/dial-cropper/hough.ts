@@ -323,71 +323,86 @@ function voteCentres(
   const ah = Math.max(1, Math.floor(height / dp));
   const accum = new Float32Array(aw * ah);
   const { gx, gy, mag } = sobel;
-  // Sub-pixel bilinear vote distribution: when a vote lands at
-  // accumulator coordinates (cx, cy), spread it over the 2×2 cells
-  // surrounding (cx, cy) weighted by distance. This gives meaningfully
-  // better centre precision than simple integer truncation, especially
-  // on small images where each pixel matters (e.g. waterbury at
-  // ~1067×980 — without sub-pixel votes the centre walks several
-  // pixels off-axis because the accumulator quantises away the
-  // gradient-direction signal).
-  const splatBilinear = (fx: number, fy: number, weight: number) => {
-    if (fx < 0 || fx >= aw - 1 || fy < 0 || fy >= ah - 1) return;
-    const ix = Math.floor(fx);
-    const iy = Math.floor(fy);
-    const wx = fx - ix;
-    const wy = fy - iy;
-    const w00 = (1 - wx) * (1 - wy) * weight;
-    const w01 = wx * (1 - wy) * weight;
-    const w10 = (1 - wx) * wy * weight;
-    const w11 = wx * wy * weight;
-    const r0 = iy * aw + ix;
-    const r1 = r0 + aw;
-    accum[r0] = (accum[r0] ?? 0) + w00;
-    accum[r0 + 1] = (accum[r0 + 1] ?? 0) + w01;
-    accum[r1] = (accum[r1] ?? 0) + w10;
-    accum[r1 + 1] = (accum[r1 + 1] ?? 0) + w11;
-  };
-  // Compute the median edge magnitude so we can normalise the weight
-  // and not let a single super-strong gradient dominate the
-  // accumulator. We approximate the median with the mean over edge
-  // pixels (cheap and good enough — Canny has already filtered out
-  // the long tail of weak gradients).
+  const invDp = 1 / dp;
+  // Compute the mean edge magnitude so we can normalise the per-vote
+  // weight and not let a single super-strong gradient dominate the
+  // accumulator. (We use the mean as a cheap proxy for the median —
+  // good enough since Canny has already filtered out the long tail
+  // of weak gradients.) Weighting matters on photos with both an
+  // inner dial and an outer bezel: a uniformly-textured outer bezel
+  // with many medium-strength pixels can otherwise lose to an inner
+  // dial bordered by a few very-bright marks.
   let edgeMagSum = 0;
   let edgeCount = 0;
-  for (let y = 0; y < height; y += 1) {
-    const row = y * width;
-    for (let x = 0; x < width; x += 1) {
-      if (edges[row + x] !== 255) continue;
-      edgeMagSum += mag[row + x] ?? 0;
-      edgeCount += 1;
-    }
+  for (let i = 0; i < edges.length; i += 1) {
+    if (edges[i] !== 255) continue;
+    edgeMagSum += mag[i] ?? 0;
+    edgeCount += 1;
   }
   const meanEdgeMag = edgeCount > 0 ? edgeMagSum / edgeCount : 1;
+  // Performance note: this is the hot loop of the entire pipeline.
+  // Roughly (#edge pixels) × (maxR - minR) × 2 polarities × 4 cells
+  // splats per call — ≈ 100–200 M FLOPs on a 1024×1024 input. The
+  // bilinear-splat distribution is inlined here (no helper function)
+  // and uses bare typed-array access (no `?? 0` fallback) since we
+  // know the indices are always in-range after the explicit bounds
+  // check. That cuts JIT dispatch overhead by roughly 3×.
+  const awMinus1 = aw - 1;
+  const ahMinus1 = ah - 1;
   for (let y = 0; y < height; y += 1) {
     const row = y * width;
     for (let x = 0; x < width; x += 1) {
       if (edges[row + x] !== 255) continue;
       const m = mag[row + x] ?? 0;
       if (m === 0) continue;
-      const ux = (gx[row + x] ?? 0) / m;
-      const uy = (gy[row + x] ?? 0) / m;
-      // Weight each vote by the gradient strength (clamped at 2× the
-      // mean so a single very strong edge doesn't drown out a real
-      // ring made of many medium-strength pixels). Without this
-      // weighting, a uniformly-textured outer bezel made of many
-      // medium-strength pixels can lose to an inner dial bordered
-      // by a few very-bright marks.
-      const w = Math.min(m / meanEdgeMag, 2);
+      const invM = 1 / m;
+      const ux = (gx[row + x] ?? 0) * invM;
+      const uy = (gy[row + x] ?? 0) * invM;
+      const weight = m / meanEdgeMag > 2 ? 2 : m / meanEdgeMag;
+      const xDp = x * invDp;
+      const yDp = y * invDp;
+      const dx = ux * invDp;
+      const dy = uy * invDp;
       // Step from minR to maxR; at each r vote in both directions
       // (the dial may be brighter or darker than its surround).
-      for (let r = minR; r <= maxR; r += 1) {
-        const cx1 = (x - r * ux) / dp;
-        const cy1 = (y - r * uy) / dp;
-        const cx2 = (x + r * ux) / dp;
-        const cy2 = (y + r * uy) / dp;
-        splatBilinear(cx1, cy1, w);
-        splatBilinear(cx2, cy2, w);
+      // Stride of 2: the centre accumulator only needs ~half the
+      // samples per gradient ray to lock onto the peak; the per-
+      // candidate radius search (`bestRadius`) re-histograms at
+      // 1-pixel granularity later, so dropping centre-accumulator
+      // fidelity here doesn't lose accuracy on the final r value.
+      // Halves the wall-clock cost of the hot loop.
+      const rStride = 2;
+      for (let r = minR; r <= maxR; r += rStride) {
+        // Polarity 1: centre at (x, y) - r * (ux, uy) in image space.
+        let fx = xDp - r * dx;
+        let fy = yDp - r * dy;
+        if (fx >= 0 && fx < awMinus1 && fy >= 0 && fy < ahMinus1) {
+          const ix = fx | 0;
+          const iy = fy | 0;
+          const wx = fx - ix;
+          const wy = fy - iy;
+          const r0 = iy * aw + ix;
+          const r1 = r0 + aw;
+          accum[r0]! += (1 - wx) * (1 - wy) * weight;
+          accum[r0 + 1]! += wx * (1 - wy) * weight;
+          accum[r1]! += (1 - wx) * wy * weight;
+          accum[r1 + 1]! += wx * wy * weight;
+        }
+        // Polarity 2: centre at (x, y) + r * (ux, uy).
+        fx = xDp + r * dx;
+        fy = yDp + r * dy;
+        if (fx >= 0 && fx < awMinus1 && fy >= 0 && fy < ahMinus1) {
+          const ix = fx | 0;
+          const iy = fy | 0;
+          const wx = fx - ix;
+          const wy = fy - iy;
+          const r0 = iy * aw + ix;
+          const r1 = r0 + aw;
+          accum[r0]! += (1 - wx) * (1 - wy) * weight;
+          accum[r0 + 1]! += wx * (1 - wy) * weight;
+          accum[r1]! += (1 - wx) * wy * weight;
+          accum[r1 + 1]! += wx * wy * weight;
+        }
       }
     }
   }

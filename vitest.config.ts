@@ -153,9 +153,13 @@ export default defineConfig(async (_env): Promise<ViteUserConfig> => {
             // jpeg-js + node:fs). No workerd, no bindings.
             include: ["src/**/*.node.test.{ts,tsx}"],
             exclude: ["node_modules/**", "dist/**", ".wrangler/**"],
-            // Hough on a 1024px image plus six fixtures takes a few
-            // seconds wall-clock; give plenty of headroom.
-            testTimeout: 60_000,
+            // Hough on a 1024px-long-edge image is the slowest test
+            // in the project (a few seconds per fixture on a fast
+            // laptop, slower on a GitHub runner). 120s per test
+            // covers the worst fixture (waterbury — full-res
+            // 1067×980, the only one not downsampled below 1024)
+            // with comfortable headroom on the smallest CI runners.
+            testTimeout: 120_000,
           },
         },
       ],
