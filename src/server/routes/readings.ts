@@ -22,6 +22,7 @@
 // deviation with the baseline flag.
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { createDb } from "@/db";
 import type { DB } from "@/db";
 import { cropToDial } from "@/domain/dial-cropper/cropper";
@@ -34,9 +35,16 @@ import {
 } from "@/domain/drift-calc";
 import {
   DEFAULT_VLM_MODEL,
+  computeMmSsDeviation,
   verifyVlmReadingFromEnv,
   type VerifyReadingErrorCode,
 } from "@/domain/reading-verifier/verifier";
+import {
+  READING_TOKEN_TTL_SECONDS,
+  signReadingToken,
+  verifyReadingToken,
+  type ReadingTokenPayload,
+} from "@/domain/reading-token/token";
 import { assertWatchOwnership } from "@/domain/watches/ownership";
 import { logEvent } from "@/observability/events";
 import {
@@ -68,6 +76,13 @@ type Bindings = AuthEnv & {
   // Analytics Engine (slice #19). Optional because logEvent
   // defaults to a silent no-op when unbound.
   ANALYTICS?: AnalyticsEngineDataset;
+  // HMAC-SHA256 secret used to sign the `reading_token` envelope
+  // exchanged between /readings/verified/draft and
+  // /readings/verified/confirm (slice #6 of PRD #99). Set via
+  // `wrangler secret put READING_TOKEN_SECRET` in production; the
+  // miniflare test config seeds a deterministic value via bindings.
+  // 32+ bytes of entropy required (`openssl rand -base64 32`).
+  READING_TOKEN_SECRET: string;
   [key: string]: unknown;
 };
 
@@ -387,44 +402,121 @@ readingsByWatchRoute.post("/tap", async (c) => {
   return c.json(toResponse(created as DbReadingRow), 201);
 });
 
+// ---- Verified-reading two-step API (slice #6 of PRD #99) ----------
+//
+// The synchronous `POST /verified` route is replaced by:
+//
+//   1. POST /verified/draft   — accepts the photo, runs the VLM
+//      pipeline, persists the photo to a temporary R2 prefix
+//      (`drafts/{user_id}/{uuid}.jpg`), and returns a signed
+//      `reading_token` + the predicted MM:SS + a photo URL. Does
+//      NOT save a reading row.
+//
+//   2. POST /verified/confirm — accepts `{ reading_token,
+//      final_mm_ss }`. Verifies the token signature and expiry,
+//      cross-checks the payload's user_id/watch_id against the
+//      session and request, validates `final_mm_ss` is within ±30s
+//      of the predicted value (per-click adjustment limit), saves
+//      the reading row, and moves the photo from `drafts/` to
+//      `verified/{user_id}/{reading_id}.jpg`.
+//
+// Anti-cheat property: `/draft` returns the prediction but NOT
+// the deviation. The SPA confirmation page (slice #7) lets the
+// user adjust ± seconds without ever seeing the deviation, so a
+// user can't naively dial up to "make their watch look perfect".
+//
+// `READING_TOKEN_SECRET` carries the integrity guarantee. A
+// missing or wrong secret on the server makes every confirm a 401;
+// the route layer never falls back to "trust the client".
+//
+// Photo lifecycle:
+//   * On `/draft` success: photo lives at `drafts/{user_id}/{uuid}.jpg`.
+//   * R2 lifecycle rule expires `drafts/` after 24h (handled in
+//     `infra/terraform/r2.tf`), so abandoned drafts don't pile up.
+//   * On `/confirm` success: photo is copied to
+//     `verified/{user_id}/{reading_id}.jpg` and the draft copy
+//     deleted. The copy+delete sequence is idempotent — if the
+//     verified copy already exists, the second attempt is a no-op
+//     re-write of the same bytes.
+
 /**
- * POST /verified — log a verified (camera-captured, VLM-read) reading.
+ * Per-click adjustment cap (in seconds). The slice-#7 confirmation
+ * UI lets the user ± seconds with each click; the server enforces
+ * the same ±30s limit so a malicious client can't bypass the UI.
+ * Larger corrections require retake.
+ */
+const CONFIRM_ADJUSTMENT_LIMIT_SECONDS = 30;
+
+const confirmReadingSchema = z.object({
+  reading_token: z.string().min(1),
+  final_mm_ss: z.object({
+    m: z.number().int().min(0).max(59),
+    s: z.number().int().min(0).max(59),
+  }),
+  is_baseline: z.boolean().optional(),
+});
+
+/**
+ * Format a unix-ms timestamp as `HH:MM:SS` UTC for the
+ * `anchor_hms` field of the reading-token payload. We don't bake a
+ * full unix timestamp into the token because the deviation calc on
+ * confirm only needs the MM:SS components — but we keep the hour
+ * for log/debug purposes (anchor-vs-prediction mismatch
+ * investigation).
+ */
+function formatHms(timestampMs: number): string {
+  const d = new Date(timestampMs);
+  const h = String(d.getUTCHours()).padStart(2, "0");
+  const m = String(d.getUTCMinutes()).padStart(2, "0");
+  const s = String(d.getUTCSeconds()).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+/**
+ * Wrap-aware MM:SS distance on the [0, 3600) circle. Returns the
+ * shortest signed distance (in seconds) between two MM:SS pairs,
+ * always in [-1800, +1800]. The route uses the absolute value to
+ * enforce the ±30s adjustment cap.
+ */
+function mmSsCircularDistance(
+  a: { m: number; s: number },
+  b: { m: number; s: number },
+): number {
+  const aTotal = a.m * 60 + a.s;
+  const bTotal = b.m * 60 + b.s;
+  const raw = aTotal - bTotal;
+  const wrapped = (((raw + 1800) % 3600) + 3600) % 3600;
+  return wrapped - 1800;
+}
+
+/**
+ * POST /verified/draft — run the VLM pipeline, return a signed
+ * `reading_token` + predicted MM:SS + photo URL. Does NOT persist
+ * a reading.
  *
- * Slice #4 of PRD #99 (issue #103) wired this route to the new
- * Worker-side hybrid pipeline:
- *
- *   1. Capture `serverArrivalMs` BEFORE the multipart parse so
- *      upload latency does not leak into the reference timestamp.
- *   2. Auth + ownership checks (existing patterns).
- *   3. Parse the multipart body — `image` File + optional
- *      `is_baseline` flag.
- *   4. Call `verifyVlmReadingFromEnv` which crops the photo
- *      (`@/domain/dial-cropper`), reads the dial via a single VLM
- *      call (`@/domain/dial-reader-vlm`), and produces a deviation.
- *   5. INSERT into `readings` with verified=1 and the new
- *      `vlm_model` column (migrations/0008_vlm_dial_reader.sql).
- *   6. Best-effort R2 upload of the photo at
- *      `verified/{userId}/{readingId}.jpg`. A failed upload is
- *      logged but does NOT roll back the reading — the row is the
- *      canonical record, the photo is provenance.
- *
- * Median-of-3 + the anchor-disagreement guard land in slice #5.
- * Rate-limit gating (the `VERIFIED_READING_LIMITER` binding +
- * 50/24h cap) is being re-introduced in a later slice — explicitly
- * out of scope for this tracer bullet per the issue body.
- *
- * Error mapping (matches the SPA's verifiedReadingErrors.ts mapper):
+ * Error mapping:
  *   * 400 + error: "image_required"               — no image on form
  *   * 413 + error: "image_too_large"               — > 10 MB
  *   * 422 + error: "exif_clock_skew"               — EXIF outside bounds
- *   * 422 + error_code: "ai_unparseable"           — VLM didn't emit HH:MM:SS
+ *   * 422 + error_code: "ai_unparseable" + retake reason
+ *                                                  — VLM didn't emit HH:MM:SS
  *   * 502 + error_code: "dial_reader_transport_error" — upstream blew up
+ *
+ * On success returns 200 with:
+ *   {
+ *     reading_token: string,
+ *     predicted_mm_ss: { m, s },
+ *     photo_url: string,
+ *     hour_from_server_clock: number,   // 0–23 UTC; SPA renders
+ *                                       // the hour the user can't change
+ *     reference_source: "exif" | "server",
+ *     expires_at_unix: number,
+ *   }
  */
-readingsByWatchRoute.post("/verified", async (c) => {
-  // Capture wall-clock immediately. The multipart parse below can
-  // take seconds on cellular; `Date.now()` after the parse would
-  // bake that latency into the reference timestamp. See AGENTS.md
-  // and the verifier docstring.
+readingsByWatchRoute.post("/verified/draft", async (c) => {
+  // Capture wall-clock immediately. See AGENTS.md and verifier
+  // docstring — multipart parse can take seconds, and we don't
+  // want upload latency leaking into the reference timestamp.
   const serverArrivalMs = Date.now();
 
   const user = c.get("user");
@@ -457,10 +549,6 @@ readingsByWatchRoute.post("/verified", async (c) => {
     return c.json({ error: "image_too_large", max_bytes: MAX_IMAGE_BYTES }, 413);
   }
 
-  const isBaselineRaw = form.get("is_baseline");
-  const isBaseline =
-    typeof isBaselineRaw === "string" && isBaselineRaw.toLowerCase() === "true";
-
   const imageBuffer = await image.arrayBuffer();
 
   const aiGatewayId = c.env.AI_GATEWAY_ID ?? "dial-reader-bakeoff";
@@ -492,10 +580,180 @@ readingsByWatchRoute.post("/verified", async (c) => {
     return verifiedReadingErrorResponse(c, result.error, result.raw_response);
   }
 
-  // Success — persist the row. Baseline overrides deviation to 0
-  // (matches the existing `is_baseline => deviation_seconds = 0`
-  // contract from the manual flow).
-  const deviation = isBaseline ? 0 : result.deviation_seconds;
+  // Persist the photo to the draft prefix. The lifecycle rule on
+  // `drafts/` (24h TTL — see infra/terraform/r2.tf) cleans up
+  // abandoned drafts. Failure here is fatal to /draft because we
+  // need a working photo URL to return to the SPA.
+  const draftPhotoUuid = crypto.randomUUID();
+  const draftKey = `drafts/${user.id}/${draftPhotoUuid}.jpg`;
+  try {
+    await c.env.WATCH_IMAGES.put(draftKey, imageBuffer, {
+      httpMetadata: { contentType: image.type || "image/jpeg" },
+    });
+  } catch (err) {
+    console.warn(
+      `verified-reading: R2 PUT failed for draft ${draftKey}, returning 502:`,
+      err,
+    );
+    return c.json(
+      {
+        error_code: "dial_reader_transport_error",
+        ux_hint: "Couldn't store your photo. Please try again.",
+      },
+      502,
+    );
+  }
+
+  const expiresAtUnix = Math.floor(Date.now() / 1000) + READING_TOKEN_TTL_SECONDS;
+  const tokenPayload: ReadingTokenPayload = {
+    photo_r2_key: draftKey,
+    anchor_hms: formatHms(result.reference_timestamp_ms),
+    predicted_mm_ss: result.mm_ss,
+    user_id: user.id,
+    watch_id: watchId,
+    expires_at_unix: expiresAtUnix,
+    vlm_model: result.vlm_model,
+  };
+  const readingToken = await signReadingToken(tokenPayload, c.env.READING_TOKEN_SECRET);
+
+  // Photo URL — the SPA fetches the draft photo from `/images/`
+  // (see src/server/routes/images.ts). Slice #7 will wire the
+  // confirmation page to this URL; for now we return the absolute
+  // URL based on the request origin.
+  const requestUrl = new URL(c.req.url);
+  const photoUrl = `${requestUrl.origin}/images/${draftKey}`;
+
+  await logEvent("verified_reading_drafted", { userId: user.id, watchId }, c.env);
+
+  return c.json(
+    {
+      reading_token: readingToken,
+      predicted_mm_ss: result.mm_ss,
+      photo_url: photoUrl,
+      hour_from_server_clock: new Date(result.reference_timestamp_ms).getUTCHours(),
+      reference_source: result.reference_source,
+      expires_at_unix: expiresAtUnix,
+    },
+    200,
+  );
+});
+
+/**
+ * POST /verified/confirm — accept the user's (possibly adjusted)
+ * MM:SS, validate against the signed token, save the reading, and
+ * move the photo to the verified prefix.
+ *
+ * Error mapping:
+ *   * 400 invalid_input          — Zod validation failed
+ *   * 401 invalid_token          — bad signature, expired, or
+ *                                  missing READING_TOKEN_SECRET
+ *   * 403 forbidden              — token user_id/watch_id doesn't
+ *                                  match the request session/URL
+ *   * 422 adjustment_too_large   — final_mm_ss further than ±30s
+ *                                  from the predicted value
+ *
+ * On success returns 201 with the saved reading row (same shape
+ * as the manual POST).
+ */
+readingsByWatchRoute.post("/verified/confirm", async (c) => {
+  const user = c.get("user");
+  const watchId = getWatchIdParam(c);
+  if (!watchId) return c.json({ error: "not_found" }, 404);
+
+  const db = createDb(c.env);
+  const ownership = await assertWatchOwnership(db, watchId, user.id);
+  if (ownership.status === "not_found") {
+    return c.json({ error: "not_found" }, 404);
+  }
+  if (ownership.status === "forbidden") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  let json: unknown;
+  try {
+    json = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const parsed = confirmReadingSchema.safeParse(json);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "invalid_input",
+        fieldErrors: parsed.error.issues,
+      },
+      400,
+    );
+  }
+  const { reading_token, final_mm_ss, is_baseline } = parsed.data;
+
+  const payload = await verifyReadingToken(reading_token, c.env.READING_TOKEN_SECRET);
+  if (!payload) {
+    await logEvent(
+      "verified_reading_confirm_rejected",
+      { userId: user.id, watchId, reason: "invalid_token" },
+      c.env,
+    );
+    return c.json({ error: "invalid_token" }, 401);
+  }
+
+  // Cross-check token payload against the request. A token signed
+  // for a different user or watch is suspicious and gets a 403
+  // rather than 401 — the signature is fine, the *use* is wrong.
+  if (payload.user_id !== user.id || payload.watch_id !== watchId) {
+    await logEvent(
+      "verified_reading_confirm_rejected",
+      {
+        userId: user.id,
+        watchId,
+        reason: "token_subject_mismatch",
+      },
+      c.env,
+    );
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  // Adjustment cap. The SPA enforces ±30s client-side; the server
+  // is the security boundary.
+  const adjustmentSeconds = Math.abs(
+    mmSsCircularDistance(final_mm_ss, payload.predicted_mm_ss),
+  );
+  if (adjustmentSeconds > CONFIRM_ADJUSTMENT_LIMIT_SECONDS) {
+    await logEvent(
+      "verified_reading_confirm_rejected",
+      {
+        userId: user.id,
+        watchId,
+        reason: "adjustment_too_large",
+      },
+      c.env,
+    );
+    return c.json(
+      {
+        error: "adjustment_too_large",
+        max_seconds: CONFIRM_ADJUSTMENT_LIMIT_SECONDS,
+      },
+      422,
+    );
+  }
+
+  // Reconstruct the reference MM:SS from the token's anchor_hms.
+  // The hour component is informational; only m/s feed the deviation.
+  const [, anchorM, anchorS] = parseHms(payload.anchor_hms);
+
+  const deviationSeconds = is_baseline
+    ? 0
+    : computeMmSsDeviation(final_mm_ss, { m: anchorM, s: anchorS });
+
+  // Reconstruct a unix-ms reference timestamp for the row. We
+  // don't store the EXIF year/month/day in the token, so we
+  // reconstruct against today's UTC date + the anchor's HH:MM:SS.
+  // This is a small fudge — the reading row's `reference_timestamp`
+  // ends up within a few minutes of the actual capture (token
+  // lifetime is 5 min). For drift math the absolute timestamp
+  // doesn't matter much; the deviation is the headline number.
+  const referenceMs = reconstructReferenceMs(payload.anchor_hms);
+
   const id = crypto.randomUUID();
   await db
     .insertInto("readings")
@@ -503,38 +761,52 @@ readingsByWatchRoute.post("/verified", async (c) => {
       id,
       watch_id: watchId,
       user_id: user.id,
-      reference_timestamp: result.reference_timestamp_ms,
-      deviation_seconds: deviation,
-      is_baseline: isBaseline ? 1 : 0,
+      reference_timestamp: referenceMs,
+      deviation_seconds: deviationSeconds,
+      is_baseline: is_baseline ? 1 : 0,
       verified: 1,
       notes: null,
-      vlm_model: result.vlm_model,
+      vlm_model: payload.vlm_model,
     })
     .execute();
 
-  // Best-effort R2 upload. Failure does NOT roll back — the DB row
-  // is the canonical record. Permanent prefix `verified/{userId}/{id}.jpg`
-  // — slice #6 will introduce the draft/confirm split where photos
-  // live under a draft prefix until confirmed.
-  const photoKey = `verified/${user.id}/${id}.jpg`;
-  let storedPhotoKey: string | null = null;
+  // Move the photo from drafts/ to verified/. R2 has no native
+  // server-side rename; we copy + delete. Idempotent — if the
+  // verified key already exists we re-write the same bytes (no
+  // harm) and the delete on a missing draft key is a no-op.
+  const verifiedKey = `verified/${user.id}/${id}.jpg`;
+  let photoMoved = false;
   try {
-    await c.env.WATCH_IMAGES.put(photoKey, imageBuffer, {
-      httpMetadata: { contentType: image.type || "image/jpeg" },
-    });
-    storedPhotoKey = photoKey;
-    await db
-      .updateTable("readings")
-      .set({ photo_r2_key: photoKey })
-      .where("id", "=", id)
-      .execute();
+    const draft = await c.env.WATCH_IMAGES.get(payload.photo_r2_key);
+    if (draft) {
+      const draftBytes = await draft.arrayBuffer();
+      await c.env.WATCH_IMAGES.put(verifiedKey, draftBytes, {
+        httpMetadata: draft.httpMetadata,
+      });
+      await c.env.WATCH_IMAGES.delete(payload.photo_r2_key);
+      photoMoved = true;
+    } else {
+      // Draft photo expired between draft and confirm (24h TTL).
+      // The reading row stays — the photo is provenance, not
+      // the canonical record — but we surface a warning.
+      console.warn(
+        `verified-reading: draft photo missing on confirm for reading ${id} (key=${payload.photo_r2_key})`,
+      );
+    }
   } catch (err) {
     console.warn(
-      `verified-reading: R2 upload failed for reading ${id}, continuing:`,
+      `verified-reading: R2 photo move failed for reading ${id}, continuing:`,
       err,
     );
   }
-  void storedPhotoKey; // tracked for symmetry; not surfaced on the response
+
+  if (photoMoved) {
+    await db
+      .updateTable("readings")
+      .set({ photo_r2_key: verifiedKey })
+      .where("id", "=", id)
+      .execute();
+  }
 
   const created = (await db
     .selectFrom("readings")
@@ -553,12 +825,53 @@ readingsByWatchRoute.post("/verified", async (c) => {
 
   await logEvent(
     "verified_reading_succeeded",
-    { userId: user.id, watchId, is_baseline: isBaseline },
+    { userId: user.id, watchId, is_baseline: is_baseline === true },
     c.env,
   );
 
   return c.json(toResponse(created), 201);
 });
+
+/** Parse `HH:MM:SS` into `[h, m, s]`. Returns zeroes on a malformed string. */
+function parseHms(hms: string): [number, number, number] {
+  const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(hms);
+  if (!m) return [0, 0, 0];
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+/**
+ * Reconstruct a unix-ms reference timestamp from the token's
+ * `anchor_hms` (HH:MM:SS UTC). Uses today's UTC date — this is
+ * accurate to ±5 minutes because token lifetime is 5 minutes.
+ *
+ * Edge case: if the anchor's HH is >12h ahead of "now" we assume
+ * the anchor was set yesterday (e.g. anchor 23:59:00 confirmed at
+ * 00:01:00); if it's >12h behind we assume tomorrow. This handles
+ * the day-boundary crossing without needing the date in the token.
+ */
+function reconstructReferenceMs(anchorHms: string): number {
+  const now = new Date();
+  const [h, m, s] = parseHms(anchorHms);
+  const candidate = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    h,
+    m,
+    s,
+    0,
+  );
+  const diff = candidate - now.getTime();
+  if (diff > 12 * 60 * 60 * 1000) {
+    // Candidate is far in the future → must have been yesterday.
+    return candidate - 24 * 60 * 60 * 1000;
+  }
+  if (diff < -12 * 60 * 60 * 1000) {
+    // Candidate is far in the past → must be tomorrow.
+    return candidate + 24 * 60 * 60 * 1000;
+  }
+  return candidate;
+}
 
 /**
  * Map a verifier error code to the wire-format error response.
@@ -632,6 +945,8 @@ function verifiedReadingErrorResponse(
   return c.json(
     {
       error_code: code,
+      retake: true,
+      reason: "unreadable_photo",
       ux_hint:
         "We couldn't read the dial in your photo — try a clearer shot or log manually.",
     },
