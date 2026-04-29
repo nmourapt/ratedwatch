@@ -90,17 +90,38 @@
   ],
 
   // The verified-reading dial reader (Python container + Durable
-  // Object plus its `DIAL_READER` binding and the `v1`
-  // new_sqlite_classes migration) was decommissioned in slice #1 of
-  // PRD #99 (issue #100). The replacement Worker-side VLM pipeline
-  // lands in slice #4 (issue #103). Until then `/readings/verified`
-  // and `/readings/manual_with_photo` return 503.
+  // Object plus its `DIAL_READER` binding) was decommissioned in
+  // slice #1 of PRD #99 (issue #100). The replacement Worker-side
+  // VLM pipeline lands in slice #4 (issue #103). Until then
+  // `/readings/verified` and `/readings/manual_with_photo` return
+  // 503.
+  //
+  // Migrations: the `v1` migration that introduced
+  // `DialReaderContainer` as a SQLite-backed DO class is kept here
+  // so wrangler does not try to re-apply it (migrations are
+  // identified by tag and are append-only). The new `v2` migration
+  // tells the runtime to drop the class entirely — required
+  // because the script no longer exports `DialReaderContainer`.
+  // Without this, wrangler refuses to deploy with `code: 10064`
+  // ("New version of script does not export class
+  // 'DialReaderContainer' which is depended on by existing Durable
+  // Objects").
   //
   // Operator follow-up post-merge:
   //   - Delete `ratedwatch-dialreadercontainer:*` images from
   //     Cloudflare Container Registry.
-  //   - The next prod deploy will surface the `DialReaderContainer`
-  //     DO class as "deleted (no longer in code)" — that is expected.
+  //   - The DialReaderContainer DO class will be removed by the
+  //     v2 migration on the next prod deploy.
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DialReaderContainer"]
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": ["DialReaderContainer"]
+    }
+  ],
 
   "observability": {
     "enabled": true,
