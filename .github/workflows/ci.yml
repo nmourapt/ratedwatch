@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # `workflow_dispatch` lets the operator re-trigger a deploy from
+  # the Actions UI without having to push a no-op commit. The
+  # deploy job below has its own `if:` gate so workflow_dispatch
+  # runs the deploy too (gated on verify passing first).
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -381,3 +386,108 @@ jobs:
       - name: Skip note
         if: steps.filter.outputs.relevant != 'true'
         run: echo "PR does not touch dial-reader-vlm/ or related modules — cheat-regression skipped."
+
+  # ---------------------------------------------------------------
+  # Production deploy on push to main (or manual dispatch).
+  #
+  # Runs `wrangler d1 migrations apply --remote` first so D1 schema
+  # changes (e.g. `0008_vlm_dial_reader.sql` adding the vlm_model
+  # column) are applied BEFORE the new Worker code that depends on
+  # them goes live. Then `wrangler deploy --env=production`, which
+  # also applies any DO migrations declared in wrangler.jsonc (the
+  # v2 deletion of `DialReaderContainer` was applied this way).
+  #
+  # Only fires on:
+  #   * push to main (auto-deploy on merge), AND
+  #   * verify passing — defense-in-depth on top of the
+  #     branch-protection-required check on the PR head.
+  #   * NOT on PR events (gate via the `if:` below).
+  #
+  # Manual `workflow_dispatch` from the Actions UI also fires the
+  # deploy — useful for re-running after a transient Cloudflare
+  # API glitch without having to push a no-op commit.
+  #
+  # Concurrency group `production-deploy` queues overlapping main
+  # pushes serially. We deliberately DO NOT cancel-in-progress here
+  # — cancelling a half-applied migration would leave prod in a
+  # weird state. Subsequent merges wait for the in-flight deploy
+  # to finish.
+  #
+  # Required repository secrets (already provisioned for the
+  # preview job): `CLOUDFLARE_API_TOKEN` (Workers Scripts:Edit +
+  # D1:Edit) and `CLOUDFLARE_ACCOUNT_ID`.
+  #
+  # ## Rollback
+  #
+  # If a deploy ships a regression, roll back manually:
+  #   wrangler versions list --name=ratedwatch
+  #   wrangler versions deploy <previous-version-id> --name=ratedwatch
+  # The `--env=production` flag is irrelevant for rollback (the
+  # version-id encodes the env). For a flag-flip rollback (e.g.
+  # disable verified-reading on a bad VLM rollout), use
+  # `wrangler kv key put verified_reading_cv '{"mode":"never"}' --remote`
+  # — the Worker stays deployed, the feature just goes off.
+  deploy:
+    name: Deploy to production
+    if: |
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: verify
+    permissions:
+      contents: read
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The SPA is served as Workers Assets at deploy time, so we
+      # need a fresh `dist/` before `wrangler deploy` reads it.
+      - name: Build SPA
+        run: npm run build
+
+      # D1 migrations land BEFORE the Worker so post-deploy code
+      # can rely on the new schema immediately. `wrangler d1
+      # migrations apply` is idempotent — it only applies migrations
+      # that haven't been recorded as applied yet, so a deploy with
+      # no schema change is a no-op here.
+      - name: Apply D1 migrations to production
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: d1 migrations apply rated-watch-db --remote
+        env:
+          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"
+
+      # `wrangler deploy --env=production` is what `npm run deploy`
+      # resolves to (slice #9 of PRD #99 wired the env override).
+      # This (a) bumps the live version of the `ratedwatch` Worker,
+      # (b) applies any pending Durable Object migrations declared
+      # in wrangler.jsonc, and (c) routes 100% of traffic to the
+      # new version. There's no canary stage — the production
+      # surface is small enough that a flag-flip rollback (KV) or
+      # version-id rollback (wrangler versions deploy) is the
+      # right tool when something breaks.
+      - name: Deploy Worker to production
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: deploy --env=production
+        env:
+          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"
