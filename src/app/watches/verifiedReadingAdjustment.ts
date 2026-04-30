@@ -1,100 +1,118 @@
-// Pure helpers for the verified-reading SPA confirmation page (slice
-// #7 of PRD #99 — issue #106).
+// Pure helpers for the verified-reading SPA confirmation page.
 //
-// The confirmation page renders the VLM's predicted MM:SS and lets
-// the user nudge ± seconds before saving. Two invariants drive the
-// logic:
+// Originally added in slice #7 of PRD #99 (issue #106) with a
+// seconds-only ±30s adjustment cap. PR #122 reworks the UX into
+// per-component HH:MM:SS up/down arrows with no cap, after the
+// observation that:
 //
-//   1. Wrap-aware seconds math. When the user clicks +1 with seconds
-//      at 59, the result is `m+1, s=0` — NOT clamping at 59 (that
-//      would leak "you've hit the natural maximum" as a deviation
-//      hint). Wrapping past the 60-minute boundary is theoretically
-//      possible but practically impossible inside the ±30s adjustment
-//      window; we still handle the modulo to be safe.
+//   1. The seconds-only cap couldn't actually prevent fraud — a
+//      determined cheater knows the rough current time from their
+//      phone and can game the value either way regardless of
+//      whether the cap is ±30s, ±5s, or unbounded. The cap was
+//      always more about gentle UI nudge than security.
 //
-//   2. Wrap-aware "clicks used" calculation on the [0, 3600) MM:SS
-//      circle. Going +1 from 59m 59s lands at 0m 0s — that's a 1s
-//      adjustment, not a 3599s one. The shortest-distance metric
-//      mirrors `mmSsCircularDistance` in `src/server/routes/readings.ts`
-//      so client and server agree on what "30s away" means.
+//   2. The hour shown to the user in the original UI was derived
+//      from the server reference timestamp's UTC hour, which is
+//      WRONG when EXIF is missing and the user is in a non-UTC
+//      timezone (e.g. Lisbon DST = UTC+1 means the watch reads 14
+//      while the server says 13). The user couldn't override it,
+//      so the deviation calc silently used the wrong hour.
 //
-// The ±30s cap is enforced server-side (slice #6) — these helpers
-// drive the UI's "disable + at the limit" behaviour. The server is
-// the security boundary.
+//   3. Real watch deviations come in three shapes: seconds (typical
+//      mechanical drift), minutes (model misread or watch needs
+//      regulation), and hours (model picked the wrong rollover side
+//      or DST mismatch). All three need an adjustment knob.
+//
+// The new design: each of HH / MM / SS gets independent up/down
+// arrows. Pressing "MM ▲" at 59 wraps to 00 within the minutes
+// component only — it does NOT carry into hours. This keeps the
+// mental model dead simple ("set each digit to match what your
+// dial reads") and matches the way most setting crowns work on
+// real watches.
+//
+// The photo is still stored for audit (slice #6), the rate limiter
+// is still in front (slice #82 of PRD #73), and the SPA still
+// hides the deviation. Honest users enter what they see; cheaters
+// have always been able to cheat — the photo is the audit trail.
 
-export interface MmSs {
+/**
+ * 12-hour-clock HH:MM:SS triple, matching what an analog watch
+ * displays. `h` is 1..12 (no AM/PM signal — analog dials don't
+ * show one). `m` and `s` are 0..59.
+ */
+export interface Hms {
+  h: number;
   m: number;
   s: number;
 }
 
-/**
- * The per-click adjustment cap in seconds. Mirrors
- * `CONFIRM_ADJUSTMENT_LIMIT_SECONDS` in `src/server/routes/readings.ts`.
- * Adjustments beyond this require a retake.
- */
-export const ADJUSTMENT_LIMIT_SECONDS = 30;
+/** Which component the up/down button targets. */
+export type HmsComponent = "h" | "m" | "s";
 
 /**
- * Adjust an MM:SS pair by `delta` seconds, wrapping minute boundaries.
- * `delta` may be any integer; positive means later, negative earlier.
+ * Adjust ONE component of the HMS triple by `delta`, wrapping
+ * within that component only. Cross-component carry is intentionally
+ * disabled: pressing minutes ▲ at 59 wraps to 0 (still within the
+ * minute slot), it does NOT increment the hour. Same for seconds.
  *
- * Wrap math: total seconds = m*60 + s, then adjust modulo 3600 to
- * stay on the [0, 3600) MM:SS circle (which is what the watch dial
- * itself represents — minutes wrap every hour). Negative results are
- * lifted into the positive range with the canonical
- * `((x % n) + n) % n` idiom.
- */
-export function adjustSeconds(current: MmSs, delta: number): MmSs {
-  const total = current.m * 60 + current.s + delta;
-  const wrapped = ((total % 3600) + 3600) % 3600;
-  return { m: Math.floor(wrapped / 60), s: wrapped % 60 };
-}
-
-/**
- * Wrap-aware shortest signed distance between two MM:SS pairs on
- * the [0, 3600) circle. Returns seconds in [-1800, +1800].
+ * This matches how a manual setting crown on a watch works (you
+ * pull the crown and crank the minute hand; hours don't move with
+ * minute rollover unless you're explicitly setting them).
  *
- * Mirrors `mmSsCircularDistance` in the route handler so the SPA's
- * "X / 30 used" counter matches the server's adjustment-cap math
- * exactly.
+ * Hours wrap 12 → 1 → 12 (12-hour cycle, no zero — analog dials
+ * read "12" not "0"). Minutes and seconds wrap 59 → 0 → 59.
  */
-export function mmSsCircularDistance(a: MmSs, b: MmSs): number {
-  const aTotal = a.m * 60 + a.s;
-  const bTotal = b.m * 60 + b.s;
-  const raw = aTotal - bTotal;
-  const wrapped = (((raw + 1800) % 3600) + 3600) % 3600;
-  return wrapped - 1800;
+export function adjustComponent(
+  current: Hms,
+  component: HmsComponent,
+  delta: number,
+): Hms {
+  if (component === "h") {
+    // 12-hour cycle: map 1..12 to 0..11, add delta, mod 12, map back.
+    const idx = (((current.h - 1 + delta) % 12) + 12) % 12;
+    return { ...current, h: idx + 1 };
+  }
+  if (component === "m") {
+    const next = (((current.m + delta) % 60) + 60) % 60;
+    return { ...current, m: next };
+  }
+  // component === "s"
+  const next = (((current.s + delta) % 60) + 60) % 60;
+  return { ...current, s: next };
 }
 
 /**
- * Absolute seconds the user has nudged away from the prediction,
- * clamped to non-negative integers. Drives the "± X / 30 used" UI
- * counter and the +/- button disable state.
+ * Format an HMS triple as "HH:MM:SS" with zero padding (note: hour
+ * is 1..12 so no leading zeros are stripped — "01:02:03" looks
+ * fine, "1:02:03" would look uneven against the bigger numbers).
  */
-export function clicksUsed(predicted: MmSs, current: MmSs): number {
-  return Math.abs(mmSsCircularDistance(current, predicted));
+export function formatHms(hms: Hms): string {
+  const h = String(hms.h).padStart(2, "0");
+  const m = String(hms.m).padStart(2, "0");
+  const s = String(hms.s).padStart(2, "0");
+  return `${h}:${m}:${s}`;
 }
 
 /**
- * Whether nudging ± seconds further would cross the ±30s cap.
- * Disable the corresponding button when this returns true.
- *
- * NOTE: we look at the *signed* distance, not just the absolute. A
- * user at -30 should still be able to click + (moving toward
- * predicted), but not - (moving away). Symmetric for +30.
+ * Coerce an arbitrary input into a valid Hms or null. Used for
+ * defensive parsing of the server's predicted_hms response — if
+ * something upstream goes off the rails we don't want to render
+ * NaN in the UI or send NaN to /confirm.
  */
-export function canAdjust(predicted: MmSs, current: MmSs, delta: 1 | -1): boolean {
-  const next = adjustSeconds(current, delta);
-  const nextDist = Math.abs(mmSsCircularDistance(next, predicted));
-  return nextDist <= ADJUSTMENT_LIMIT_SECONDS;
-}
-
-/**
- * Format an MM:SS pair as "MM:SS" with zero padding. Used for the
- * big display + a11y labels.
- */
-export function formatMmSs(mmSs: MmSs): string {
-  const m = String(mmSs.m).padStart(2, "0");
-  const s = String(mmSs.s).padStart(2, "0");
-  return `${m}:${s}`;
+export function parseHms(input: unknown): Hms | null {
+  if (input === null || typeof input !== "object") return null;
+  const obj = input as Record<string, unknown>;
+  const h = obj.h;
+  const m = obj.m;
+  const s = obj.s;
+  if (typeof h !== "number" || typeof m !== "number" || typeof s !== "number") {
+    return null;
+  }
+  if (!Number.isInteger(h) || !Number.isInteger(m) || !Number.isInteger(s)) {
+    return null;
+  }
+  if (h < 1 || h > 12) return null;
+  if (m < 0 || m > 59) return null;
+  if (s < 0 || s > 59) return null;
+  return { h, m, s };
 }

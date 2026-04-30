@@ -35,7 +35,6 @@ import {
 } from "@/domain/drift-calc";
 import {
   DEFAULT_VLM_MODEL,
-  computeMmSsDeviation,
   verifyVlmReadingFromEnv,
   type VerifyReadingErrorCode,
 } from "@/domain/reading-verifier/verifier";
@@ -409,16 +408,17 @@ readingsByWatchRoute.post("/tap", async (c) => {
 //   1. POST /verified/draft   — accepts the photo, runs the VLM
 //      pipeline, persists the photo to a temporary R2 prefix
 //      (`drafts/{user_id}/{uuid}.jpg`), and returns a signed
-//      `reading_token` + the predicted MM:SS + a photo URL. Does
-//      NOT save a reading row.
+//      `reading_token` + the predicted HH:MM:SS (12-hour) + a
+//      photo URL. Does NOT save a reading row.
 //
 //   2. POST /verified/confirm — accepts `{ reading_token,
-//      final_mm_ss }`. Verifies the token signature and expiry,
+//      final_hms }`. Verifies the token signature and expiry,
 //      cross-checks the payload's user_id/watch_id against the
-//      session and request, validates `final_mm_ss` is within ±30s
-//      of the predicted value (per-click adjustment limit), saves
-//      the reading row, and moves the photo from `drafts/` to
-//      `verified/{user_id}/{reading_id}.jpg`.
+//      session and request, validates `final_hms` shape (h ∈
+//      [1, 12], m/s ∈ [0, 59]), saves the reading row, and
+//      moves the photo from `drafts/` to
+//      `verified/{user_id}/{reading_id}.jpg`. PR #122 removed
+//      the previous ±30s adjustment cap.
 //
 // Anti-cheat property: `/draft` returns the prediction but NOT
 // the deviation. The SPA confirmation page (slice #7) lets the
@@ -440,16 +440,25 @@ readingsByWatchRoute.post("/tap", async (c) => {
 //     re-write of the same bytes.
 
 /**
- * Per-click adjustment cap (in seconds). The slice-#7 confirmation
- * UI lets the user ± seconds with each click; the server enforces
- * the same ±30s limit so a malicious client can't bypass the UI.
- * Larger corrections require retake.
+ * Confirm body schema. PR #122 reworked the adjustment surface from
+ * seconds-only ±30s to per-component HH:MM:SS up/down. The server
+ * accepts any well-shaped 12-hour HH:MM:SS triple — there's no
+ * adjustment cap. The defenses against malicious clients are:
+ *
+ *   * The reading-token's HMAC signature + 5-min expiry.
+ *   * The photo stored in R2 (audit trail).
+ *   * The watch-ownership + auth + rate-limit checks earlier in
+ *     the handler.
+ *
+ * The previous ±30s cap was always more about UI nudge than fraud
+ * prevention — a determined cheater knows the rough current time
+ * from their phone clock and can game the value either way. The
+ * photo audit is the real check.
  */
-const CONFIRM_ADJUSTMENT_LIMIT_SECONDS = 30;
-
 const confirmReadingSchema = z.object({
   reading_token: z.string().min(1),
-  final_mm_ss: z.object({
+  final_hms: z.object({
+    h: z.number().int().min(1).max(12),
     m: z.number().int().min(0).max(59),
     s: z.number().int().min(0).max(59),
   }),
@@ -473,20 +482,45 @@ function formatHms(timestampMs: number): string {
 }
 
 /**
- * Wrap-aware MM:SS distance on the [0, 3600) circle. Returns the
- * shortest signed distance (in seconds) between two MM:SS pairs,
- * always in [-1800, +1800]. The route uses the absolute value to
- * enforce the ±30s adjustment cap.
+ * Convert a 12-hour HH:MM:SS triple to total seconds on the
+ * [0, 43200) 12-hour cycle. Hour 12 maps to 0 seconds (top of the
+ * cycle), hours 1..11 map to 1*3600..11*3600.
  */
-function mmSsCircularDistance(
-  a: { m: number; s: number },
-  b: { m: number; s: number },
+function hmsTotalSeconds(hms: { h: number; m: number; s: number }): number {
+  return (hms.h % 12) * 3600 + hms.m * 60 + hms.s;
+}
+
+/**
+ * Wrap-aware full-HMS deviation on the 12-hour analog cycle (43200
+ * seconds). Returns the shortest signed distance (in seconds)
+ * between two HH:MM:SS triples, always in [-21600, +21600].
+ *
+ * Used by /confirm to compute the saved `deviation_seconds`. PR
+ * #122 graduated this from MM:SS-only (30-min wrap) to full HMS
+ * (6-hour wrap) because the new UX lets the user adjust the hour
+ * — a watch that's actually 1h fast must record as +3600s, not
+ * wrap modulo-30-min into a near-zero value.
+ *
+ * Timezone caveat: when the reference came from server arrival
+ * (no EXIF), the reference's UTC hour ≠ user's local hour by the
+ * TZ offset. The deviation will then include a constant TZ-offset
+ * component that's the same for every reading the user submits,
+ * so DRIFT-RATE math (delta between readings) cancels it out
+ * correctly. Per-reading absolute deviation will look "off" by
+ * the TZ offset for the EXIF-missing case. Acceptable for v1; a
+ * follow-up could pass the user's TZ offset from the SPA.
+ */
+function compute12HourDeviation(
+  dial: { h: number; m: number; s: number },
+  ref: { h: number; m: number; s: number },
 ): number {
-  const aTotal = a.m * 60 + a.s;
-  const bTotal = b.m * 60 + b.s;
-  const raw = aTotal - bTotal;
-  const wrapped = (((raw + 1800) % 3600) + 3600) % 3600;
-  return wrapped - 1800;
+  const dialTotal = hmsTotalSeconds(dial);
+  const refTotal = hmsTotalSeconds(ref);
+  const raw = dialTotal - refTotal;
+  // Map raw delta into [-21600, +21600] via the canonical wrap idiom.
+  // Half-cycle = 21600 (= 6 hours), full cycle = 43200 (= 12 hours).
+  const wrapped = (((raw + 21600) % 43200) + 43200) % 43200;
+  return wrapped - 21600;
 }
 
 /**
@@ -605,10 +639,27 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
   }
 
   const expiresAtUnix = Math.floor(Date.now() / 1000) + READING_TOKEN_TTL_SECONDS;
+
+  // Convert the reference's UTC hour to a 12-hour analog hour
+  // (1..12, no AM/PM marker). The VLM's mm_ss read is paired with
+  // this hour to produce the predicted analog dial display the SPA
+  // shows in the confirmation page. PR #122: full HH:MM:SS
+  // returned to client so per-component up/down can pre-populate
+  // with the right starting values.
+  const refDate = new Date(result.reference_timestamp_ms);
+  const refHour24 = refDate.getUTCHours();
+  const refHour12 = ((refHour24 + 11) % 12) + 1;
+  const predictedHms = {
+    h: refHour12,
+    m: result.mm_ss.m,
+    s: result.mm_ss.s,
+  };
+
   const tokenPayload: ReadingTokenPayload = {
     photo_r2_key: draftKey,
     anchor_hms: formatHms(result.reference_timestamp_ms),
-    predicted_mm_ss: result.mm_ss,
+    reference_ms: result.reference_timestamp_ms,
+    predicted_hms: predictedHms,
     user_id: user.id,
     watch_id: watchId,
     expires_at_unix: expiresAtUnix,
@@ -628,9 +679,14 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
   return c.json(
     {
       reading_token: readingToken,
-      predicted_mm_ss: result.mm_ss,
+      // PR #122: return full predicted HH:MM:SS (12-hour) so the
+      // SPA can pre-populate the per-component up/down adjusters.
+      // `hour_from_server_clock` (24-hour UTC) was previously
+      // returned alongside `predicted_mm_ss`; merging them into a
+      // single `predicted_hms` removes the back-and-forth
+      // 12h/24h conversion the SPA was doing.
+      predicted_hms: predictedHms,
       photo_url: photoUrl,
-      hour_from_server_clock: new Date(result.reference_timestamp_ms).getUTCHours(),
       reference_source: result.reference_source,
       expires_at_unix: expiresAtUnix,
     },
@@ -649,8 +705,9 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
  *                                  missing READING_TOKEN_SECRET
  *   * 403 forbidden              — token user_id/watch_id doesn't
  *                                  match the request session/URL
- *   * 422 adjustment_too_large   — final_mm_ss further than ±30s
- *                                  from the predicted value
+ *
+ * PR #122 removed the `422 adjustment_too_large` branch (no more
+ * ±30s cap; any well-shaped HH:MM:SS triple is accepted).
  *
  * On success returns 201 with the saved reading row (same shape
  * as the manual POST).
@@ -685,7 +742,7 @@ readingsByWatchRoute.post("/verified/confirm", async (c) => {
       400,
     );
   }
-  const { reading_token, final_mm_ss, is_baseline } = parsed.data;
+  const { reading_token, final_hms, is_baseline } = parsed.data;
 
   const payload = await verifyReadingToken(reading_token, c.env.READING_TOKEN_SECRET);
   if (!payload) {
@@ -713,46 +770,40 @@ readingsByWatchRoute.post("/verified/confirm", async (c) => {
     return c.json({ error: "forbidden" }, 403);
   }
 
-  // Adjustment cap. The SPA enforces ±30s client-side; the server
-  // is the security boundary.
-  const adjustmentSeconds = Math.abs(
-    mmSsCircularDistance(final_mm_ss, payload.predicted_mm_ss),
-  );
-  if (adjustmentSeconds > CONFIRM_ADJUSTMENT_LIMIT_SECONDS) {
-    await logEvent(
-      "verified_reading_confirm_rejected",
-      {
-        userId: user.id,
-        watchId,
-        reason: "adjustment_too_large",
-      },
-      c.env,
-    );
-    return c.json(
-      {
-        error: "adjustment_too_large",
-        max_seconds: CONFIRM_ADJUSTMENT_LIMIT_SECONDS,
-      },
-      422,
-    );
-  }
+  // PR #122 removed the ±30s adjustment cap. The Zod schema's
+  // shape validation (h ∈ [1,12], m/s ∈ [0,59]) is the only
+  // server-side bound now. Defense-in-depth comes from:
+  //   * The reading-token's HMAC + 5-min expiry above.
+  //   * The photo persisted to R2 (audit trail).
+  //   * Auth + ownership + rate-limit checks earlier in the
+  //     handler.
+  // The cap was always more about UI nudge than fraud prevention
+  // — a determined cheater knows the rough current time anyway.
+  // Real fraud would surface as a watch with consistently exact
+  // server-clock readings (no drift) which is itself a detection
+  // signal in the leaderboard.
 
-  // Reconstruct the reference MM:SS from the token's anchor_hms.
-  // The hour component is informational; only m/s feed the deviation.
-  const [, anchorM, anchorS] = parseHms(payload.anchor_hms);
+  // Build the reference HMS from the token's stored reference_ms.
+  // The hour comes via 12-hour conversion of the reference's UTC
+  // hour (matches what /draft minted into predicted_hms).
+  const refDate = new Date(payload.reference_ms);
+  const refHour24 = refDate.getUTCHours();
+  const refHour12 = ((refHour24 + 11) % 12) + 1;
+  const referenceHms = {
+    h: refHour12,
+    m: refDate.getUTCMinutes(),
+    s: refDate.getUTCSeconds(),
+  };
 
   const deviationSeconds = is_baseline
     ? 0
-    : computeMmSsDeviation(final_mm_ss, { m: anchorM, s: anchorS });
+    : compute12HourDeviation(final_hms, referenceHms);
 
-  // Reconstruct a unix-ms reference timestamp for the row. We
-  // don't store the EXIF year/month/day in the token, so we
-  // reconstruct against today's UTC date + the anchor's HH:MM:SS.
-  // This is a small fudge — the reading row's `reference_timestamp`
-  // ends up within a few minutes of the actual capture (token
-  // lifetime is 5 min). For drift math the absolute timestamp
-  // doesn't matter much; the deviation is the headline number.
-  const referenceMs = reconstructReferenceMs(payload.anchor_hms);
+  // The reference timestamp on the row is the actual ms the photo
+  // was captured (stored in the token at /draft time). PR #122 no
+  // longer reconstructs from a string — the token carries the
+  // precise ms.
+  const referenceMs = payload.reference_ms;
 
   const id = crypto.randomUUID();
   await db
@@ -832,46 +883,12 @@ readingsByWatchRoute.post("/verified/confirm", async (c) => {
   return c.json(toResponse(created), 201);
 });
 
-/** Parse `HH:MM:SS` into `[h, m, s]`. Returns zeroes on a malformed string. */
-function parseHms(hms: string): [number, number, number] {
-  const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(hms);
-  if (!m) return [0, 0, 0];
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-/**
- * Reconstruct a unix-ms reference timestamp from the token's
- * `anchor_hms` (HH:MM:SS UTC). Uses today's UTC date — this is
- * accurate to ±5 minutes because token lifetime is 5 minutes.
- *
- * Edge case: if the anchor's HH is >12h ahead of "now" we assume
- * the anchor was set yesterday (e.g. anchor 23:59:00 confirmed at
- * 00:01:00); if it's >12h behind we assume tomorrow. This handles
- * the day-boundary crossing without needing the date in the token.
- */
-function reconstructReferenceMs(anchorHms: string): number {
-  const now = new Date();
-  const [h, m, s] = parseHms(anchorHms);
-  const candidate = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    h,
-    m,
-    s,
-    0,
-  );
-  const diff = candidate - now.getTime();
-  if (diff > 12 * 60 * 60 * 1000) {
-    // Candidate is far in the future → must have been yesterday.
-    return candidate - 24 * 60 * 60 * 1000;
-  }
-  if (diff < -12 * 60 * 60 * 1000) {
-    // Candidate is far in the past → must be tomorrow.
-    return candidate + 24 * 60 * 60 * 1000;
-  }
-  return candidate;
-}
+// PR #122: removed `parseHms`/`reconstructReferenceMs` — the token
+// now carries `reference_ms` directly so /confirm doesn't have to
+// reconstruct the timestamp from a HH:MM:SS string + today's date.
+// Old behaviour was a small fudge that drifted by token-TTL (~5
+// min) for the saved row's `reference_timestamp`; the new path is
+// exact.
 
 /**
  * Map a verifier error code to the wire-format error response.

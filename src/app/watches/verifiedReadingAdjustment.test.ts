@@ -3,112 +3,193 @@
 // These are pure functions — no DOM, no fetch — so they run cleanly
 // inside the cloudflare-workers vitest pool alongside the rest of
 // the workers-pool tests.
+//
+// PR #122 reworked the helpers from seconds-only ±30s nudges into
+// per-component HH:MM:SS independent up/down. The old
+// `adjustSeconds` / `clicksUsed` / `canAdjust` / `mmSsCircularDistance`
+// surface area is gone; new tests cover `adjustComponent`,
+// `formatHms`, and `parseHms`.
 
 import { describe, expect, it } from "vitest";
 import {
-  ADJUSTMENT_LIMIT_SECONDS,
-  adjustSeconds,
-  canAdjust,
-  clicksUsed,
-  formatMmSs,
-  mmSsCircularDistance,
+  adjustComponent,
+  formatHms,
+  parseHms,
+  type Hms,
 } from "./verifiedReadingAdjustment";
 
-describe("adjustSeconds", () => {
-  it("increments seconds within the same minute", () => {
-    expect(adjustSeconds({ m: 19, s: 34 }, 1)).toEqual({ m: 19, s: 35 });
-    expect(adjustSeconds({ m: 19, s: 34 }, 5)).toEqual({ m: 19, s: 39 });
+describe("adjustComponent — seconds slot", () => {
+  it("increments seconds without touching minutes or hours", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 34 }, "s", 1)).toEqual({
+      h: 10,
+      m: 19,
+      s: 35,
+    });
   });
 
-  it("decrements seconds within the same minute", () => {
-    expect(adjustSeconds({ m: 19, s: 34 }, -1)).toEqual({ m: 19, s: 33 });
-    expect(adjustSeconds({ m: 19, s: 34 }, -10)).toEqual({ m: 19, s: 24 });
+  it("decrements seconds without touching minutes or hours", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 34 }, "s", -1)).toEqual({
+      h: 10,
+      m: 19,
+      s: 33,
+    });
   });
 
-  it("wraps forward across the minute boundary", () => {
-    // The dial doesn't clamp at 59 — going +1 from 59s lands at the
-    // next minute's 0s. Critical: clamping would leak "you've hit
-    // the wall" as a deviation hint.
-    expect(adjustSeconds({ m: 19, s: 59 }, 1)).toEqual({ m: 20, s: 0 });
-    expect(adjustSeconds({ m: 19, s: 58 }, 5)).toEqual({ m: 20, s: 3 });
+  it("wraps seconds 59 -> 0 WITHOUT carrying into minutes", () => {
+    // Critical: the watch crown analogy is "set each digit
+    // independently". Carrying would surprise the user when they
+    // wanted to fix a seconds misread without disturbing the minute.
+    expect(adjustComponent({ h: 10, m: 19, s: 59 }, "s", 1)).toEqual({
+      h: 10,
+      m: 19,
+      s: 0,
+    });
   });
 
-  it("wraps backward across the minute boundary", () => {
-    expect(adjustSeconds({ m: 20, s: 0 }, -1)).toEqual({ m: 19, s: 59 });
-    expect(adjustSeconds({ m: 20, s: 2 }, -5)).toEqual({ m: 19, s: 57 });
+  it("wraps seconds 0 -> 59 WITHOUT carrying into minutes", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 0 }, "s", -1)).toEqual({
+      h: 10,
+      m: 19,
+      s: 59,
+    });
   });
 
-  it("wraps across the 60-minute boundary (total seconds modulo 3600)", () => {
-    // Theoretical edge case. The product flow uses ±30s so this
-    // shouldn't fire in practice, but the helper handles it.
-    expect(adjustSeconds({ m: 59, s: 59 }, 1)).toEqual({ m: 0, s: 0 });
-    expect(adjustSeconds({ m: 0, s: 0 }, -1)).toEqual({ m: 59, s: 59 });
-  });
-});
-
-describe("mmSsCircularDistance", () => {
-  it("is zero for identical pairs", () => {
-    expect(mmSsCircularDistance({ m: 19, s: 34 }, { m: 19, s: 34 })).toBe(0);
+  it("handles large positive deltas with modulo", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 30 }, "s", 65)).toEqual({
+      h: 10,
+      m: 19,
+      s: (30 + 65) % 60, // 35
+    });
   });
 
-  it("returns the signed shortest distance for nearby pairs", () => {
-    expect(mmSsCircularDistance({ m: 19, s: 35 }, { m: 19, s: 34 })).toBe(1);
-    expect(mmSsCircularDistance({ m: 19, s: 33 }, { m: 19, s: 34 })).toBe(-1);
-  });
-
-  it("wraps through the 60-minute boundary", () => {
-    // 0m 0s is 1s after 59m 59s on the circle, not 3599s before.
-    expect(mmSsCircularDistance({ m: 0, s: 0 }, { m: 59, s: 59 })).toBe(1);
-    expect(mmSsCircularDistance({ m: 59, s: 59 }, { m: 0, s: 0 })).toBe(-1);
-  });
-});
-
-describe("clicksUsed", () => {
-  it("is zero when the user has not adjusted", () => {
-    expect(clicksUsed({ m: 19, s: 34 }, { m: 19, s: 34 })).toBe(0);
-  });
-
-  it("counts absolute seconds nudged in either direction", () => {
-    expect(clicksUsed({ m: 19, s: 34 }, { m: 19, s: 39 })).toBe(5);
-    expect(clicksUsed({ m: 19, s: 34 }, { m: 19, s: 29 })).toBe(5);
-  });
-
-  it("counts wrap-aware distance when seconds cross the minute", () => {
-    // Predicted at 19:58, current at 20:01 — the user nudged +3.
-    expect(clicksUsed({ m: 19, s: 58 }, { m: 20, s: 1 })).toBe(3);
+  it("handles large negative deltas with modulo", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 5 }, "s", -65)).toEqual({
+      h: 10,
+      m: 19,
+      s: (((5 - 65) % 60) + 60) % 60, // 0
+    });
   });
 });
 
-describe("canAdjust", () => {
-  it("allows + when under the cap", () => {
-    expect(canAdjust({ m: 19, s: 34 }, { m: 19, s: 34 }, 1)).toBe(true);
-    expect(canAdjust({ m: 19, s: 34 }, { m: 20, s: 3 }, 1)).toBe(true); // 29 used
+describe("adjustComponent — minutes slot", () => {
+  it("increments minutes without touching seconds or hours", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 34 }, "m", 1)).toEqual({
+      h: 10,
+      m: 20,
+      s: 34,
+    });
   });
 
-  it("disables + at exactly +30", () => {
-    // Predicted 19:34, current 20:04 → 30s used. Clicking + would
-    // take it to 20:05 (31s used) which is over the cap.
-    expect(canAdjust({ m: 19, s: 34 }, { m: 20, s: 4 }, 1)).toBe(false);
+  it("decrements minutes without touching seconds or hours", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 34 }, "m", -1)).toEqual({
+      h: 10,
+      m: 18,
+      s: 34,
+    });
   });
 
-  it("still allows − when at the +30 limit", () => {
-    expect(canAdjust({ m: 19, s: 34 }, { m: 20, s: 4 }, -1)).toBe(true);
+  it("wraps minutes 59 -> 0 WITHOUT carrying into hours", () => {
+    expect(adjustComponent({ h: 10, m: 59, s: 34 }, "m", 1)).toEqual({
+      h: 10,
+      m: 0,
+      s: 34,
+    });
   });
 
-  it("disables − at exactly -30 (mirror of +30 case)", () => {
-    expect(canAdjust({ m: 19, s: 34 }, { m: 19, s: 4 }, -1)).toBe(false);
-    expect(canAdjust({ m: 19, s: 34 }, { m: 19, s: 4 }, 1)).toBe(true);
-  });
-
-  it("ADJUSTMENT_LIMIT_SECONDS is 30 (mirrors server)", () => {
-    expect(ADJUSTMENT_LIMIT_SECONDS).toBe(30);
+  it("wraps minutes 0 -> 59 WITHOUT carrying into hours", () => {
+    expect(adjustComponent({ h: 10, m: 0, s: 34 }, "m", -1)).toEqual({
+      h: 10,
+      m: 59,
+      s: 34,
+    });
   });
 });
 
-describe("formatMmSs", () => {
-  it("zero-pads minutes and seconds", () => {
-    expect(formatMmSs({ m: 0, s: 0 })).toBe("00:00");
-    expect(formatMmSs({ m: 19, s: 34 })).toBe("19:34");
-    expect(formatMmSs({ m: 5, s: 9 })).toBe("05:09");
+describe("adjustComponent — hours slot", () => {
+  it("increments hours within 1..12", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 34 }, "h", 1)).toEqual({
+      h: 11,
+      m: 19,
+      s: 34,
+    });
+  });
+
+  it("decrements hours within 1..12", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 34 }, "h", -1)).toEqual({
+      h: 9,
+      m: 19,
+      s: 34,
+    });
+  });
+
+  it("wraps hours 12 -> 1 (12-hour analog cycle)", () => {
+    expect(adjustComponent({ h: 12, m: 0, s: 0 }, "h", 1)).toEqual({
+      h: 1,
+      m: 0,
+      s: 0,
+    });
+  });
+
+  it("wraps hours 1 -> 12 (12-hour analog cycle)", () => {
+    expect(adjustComponent({ h: 1, m: 0, s: 0 }, "h", -1)).toEqual({
+      h: 12,
+      m: 0,
+      s: 0,
+    });
+  });
+
+  it("handles a 12-step delta as identity", () => {
+    expect(adjustComponent({ h: 10, m: 19, s: 34 }, "h", 12)).toEqual({
+      h: 10,
+      m: 19,
+      s: 34,
+    });
+  });
+});
+
+describe("formatHms", () => {
+  it("zero-pads each component to two digits", () => {
+    expect(formatHms({ h: 1, m: 2, s: 3 })).toBe("01:02:03");
+    expect(formatHms({ h: 12, m: 59, s: 59 })).toBe("12:59:59");
+  });
+});
+
+describe("parseHms", () => {
+  it("accepts a well-formed object", () => {
+    const input = { h: 10, m: 19, s: 34 };
+    expect(parseHms(input)).toEqual(input);
+  });
+
+  it("rejects out-of-range hours", () => {
+    expect(parseHms({ h: 0, m: 0, s: 0 })).toBeNull();
+    expect(parseHms({ h: 13, m: 0, s: 0 })).toBeNull();
+    expect(parseHms({ h: -1, m: 0, s: 0 })).toBeNull();
+  });
+
+  it("rejects out-of-range minutes/seconds", () => {
+    expect(parseHms({ h: 10, m: 60, s: 0 })).toBeNull();
+    expect(parseHms({ h: 10, m: -1, s: 0 })).toBeNull();
+    expect(parseHms({ h: 10, m: 0, s: 60 })).toBeNull();
+    expect(parseHms({ h: 10, m: 0, s: -1 })).toBeNull();
+  });
+
+  it("rejects non-integers", () => {
+    expect(parseHms({ h: 10.5, m: 0, s: 0 })).toBeNull();
+    expect(parseHms({ h: NaN, m: 0, s: 0 })).toBeNull();
+  });
+
+  it("rejects non-objects + missing fields", () => {
+    expect(parseHms(null)).toBeNull();
+    expect(parseHms("10:19:34")).toBeNull();
+    expect(parseHms({ m: 19, s: 34 })).toBeNull();
+    expect(parseHms({ h: "10", m: 19, s: 34 })).toBeNull();
+  });
+});
+
+// A tiny sanity check that the type is exported and usable.
+describe("Hms type", () => {
+  it("can be constructed from literals", () => {
+    const x: Hms = { h: 10, m: 19, s: 34 };
+    expect(x.h + x.m + x.s).toBe(63);
   });
 });

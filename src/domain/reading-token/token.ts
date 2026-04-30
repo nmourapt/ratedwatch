@@ -79,8 +79,32 @@ export const READING_TOKEN_TTL_SECONDS = 5 * 60;
  */
 export interface ReadingTokenPayload {
   photo_r2_key: string;
+  /**
+   * The server's reference clock at moment of capture, formatted as
+   * `HH:MM:SS` (UTC, 24-hour) for human-debug log lines. NOT used in
+   * deviation math — the canonical reference is `reference_ms` below.
+   */
   anchor_hms: string;
-  predicted_mm_ss: { m: number; s: number };
+  /**
+   * The reference timestamp the deviation is computed against, as
+   * unix milliseconds. Source is either EXIF DateTimeOriginal (the
+   * camera's local clock encoded UTC-naively) or server arrival
+   * (`Date.now()` UTC). Stored at draft time so /confirm computes
+   * the same deviation no matter when the user taps Confirm within
+   * the token's 5-min TTL. Added in PR #122 alongside the move from
+   * MM:SS-only to full-HMS deviation.
+   */
+  reference_ms: number;
+  /**
+   * The VLM's predicted reading on a 12-hour analog clock (h ∈
+   * [1, 12], m/s ∈ [0, 59]). Hour comes from the server reference
+   * (the VLM doesn't determine hour — it disambiguates the
+   * rollover-side using the prompt's anchor). Replaces the old
+   * `predicted_mm_ss` field added in slice #6 of PRD #99 because
+   * PR #122 lets the user adjust HH/MM/SS independently and the
+   * SPA needs the predicted hour as the initial value.
+   */
+  predicted_hms: { h: number; m: number; s: number };
   user_id: string;
   watch_id: string;
   expires_at_unix: number;
@@ -218,17 +242,25 @@ function isReadingTokenPayload(value: unknown): value is ReadingTokenPayload {
   const v = value as Record<string, unknown>;
   if (typeof v.photo_r2_key !== "string") return false;
   if (typeof v.anchor_hms !== "string") return false;
+  if (typeof v.reference_ms !== "number" || !Number.isFinite(v.reference_ms)) {
+    return false;
+  }
   if (typeof v.user_id !== "string") return false;
   if (typeof v.watch_id !== "string") return false;
   if (typeof v.vlm_model !== "string") return false;
   if (typeof v.expires_at_unix !== "number" || !Number.isFinite(v.expires_at_unix)) {
     return false;
   }
-  const mm_ss = v.predicted_mm_ss;
-  if (typeof mm_ss !== "object" || mm_ss === null) return false;
-  const m = (mm_ss as { m?: unknown }).m;
-  const s = (mm_ss as { s?: unknown }).s;
-  if (typeof m !== "number" || !Number.isFinite(m)) return false;
-  if (typeof s !== "number" || !Number.isFinite(s)) return false;
+  // PR #122: predicted_hms = { h: 1..12, m: 0..59, s: 0..59 }. Old
+  // tokens carrying `predicted_mm_ss` are rejected here — they
+  // expire within 5 minutes of the deploy anyway.
+  const hms = v.predicted_hms;
+  if (typeof hms !== "object" || hms === null) return false;
+  const h = (hms as { h?: unknown }).h;
+  const m = (hms as { m?: unknown }).m;
+  const s = (hms as { s?: unknown }).s;
+  if (typeof h !== "number" || !Number.isFinite(h) || h < 1 || h > 12) return false;
+  if (typeof m !== "number" || !Number.isFinite(m) || m < 0 || m > 59) return false;
+  if (typeof s !== "number" || !Number.isFinite(s) || s < 0 || s > 59) return false;
   return true;
 }
