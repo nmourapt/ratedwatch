@@ -146,7 +146,7 @@ async function postDraft(
   watchId: string,
   fixtureName: string,
   cookie: string,
-  options?: { clientCaptureMs?: number },
+  options?: { clientCaptureMs?: number; clientTzOffsetMinutes?: number },
 ): Promise<Response> {
   const bytes = fixtureBytes(fixtureName);
   const form = new FormData();
@@ -154,6 +154,9 @@ async function postDraft(
   form.append("image", file);
   if (options?.clientCaptureMs !== undefined) {
     form.append("client_capture_ms", String(options.clientCaptureMs));
+  }
+  if (options?.clientTzOffsetMinutes !== undefined) {
+    form.append("client_tz_offset_minutes", String(options.clientTzOffsetMinutes));
   }
   return exports.default.fetch(
     new Request(
@@ -469,6 +472,124 @@ describe("POST /api/v1/watches/:id/readings/verified/draft", () => {
     VERIFIED_TIMEOUT,
   );
 
+  // ---- client_tz_offset_minutes (PR #126, fix for TZ-bias-as-deviation) ----
+  //
+  // A user in Lisbon (WEST = UTC+1) with a watch on local time
+  // reported a saved verified reading with a 1-hour deviation even
+  // though they confirmed the correct dial values. Cause: the
+  // server's reference HMS came from `refDate.getUTCHours()`, which
+  // is UTC-relative; the watch dial shows local hour. Every reading
+  // ended up with a constant +3600 s TZ-bias baked into
+  // `deviation_seconds`. Drift rate cancelled it (constant offset),
+  // but per-reading absolute deviation looked an hour off.
+  //
+  // The SPA now sends `client_tz_offset_minutes` (DST-aware,
+  // captured via `-new Date(captureMs).getTimezoneOffset()`).
+  // Server uses it to compute `predicted_hms.h` at /draft and the
+  // reference HMS at /confirm, so deviation reflects watch-clock
+  // vs local-clock comparison rather than UTC.
+
+  it(
+    "uses client_tz_offset_minutes to shift predicted_hms.h into local-clock frame (Lisbon WEST +60)",
+    async () => {
+      // Reference: 2026-04-29 13:30:15 UTC. With +60 min offset (Lisbon
+      // WEST), local clock is 14:30:15 → predicted h = 2 (12-hour),
+      // not 1 (which is what UTC alone would give).
+      const refMs = Date.UTC(2026, 3, 29, 13, 30, 15, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 15 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Lisbon WEST", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie, {
+        clientTzOffsetMinutes: 60,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
+      expect(body.predicted_hms).toEqual({ h: 2, m: 30, s: 15 });
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "uses client_tz_offset_minutes to shift predicted_hms.h into local-clock frame (New York EDT −240)",
+    async () => {
+      // Reference: 2026-04-29 13:30:15 UTC. With −240 min offset
+      // (New York EDT), local clock is 09:30:15 → predicted h = 9.
+      const refMs = Date.UTC(2026, 3, 29, 13, 30, 15, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 15 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "NYC EDT", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie, {
+        clientTzOffsetMinutes: -240,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
+      expect(body.predicted_hms).toEqual({ h: 9, m: 30, s: 15 });
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "preserves UTC-relative behaviour when client_tz_offset_minutes is omitted (backward compat)",
+    async () => {
+      const refMs = Date.UTC(2026, 3, 29, 13, 30, 15, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 15 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Backward compat", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
+      // No offset → use UTC components → 13 → h=1 (12-hour).
+      expect(body.predicted_hms).toEqual({ h: 1, m: 30, s: 15 });
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "returns 400 when client_tz_offset_minutes is out of bounds",
+    async () => {
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 0 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Bad TZ", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(
+        watchId,
+        "bambino_10_19_34.jpeg",
+        owner.cookie,
+        { clientTzOffsetMinutes: 1500 }, // > +840 max
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error?: string; field?: string };
+      expect(body.error).toBe("invalid_input");
+      expect(body.field).toBe("client_tz_offset_minutes");
+    },
+    VERIFIED_TIMEOUT,
+  );
+
   it(
     "returns 422 with retake reason on VLM unparseable",
     async () => {
@@ -604,6 +725,105 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       const draftKey = new URL(draftBody.photo_url).pathname.replace(/^\/images\//, "");
       const draftPhoto = await r2.get(draftKey);
       expect(draftPhoto).toBeNull();
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "with client_tz_offset_minutes, deviation reflects local-clock comparison (no TZ-bias added)",
+    async () => {
+      // The bug we're fixing: pre-#126, a Lisbon-WEST user (+60 min)
+      // with a watch on local time submitting an HMS that exactly
+      // matches their dial got `deviation_seconds = 3600` because
+      // the server compared against UTC hour. With this fix, the
+      // server shifts reference_ms by +60 min before extracting H/M/S,
+      // so the comparison is local-vs-local and deviation comes out
+      // small.
+      //
+      // Set up: photo captured at 13:30:15 UTC. Watch on Lisbon WEST
+      // (+60 min) shows 14:30:20 (5 s fast). User confirms
+      // {h:2, m:30, s:20}. Pre-fix this would have been compared
+      // against UTC's {h:1, m:30, s:15} → +3605. Post-fix it's
+      // compared against local {h:2, m:30, s:15} → +5.
+      const refMs = Date.UTC(2026, 3, 29, 13, 30, 15, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 15 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Lisbon local watch", movement_id: movementId },
+        owner.cookie,
+      );
+
+      const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie, {
+        clientTzOffsetMinutes: 60,
+      });
+      expect(draftRes.status).toBe(200);
+      const draftBody = (await draftRes.json()) as DraftResponse;
+      // Predicted hour reflects local clock.
+      expect(draftBody.predicted_hms.h).toBe(2);
+
+      // User confirms with a watch reading that's +5 s vs the local
+      // reference clock. Hour they submit (2) matches what they see
+      // on the dial.
+      const confirmRes = await postConfirm(
+        watchId,
+        {
+          reading_token: draftBody.reading_token,
+          final_hms: { h: 2, m: 30, s: 20 },
+        },
+        owner.cookie,
+      );
+      expect(confirmRes.status).toBe(201);
+      const reading = (await confirmRes.json()) as ReadingResponseBody;
+      // No 3600 s TZ bias — deviation reflects the +5 s offset
+      // between watch and local clock.
+      expect(reading.deviation_seconds).toBe(5);
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "without client_tz_offset_minutes, deviation falls back to UTC-relative behavior (backward compat)",
+    async () => {
+      // Backward-compat smoke: a SPA on a pre-#126 build doesn't
+      // send the offset field. The server falls back to UTC
+      // components for the reference, which means watches on local
+      // time see the historical TZ-bias-as-deviation. We don't fix
+      // that for the legacy path — we just preserve it so old
+      // tokens minted before the deploy still validate correctly
+      // against the same arithmetic.
+      const refMs = Date.UTC(2026, 3, 29, 13, 30, 15, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(refMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 15 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Pre-126 SPA", movement_id: movementId },
+        owner.cookie,
+      );
+
+      const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
+      const draftBody = (await draftRes.json()) as DraftResponse;
+      expect(draftBody.predicted_hms.h).toBe(1); // UTC's 13 → 1 (12-hour)
+
+      // User submits {h:1, m:30, s:20} matching the UTC-relative
+      // prediction. Deviation is +5 s relative to UTC.
+      const confirmRes = await postConfirm(
+        watchId,
+        {
+          reading_token: draftBody.reading_token,
+          final_hms: { h: 1, m: 30, s: 20 },
+        },
+        owner.cookie,
+      );
+      expect(confirmRes.status).toBe(201);
+      const reading = (await confirmRes.json()) as ReadingResponseBody;
+      expect(reading.deviation_seconds).toBe(5);
     },
     VERIFIED_TIMEOUT,
   );

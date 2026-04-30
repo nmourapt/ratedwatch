@@ -491,6 +491,53 @@ function hmsTotalSeconds(hms: { h: number; m: number; s: number }): number {
 }
 
 /**
+ * Convert a unix-ms timestamp into HMS components matching what the
+ * USER'S watch should be displaying at that moment, on the 12-hour
+ * analog clock. When `clientTzOffsetMinutes` is provided, we shift
+ * the timestamp by that offset before extracting H/M/S so a watch
+ * displaying local time gets compared against local-clock HMS rather
+ * than UTC-clock HMS.
+ *
+ * Background — PR #126 fix: prior to this helper, both /draft and
+ * /confirm called `refDate.getUTCHours()` directly. For a user in
+ * Lisbon WEST (+60 min) with a watch on local time, this produced a
+ * predicted hour that was UTC-relative while the watch dial was
+ * local-relative — so every reading had a 3600 s constant TZ-bias
+ * baked into its `deviation_seconds`. Drift-rate math cancelled the
+ * bias (constant offset), but per-reading absolute deviation looked
+ * 1 hour off. The user noticed and reported it. The fix: SPA sends
+ * `client_tz_offset_minutes` (DST-aware, captured via
+ * `-new Date(captureMs).getTimezoneOffset()`), persisted in the
+ * reading-token, and threaded into both endpoints' HMS computation.
+ *
+ * Backward compat: when offset is undefined we fall back to UTC
+ * components — matches the pre-#126 behaviour for any in-flight
+ * tokens minted before the deploy.
+ *
+ * @param referenceMs unix ms (UTC, the moment the photo was captured)
+ * @param clientTzOffsetMinutes  east-of-UTC offset in minutes; +60
+ *   for WEST, +120 for CEST, −240 for EDT, etc. Optional.
+ */
+function referenceHmsForUserClock(
+  referenceMs: number,
+  clientTzOffsetMinutes?: number,
+): { h: number; m: number; s: number } {
+  // Shift the unix-ms forward into the user's local clock by adding
+  // the offset. The resulting Date's `getUTC*()` methods now return
+  // components that match what a watch in the user's TZ would
+  // display at moment of capture.
+  const shiftedMs =
+    clientTzOffsetMinutes !== undefined
+      ? referenceMs + clientTzOffsetMinutes * 60_000
+      : referenceMs;
+  const d = new Date(shiftedMs);
+  const h24 = d.getUTCHours();
+  // Map 0..23 → 12, 1..11, 12, 1..11 on the analog 12-hour dial.
+  const h12 = ((h24 + 11) % 12) + 1;
+  return { h: h12, m: d.getUTCMinutes(), s: d.getUTCSeconds() };
+}
+
+/**
  * Wrap-aware full-HMS deviation on the 12-hour analog cycle (43200
  * seconds). Returns the shortest signed distance (in seconds)
  * between two HH:MM:SS triples, always in [-21600, +21600].
@@ -501,14 +548,10 @@ function hmsTotalSeconds(hms: { h: number; m: number; s: number }): number {
  * — a watch that's actually 1h fast must record as +3600s, not
  * wrap modulo-30-min into a near-zero value.
  *
- * Timezone caveat: when the reference came from server arrival
- * (no EXIF), the reference's UTC hour ≠ user's local hour by the
- * TZ offset. The deviation will then include a constant TZ-offset
- * component that's the same for every reading the user submits,
- * so DRIFT-RATE math (delta between readings) cancels it out
- * correctly. Per-reading absolute deviation will look "off" by
- * the TZ offset for the EXIF-missing case. Acceptable for v1; a
- * follow-up could pass the user's TZ offset from the SPA.
+ * Timezone handling now lives in `referenceHmsForUserClock` (PR
+ * #126). The reference HMS passed in here is already in the user's
+ * watch-clock frame, so the deviation calculation itself is a pure
+ * digit-vs-digit comparison.
  */
 function compute12HourDeviation(
   dial: { h: number; m: number; s: number },
@@ -606,6 +649,33 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
     clientCaptureMs = parsed;
   }
 
+  // Optional `client_tz_offset_minutes` form field. PR #126 fix for
+  // the TZ-bias-as-deviation report: a watch on Lisbon local
+  // (UTC+1) compared against a UTC-derived reference produces
+  // every reading with a 3600 s constant offset baked in. Drift
+  // rate cancels it, but per-reading absolute deviation looks 1 h
+  // off. The SPA captures
+  //   `-new Date(captureMs).getTimezoneOffset()`
+  // which is DST-aware (the offset that was in effect at the moment
+  // of capture, not at handler-entry time). Server bounds it to
+  // ±840 minutes (covers all real TZs incl. UTC+14 / UTC−12).
+  //
+  // Same "invalid → 400" treatment as `client_capture_ms` — a SPA
+  // that drifts out of contract should fail loud, not silently
+  // produce TZ-biased readings.
+  const clientTzOffsetMinutesRaw = form.get("client_tz_offset_minutes");
+  let clientTzOffsetMinutes: number | undefined;
+  if (
+    typeof clientTzOffsetMinutesRaw === "string" &&
+    clientTzOffsetMinutesRaw.length > 0
+  ) {
+    const parsed = Number(clientTzOffsetMinutesRaw);
+    if (!Number.isFinite(parsed) || parsed < -840 || parsed > 840) {
+      return c.json({ error: "invalid_input", field: "client_tz_offset_minutes" }, 400);
+    }
+    clientTzOffsetMinutes = parsed;
+  }
+
   const imageBuffer = await image.arrayBuffer();
 
   const aiGatewayId = c.env.AI_GATEWAY_ID ?? "dial-reader-bakeoff";
@@ -664,17 +734,24 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
 
   const expiresAtUnix = Math.floor(Date.now() / 1000) + READING_TOKEN_TTL_SECONDS;
 
-  // Convert the reference's UTC hour to a 12-hour analog hour
-  // (1..12, no AM/PM marker). The VLM's mm_ss read is paired with
-  // this hour to produce the predicted analog dial display the SPA
-  // shows in the confirmation page. PR #122: full HH:MM:SS
-  // returned to client so per-component up/down can pre-populate
-  // with the right starting values.
-  const refDate = new Date(result.reference_timestamp_ms);
-  const refHour24 = refDate.getUTCHours();
-  const refHour12 = ((refHour24 + 11) % 12) + 1;
+  // Convert the reference timestamp to a 12-hour analog HOUR position
+  // matching what the user's watch should be displaying. The VLM's
+  // mm_ss read is paired with this hour to produce the predicted
+  // analog dial display the SPA shows in the confirmation page.
+  //
+  // PR #122 added per-component HH/MM/SS adjusters. PR #126 added the
+  // optional `clientTzOffsetMinutes` shift so watches on local time
+  // (e.g. Lisbon WEST) get a predicted hour that matches their dial
+  // rather than UTC's. The minute/second components come straight
+  // from the VLM's mm_ss read (TZ doesn't affect MM:SS for any real
+  // TZ — they're all whole-hour or whole-half-hour offsets, and the
+  // half-hour cases round trivially since we never cross 30 min).
+  const refHmsAtUserClock = referenceHmsForUserClock(
+    result.reference_timestamp_ms,
+    clientTzOffsetMinutes,
+  );
   const predictedHms = {
-    h: refHour12,
+    h: refHmsAtUserClock.h,
     m: result.mm_ss.m,
     s: result.mm_ss.s,
   };
@@ -688,6 +765,10 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
     watch_id: watchId,
     expires_at_unix: expiresAtUnix,
     vlm_model: result.vlm_model,
+    // PR #126: persist client TZ offset so /confirm reproduces the
+    // same local-clock reference HMS used here for predicted_hms.h.
+    // Optional — pre-#126 SPAs omit it.
+    client_tz_offset_minutes: clientTzOffsetMinutes,
   };
   const readingToken = await signReadingToken(tokenPayload, c.env.READING_TOKEN_SECRET);
 
@@ -807,17 +888,16 @@ readingsByWatchRoute.post("/verified/confirm", async (c) => {
   // server-clock readings (no drift) which is itself a detection
   // signal in the leaderboard.
 
-  // Build the reference HMS from the token's stored reference_ms.
-  // The hour comes via 12-hour conversion of the reference's UTC
-  // hour (matches what /draft minted into predicted_hms).
-  const refDate = new Date(payload.reference_ms);
-  const refHour24 = refDate.getUTCHours();
-  const refHour12 = ((refHour24 + 11) % 12) + 1;
-  const referenceHms = {
-    h: refHour12,
-    m: refDate.getUTCMinutes(),
-    s: refDate.getUTCSeconds(),
-  };
+  // Build the reference HMS from the token's stored reference_ms,
+  // shifted into the user's local-clock frame using the same TZ
+  // offset that was used when /draft minted `predicted_hms.h`.
+  // Without this shift, a watch on local time (e.g. Lisbon WEST,
+  // +60 min) ends up with a 3600 s constant TZ-bias added to every
+  // saved deviation. PR #126.
+  const referenceHms = referenceHmsForUserClock(
+    payload.reference_ms,
+    payload.client_tz_offset_minutes,
+  );
 
   const deviationSeconds = is_baseline
     ? 0

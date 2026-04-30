@@ -199,6 +199,19 @@ export interface VerifiedReadingDraftSubmission {
    * envelope as byte-EXIF.
    */
   clientCaptureMs?: number;
+  /**
+   * Optional client TZ offset in MINUTES east of UTC (Lisbon WEST =
+   * +60, NYC EDT = −240). PR #126 fix for the TZ-bias-as-deviation
+   * report: a watch displaying local time was being compared
+   * against a UTC-derived reference, baking 3600 s of TZ offset
+   * into every reading. When this field is present, the server
+   * shifts the reference into the user's local-clock frame before
+   * extracting H/M/S, so deviation reflects watch-vs-local-clock.
+   *
+   * Captured as `-new Date(captureMs).getTimezoneOffset()` so it's
+   * DST-aware for the moment of capture. Server bounds: ±840 min.
+   */
+  clientTzOffsetMinutes?: number;
 }
 
 /**
@@ -259,6 +272,11 @@ export async function draftVerifiedReading(
     // Bounds-checked against arrival on the server — sending a
     // wildly out-of-bounds value yields HTTP 422 exif_clock_skew.
     form.append("client_capture_ms", String(submission.clientCaptureMs));
+  }
+  if (submission.clientTzOffsetMinutes !== undefined) {
+    // Server bounds: ±840 min (covers all real TZs incl. UTC+14 and
+    // UTC−12 with DST variants). Out-of-bounds → HTTP 400.
+    form.append("client_tz_offset_minutes", String(submission.clientTzOffsetMinutes));
   }
 
   const response = await fetch(

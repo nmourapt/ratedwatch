@@ -109,6 +109,27 @@ export interface ReadingTokenPayload {
   watch_id: string;
   expires_at_unix: number;
   vlm_model: string;
+  /**
+   * Optional client TZ offset in minutes east of UTC (e.g. Lisbon
+   * WEST = +60, Berlin CEST = +120, New York EDT = −240). Captured
+   * by the SPA via `-new Date(captureMs).getTimezoneOffset()` so it's
+   * DST-aware for the moment of capture.
+   *
+   * When present, the route layer shifts `reference_ms` by this
+   * offset before extracting H/M/S components (both at /draft for
+   * `predicted_hms.h` and at /confirm for the deviation calc), so a
+   * watch displaying local time produces a clean small deviation
+   * rather than a 3600 s TZ-bias-as-deviation. PR #126 fix for the
+   * "I saved the correct time, but it still showed a 1h deviation"
+   * report against PR #124's behaviour.
+   *
+   * Optional for backward compat — clients on the pre-#126 SPA omit
+   * it and the server falls back to UTC components (the old wrong-
+   * for-non-UTC-watches behaviour). Bounds on input: ±840 minutes
+   * (covers all real TZs incl. UTC+14 and UTC−12, with DST
+   * variants).
+   */
+  client_tz_offset_minutes?: number;
 }
 
 /**
