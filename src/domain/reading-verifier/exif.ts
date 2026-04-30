@@ -53,9 +53,19 @@ async function defaultReader(buffer: ArrayBuffer): Promise<number | null> {
   let parsed: { DateTimeOriginal?: unknown; CreateDate?: unknown } | undefined;
   try {
     parsed = (await exifrParse(buffer, {
-      // Only ask for the two fields we use. Cuts work — exifr can
-      // skip whole IFDs / segments when we explicitly pick.
-      pick: ["DateTimeOriginal", "CreateDate"],
+      // Skip IFD0/GPS/IFD1/interop — the two date tags live in the
+      // EXIF segment. The shorter `{ pick: [...] }` form looks
+      // tempting but is BROKEN in this exifr lite build (throws
+      // `undefined is not iterable` at setupGlobalFilters); see
+      // PR #124 for the discovery + the SPA-side counterpart in
+      // src/app/watches/extractCaptureTime.ts. This segment-on form
+      // achieves the same "skip the expensive parts" goal without
+      // tripping the bug.
+      ifd0: false,
+      exif: true,
+      gps: false,
+      interop: false,
+      ifd1: false,
     })) as typeof parsed;
   } catch {
     return null;

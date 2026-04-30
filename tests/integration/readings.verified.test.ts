@@ -146,11 +146,15 @@ async function postDraft(
   watchId: string,
   fixtureName: string,
   cookie: string,
+  options?: { clientCaptureMs?: number },
 ): Promise<Response> {
   const bytes = fixtureBytes(fixtureName);
   const form = new FormData();
   const file = new File([bytes], fixtureName, { type: "image/jpeg" });
   form.append("image", file);
+  if (options?.clientCaptureMs !== undefined) {
+    form.append("client_capture_ms", String(options.clientCaptureMs));
+  }
   return exports.default.fetch(
     new Request(
       `https://ratedwatch.test/api/v1/watches/${watchId}/readings/verified/draft`,
@@ -188,7 +192,7 @@ interface DraftResponse {
   reading_token: string;
   predicted_hms: { h: number; m: number; s: number };
   photo_url: string;
-  reference_source: "exif" | "server";
+  reference_source: "exif" | "server" | "client";
   expires_at_unix: number;
 }
 
@@ -341,6 +345,126 @@ describe("POST /api/v1/watches/:id/readings/verified/draft", () => {
       expect(body.reference_source).toBe("server");
       // Server arrival 14:30:15 UTC → 12-hour h = ((14+11)%12)+1 = 2.
       expect(body.predicted_hms).toEqual({ h: 2, m: 30, s: 15 });
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  // ---- client_capture_ms (PR #124, fixes upload-latency bias) ----
+  //
+  // The SPA's canvas-resize step strips EXIF, so the byte-EXIF path
+  // is structurally dead in production for the verified-reading flow.
+  // The SPA now reads EXIF DateTimeOriginal from the ORIGINAL bytes
+  // BEFORE the resize, falls back to `Date.now()` at file selection
+  // when EXIF is missing (HEIC/screenshots), and sends the result as
+  // a multipart `client_capture_ms` field. Server bounds it the same
+  // way as byte-EXIF (±5min/+1min) — same anti-cheat ceiling, much
+  // better accuracy.
+
+  it(
+    "uses client_capture_ms as the reference when present and in-bounds",
+    async () => {
+      const arrivalMs = Date.UTC(2026, 3, 29, 14, 30, 28, 0);
+      const captureMs = arrivalMs - 8000; // 8 s before arrival (typical upload)
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(arrivalMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 22 }); // dial reads 30:22
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Client capture ms", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie, {
+        clientCaptureMs: captureMs,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
+      expect(body.reference_source).toBe("client");
+      // captureMs at 14:30:20 UTC → 12-hour h = ((14+11)%12)+1 = 2,
+      // m = 30 (verifier carries through the VLM mm:ss for predicted_hms).
+      expect(body.predicted_hms).toEqual({ h: 2, m: 30, s: 22 });
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "client_capture_ms takes precedence over byte-EXIF when both present",
+    async () => {
+      const arrivalMs = Date.UTC(2026, 3, 29, 14, 30, 30, 0);
+      const exifMs = arrivalMs - 4000;
+      const clientMs = arrivalMs - 12000; // 12 s before arrival
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(arrivalMs);
+      __setTestExifReader(async () => exifMs); // would otherwise win
+      installVlmMock({ m: 30, s: 18 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Client wins", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie, {
+        clientCaptureMs: clientMs,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as DraftResponse;
+      expect(body.reference_source).toBe("client");
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "returns 422 exif_clock_skew when client_capture_ms is more than 5 min in the past",
+    async () => {
+      const arrivalMs = Date.UTC(2026, 3, 29, 14, 30, 30, 0);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(arrivalMs);
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 0 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Stale client capture", movement_id: movementId },
+        owner.cookie,
+      );
+      const res = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie, {
+        clientCaptureMs: arrivalMs - 6 * 60 * 1000,
+      });
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { error?: string };
+      expect(body.error).toBe("exif_clock_skew");
+    },
+    VERIFIED_TIMEOUT,
+  );
+
+  it(
+    "returns 400 invalid_input when client_capture_ms is not a finite number",
+    async () => {
+      __setTestExifReader(async () => null);
+      installVlmMock({ m: 30, s: 0 });
+
+      const owner = await registerAndGetCookie();
+      const { id: watchId } = await createWatch(
+        { name: "Bad client capture", movement_id: movementId },
+        owner.cookie,
+      );
+      const bytes = fixtureBytes("bambino_10_19_34.jpeg");
+      const form = new FormData();
+      form.append(
+        "image",
+        new File([bytes], "bambino_10_19_34.jpeg", { type: "image/jpeg" }),
+      );
+      form.append("client_capture_ms", "not-a-number");
+      const res = await exports.default.fetch(
+        new Request(
+          `https://ratedwatch.test/api/v1/watches/${watchId}/readings/verified/draft`,
+          { method: "POST", headers: { cookie: owner.cookie }, body: form },
+        ),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error?: string };
+      expect(body.error).toBe("invalid_input");
     },
     VERIFIED_TIMEOUT,
   );

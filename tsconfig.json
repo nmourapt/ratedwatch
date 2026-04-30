@@ -33,6 +33,7 @@
     "src/domain/**/*",
     "src/db/**/*",
     "src/schemas/**/*",
+    "src/types/**/*",
     "tests/integration/**/*",
     "scripts/**/*",
     "vitest.config.ts",

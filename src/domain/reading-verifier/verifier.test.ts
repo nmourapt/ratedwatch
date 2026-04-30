@@ -181,6 +181,119 @@ describe("verifyVlmReading", () => {
     expect(result.error).toBe("exif_clock_skew");
   });
 
+  // ---- clientCaptureMs (PR #124, fix for verified-reading upload-latency bias) ----
+  //
+  // Background: the SPA's canvas-resize step strips EXIF from every
+  // photo (canvas re-encoding produces a clean JPEG). So the byte-EXIF
+  // path almost always falls through to server-arrival, which lags
+  // photo-capture time by upload latency (typically 5-15s on
+  // cellular/weak WiFi). On a watch with +6s/day drift, a 13s upload
+  // delay produces a deviation of -7s — exactly the bug a real user
+  // hit on 2026-04-30.
+  //
+  // The fix: SPA reads EXIF DateTimeOriginal client-side BEFORE the
+  // canvas-resize destroys it, and falls back to Date.now() at file-
+  // selection moment. Either way it sends a `client_capture_ms`
+  // multipart field. Server bounds it (same ±5 min / +1 min window
+  // as byte-EXIF) and uses it as the reference. Anti-cheat: since the
+  // bound is exactly the EXIF bound, a malicious client can't claim
+  // a wildly different time than they could already claim by forging
+  // EXIF bytes.
+
+  it("uses clientCaptureMs as the reference when present and in-bounds", async () => {
+    const clientMs = SERVER_ARRIVAL_MS - 8000; // 8s before arrival
+    const deps = makeDeps({
+      // Dial reads 19:25 → vs ref 19:22 (= clientMs minute/second) = +3s
+      readDial: async () => vlmSuccess(19, 25),
+    });
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "watch-1",
+        userId: "user-1",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+        clientCaptureMs: clientMs,
+      },
+      deps,
+    );
+    if (!result.ok) throw new Error(`expected ok, got ${result.error}`);
+    expect(result.reference_timestamp_ms).toBe(clientMs);
+    expect(result.reference_source).toBe("client");
+    expect(result.deviation_seconds).toBe(3);
+  });
+
+  it("clientCaptureMs takes precedence over byte-extracted EXIF", async () => {
+    // Both signals available, both in-bounds. Client wins because
+    // post-canvas-resize byte-EXIF is structurally unreliable (almost
+    // always missing) and the SPA already extracted EXIF from the
+    // ORIGINAL bytes before resize. Trusting client here is more
+    // accurate, with the same anti-cheat ceiling.
+    const exifMs = SERVER_ARRIVAL_MS - 4000;
+    const clientMs = SERVER_ARRIVAL_MS - 12000;
+    __setTestExifReader(async () => exifMs);
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "w",
+        userId: "u",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+        clientCaptureMs: clientMs,
+      },
+      makeDeps(),
+    );
+    if (!result.ok) throw new Error(`expected ok, got ${result.error}`);
+    expect(result.reference_timestamp_ms).toBe(clientMs);
+    expect(result.reference_source).toBe("client");
+  });
+
+  it("rejects clientCaptureMs more than 5 minutes in the past as exif_clock_skew", async () => {
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "w",
+        userId: "u",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+        clientCaptureMs: SERVER_ARRIVAL_MS - 6 * 60 * 1000,
+      },
+      makeDeps(),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe("exif_clock_skew");
+  });
+
+  it("rejects clientCaptureMs more than 1 minute in the future as exif_clock_skew", async () => {
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "w",
+        userId: "u",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+        clientCaptureMs: SERVER_ARRIVAL_MS + 90 * 1000,
+      },
+      makeDeps(),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe("exif_clock_skew");
+  });
+
+  it("falls back to server arrival when clientCaptureMs is undefined and no EXIF", async () => {
+    const result = await verifyVlmReading(
+      {
+        photoBytes: FAKE_IMAGE,
+        watchId: "w",
+        userId: "u",
+        serverArrivalAtMs: SERVER_ARRIVAL_MS,
+        // No clientCaptureMs
+      },
+      makeDeps(),
+    );
+    if (!result.ok) throw new Error(`expected ok, got ${result.error}`);
+    expect(result.reference_timestamp_ms).toBe(SERVER_ARRIVAL_MS);
+    expect(result.reference_source).toBe("server");
+  });
+
   it("maps VLM rejection (unparseable_majority) to error: ai_unparseable", async () => {
     const deps = makeDeps({
       readDial: async () => ({ kind: "rejection", reason: "unparseable_majority" }),

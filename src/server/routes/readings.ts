@@ -583,6 +583,29 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
     return c.json({ error: "image_too_large", max_bytes: MAX_IMAGE_BYTES }, 413);
   }
 
+  // Optional `client_capture_ms` form field. PR #124 fix for the
+  // upload-latency bias: the SPA's canvas-resize step strips EXIF
+  // from every photo, so the byte-EXIF path almost always falls
+  // through to server arrival, biasing every reading by 5-15 s of
+  // upload time. The SPA now extracts EXIF DateTimeOriginal from the
+  // ORIGINAL bytes (or `Date.now()` at file selection as a fallback)
+  // and posts it here. Server bounds it the same way as byte-EXIF
+  // (±5 min / +1 min) — same anti-cheat envelope.
+  //
+  // We treat a present-but-unparseable value as an invalid request
+  // rather than silently ignoring it: a malformed field means the
+  // SPA's contract drifted from the server's, and silently falling
+  // back would re-introduce the latency bias.
+  const clientCaptureMsRaw = form.get("client_capture_ms");
+  let clientCaptureMs: number | undefined;
+  if (typeof clientCaptureMsRaw === "string" && clientCaptureMsRaw.length > 0) {
+    const parsed = Number(clientCaptureMsRaw);
+    if (!Number.isFinite(parsed)) {
+      return c.json({ error: "invalid_input", field: "client_capture_ms" }, 400);
+    }
+    clientCaptureMs = parsed;
+  }
+
   const imageBuffer = await image.arrayBuffer();
 
   const aiGatewayId = c.env.AI_GATEWAY_ID ?? "dial-reader-bakeoff";
@@ -592,6 +615,7 @@ readingsByWatchRoute.post("/verified/draft", async (c) => {
       watchId,
       userId: user.id,
       serverArrivalAtMs: serverArrivalMs,
+      clientCaptureMs,
     },
     {
       env: { IMAGES: c.env.IMAGES },
