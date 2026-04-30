@@ -189,6 +189,16 @@ export async function deleteReading(
 
 export interface VerifiedReadingDraftSubmission {
   image: File;
+  /**
+   * Optional client-supplied photo-capture timestamp (unix ms). PR
+   * #124 fix for the verified-reading upload-latency bias: the SPA
+   * extracts this from EXIF DateTimeOriginal on the ORIGINAL bytes
+   * (or `Date.now()` at file-selection moment as a fallback) before
+   * canvas-resize destroys the EXIF. The server bounds it (±5 min /
+   * +1 min vs arrival) and uses it as the reference. Same anti-cheat
+   * envelope as byte-EXIF.
+   */
+  clientCaptureMs?: number;
 }
 
 /**
@@ -206,7 +216,7 @@ export interface VerifiedReadingDraft {
   reading_token: string;
   predicted_hms: { h: number; m: number; s: number };
   photo_url: string;
-  reference_source: "exif" | "server";
+  reference_source: "exif" | "server" | "client";
   expires_at_unix: number;
 }
 
@@ -244,6 +254,12 @@ export async function draftVerifiedReading(
 > {
   const form = new FormData();
   form.append("image", submission.image);
+  if (submission.clientCaptureMs !== undefined) {
+    // Server reads this as a multipart string and parses to number.
+    // Bounds-checked against arrival on the server — sending a
+    // wildly out-of-bounds value yields HTTP 422 exif_clock_skew.
+    form.append("client_capture_ms", String(submission.clientCaptureMs));
+  }
 
   const response = await fetch(
     `/api/v1/watches/${encodeURIComponent(watchId)}/readings/verified/draft`,

@@ -25,6 +25,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/app/**/*", "vite.config.ts"],
+  "include": ["src/app/**/*", "src/types/**/*", "vite.config.ts"],
   "exclude": ["node_modules", "dist", ".wrangler"]
 }

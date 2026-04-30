@@ -66,6 +66,7 @@ import {
   type VerifiedReadingDraft,
 } from "./readings";
 import { maybeResize } from "./resizePhoto";
+import { extractCaptureTime } from "./extractCaptureTime";
 import type { VerifiedReadingErrorMessage } from "./verifiedReadingErrors";
 
 interface Props {
@@ -244,6 +245,20 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
     if (state.kind !== "chosen" && state.kind !== "error") return;
     const sourceFile = state.file;
 
+    // Capture-time extraction MUST happen before maybeResize. The
+    // canvas-based resize re-encodes the JPEG and strips ALL EXIF —
+    // so reading from `sourceFile` is the only chance to see the
+    // camera's authoritative shutter timestamp. PR #124 fix for the
+    // upload-latency bias: this value gets sent to the server as
+    // `client_capture_ms`, bounded against arrival, and used as the
+    // reference. When EXIF is missing (HEIC variants, screenshots,
+    // already-stripped photos), we fall back to `Date.now()` here —
+    // still much closer to the actual capture moment than the
+    // server-arrival fallback (which lags by upload latency, 5-15 s
+    // on cellular).
+    const submitMs = Date.now();
+    const clientCaptureMs = await extractCaptureTime(sourceFile, submitMs);
+
     // Show "uploading" immediately. The resize runs synchronously
     // (well, microtask-based via canvas.toBlob) BEFORE the network
     // call so users see the progress bar move even on fast networks.
@@ -274,7 +289,10 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
       );
     }, 200);
 
-    const result = await draftVerifiedReading(watchId, { image: resized.file });
+    const result = await draftVerifiedReading(watchId, {
+      image: resized.file,
+      clientCaptureMs,
+    });
     clearTimeout(flipToReading);
 
     if (result.ok) {

@@ -463,6 +463,14 @@ jobs:
       # migrations apply` is idempotent — it only applies migrations
       # that haven't been recorded as applied yet, so a deploy with
       # no schema change is a no-op here.
+      #
+      # NOTE: the wrangler-action's `apiToken:` input doesn't reliably
+      # propagate to subprocess env for the `d1 migrations apply`
+      # command (saw this fail on the very first auto-deploy run from
+      # PR #123's merge). The `versions upload --preview-alias` flow
+      # is unaffected — different code path inside the action. Setting
+      # CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID explicitly via
+      # the step `env:` block is the belt-and-suspenders fix.
       - name: Apply D1 migrations to production
         uses: cloudflare/wrangler-action@v3
         with:
@@ -471,6 +479,8 @@ jobs:
           wranglerVersion: "4"
           command: d1 migrations apply rated-watch-db --remote
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"
 
       # `wrangler deploy --env=production` is what `npm run deploy`
@@ -482,6 +492,9 @@ jobs:
       # surface is small enough that a flag-flip rollback (KV) or
       # version-id rollback (wrangler versions deploy) is the
       # right tool when something breaks.
+      #
+      # Same env: belt-and-suspenders as the migration step above —
+      # see comment there.
       - name: Deploy Worker to production
         uses: cloudflare/wrangler-action@v3
         with:
@@ -490,4 +503,6 @@ jobs:
           wranglerVersion: "4"
           command: deploy --env=production
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"

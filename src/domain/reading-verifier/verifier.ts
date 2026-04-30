@@ -91,6 +91,24 @@ export interface VerifyVlmReadingInput {
   watchId: string;
   userId: string;
   serverArrivalAtMs: number;
+  /**
+   * Optional client-supplied photo-capture timestamp (unix ms).
+   * Source from the SPA's perspective is either EXIF DateTimeOriginal
+   * (read from the ORIGINAL bytes before canvas-resize destroys it)
+   * or `Date.now()` at the moment the user picked the photo. Either
+   * way the server treats it as a single bucket: "client". Bounded
+   * server-side against `serverArrivalAtMs` (±5 min / +1 min) — same
+   * anti-cheat envelope as byte-EXIF, so a malicious client can't
+   * claim a wildly different time than they could already claim by
+   * forging EXIF bytes.
+   *
+   * When present and in-bounds it takes precedence over byte-EXIF.
+   * The SPA's canvas-resize strips EXIF anyway, so the byte-EXIF
+   * path is effectively dead code in production; this field is the
+   * one users actually rely on. See PR #124 + the verifier.test.ts
+   * "clientCaptureMs" block for the bug it fixes.
+   */
+  clientCaptureMs?: number;
 }
 
 export type VerifyReadingErrorCode =
@@ -107,7 +125,7 @@ export type VerifyVlmReadingResult =
       vlm_model: string;
       mm_ss: { m: number; s: number };
       reference_timestamp_ms: number;
-      reference_source: "exif" | "server";
+      reference_source: "exif" | "server" | "client";
       deviation_seconds: number;
       crop_found: boolean;
       raw_response: string;
@@ -166,8 +184,12 @@ export async function verifyVlmReading(
   input: VerifyVlmReadingInput,
   deps: VerifyVlmReadingDeps,
 ): Promise<VerifyVlmReadingResult> {
-  // Step 1: reference timestamp.
-  const ref = await resolveReferenceTimestamp(input.photoBytes, input.serverArrivalAtMs);
+  // Step 1: reference timestamp. Precedence: clientCaptureMs > byte-EXIF > server arrival.
+  const ref = await resolveReferenceTimestamp(
+    input.photoBytes,
+    input.serverArrivalAtMs,
+    input.clientCaptureMs,
+  );
   if (!ref.ok) {
     return {
       ok: false,
