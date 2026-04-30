@@ -22,7 +22,11 @@ import {
 import { loadPublicWatch } from "@/public/watch/load";
 import { WatchNotFoundPage, WatchPage } from "@/public/watch/page";
 import { getAuth, type AuthEnv } from "@/server/auth";
-import { watchImagePublicRoute, watchImageRoute } from "@/server/routes/images";
+import {
+  verifiedDraftImageRoute,
+  watchImagePublicRoute,
+  watchImageRoute,
+} from "@/server/routes/images";
 import { leaderboardRoute } from "@/server/routes/leaderboard";
 import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
@@ -319,6 +323,15 @@ app.route("/api/v1/watches", watchesRoute);
 // <img src> references it directly and a future CDN cache rule will
 // key off the stable /images/* prefix.
 app.route("/images/watches", watchImagePublicRoute);
+
+// Owner-only draft-photo serving for the verified-reading two-step
+// flow. The /verified/draft endpoint (slice #6 of PRD #99) returns
+// `photo_url = "${origin}/images/drafts/${user_id}/${uuid}.jpg"`;
+// the SPA confirmation page (slice #7) renders that URL in an
+// `<img>`. The route handler validates session ownership before
+// streaming the JPEG out of the WATCH_IMAGES bucket. See
+// src/server/routes/images.ts for the access-control rationale.
+app.route("/images/drafts", verifiedDraftImageRoute);
 
 // Outbound click-tracking redirects — /out/chrono24/:movementId and
 // friends. See src/server/routes/out.ts. Owned by the Worker (see

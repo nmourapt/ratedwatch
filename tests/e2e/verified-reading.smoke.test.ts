@@ -137,8 +137,16 @@ test("register → add watch → verified-reading flow renders and surfaces flag
   // E2E against the real container.
   await submitBtn.click();
   const outcome = panel.locator('[role="alert"], [role="status"]');
+  // Widened the regex with the new VLM-pipeline error vocabulary
+  // introduced by PRD #99 (slices #4–#6). Any of these outcomes is
+  // acceptable; the smoke only checks that *some* human-readable
+  // outcome surfaces, regardless of which preview-side path the
+  // dial reader lands on (flag-off, transport error, model
+  // refusal, anchor mismatch, etc.). When the flag-off vs flag-on
+  // behaviour matters specifically, write an integration test with
+  // a faked reader rather than an E2E against the real gateway.
   await expect(outcome.first()).toContainText(
-    /verified readings aren't enabled|ai returned an unexpected response|couldn't read the dial|reading looked off|saved\.\s*dial read/i,
+    /verified readings aren't enabled|ai returned an unexpected response|couldn't read the dial|reading looked off|saved\.\s*dial read|connection failed while reading dial|reconcile the dial with your phone's clock|inconclusive read|please retake the photo|reading session expired/i,
     { timeout: 20_000 },
   );
 });

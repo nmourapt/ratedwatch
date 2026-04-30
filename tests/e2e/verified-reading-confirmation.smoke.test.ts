@@ -158,10 +158,16 @@ test("verified-reading confirmation: deviation never rendered, ± buttons adjust
   // the data-URL we returned in the mock or any other URL would do.
   await expect(confirmation.getByTestId("confirmation-photo")).toBeVisible();
 
-  // Prediction display shows the predicted MM:SS verbatim.
-  const predictionEl = confirmation.getByTestId("prediction-mm-ss");
+  // Prediction display shows the predicted HH:MM:SS verbatim. Hour
+  // is the server-clock hour from the /draft response (14:xx:xx in
+  // this fixture); minutes + seconds come from the VLM's read.
+  const predictionEl = confirmation.getByTestId("prediction-hh-mm-ss");
+  await expect(predictionEl).toContainText("14");
   await expect(predictionEl).toContainText("19");
   await expect(predictionEl).toContainText("34");
+  // The hour element is its own testid so the rollover-edge-case
+  // verification is independent of the MM:SS sub-elements.
+  await expect(confirmation.getByTestId("confirmation-hours")).toHaveText("14");
 
   // ---- 4. Anti-cheat DOM probe -----------------------------------
   //
