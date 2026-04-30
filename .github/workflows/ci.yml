@@ -435,6 +435,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: verify
+    # `environment: preview` unlocks the CLOUDFLARE_API_TOKEN +
+    # CLOUDFLARE_ACCOUNT_ID secrets which are scoped to that GitHub
+    # Environment (the only env-scoped secrets in this repo — see
+    # the same comment on the `cheat-regression` job). Without this,
+    # `${{ secrets.CLOUDFLARE_API_TOKEN }}` resolves to an empty
+    # string and the wrangler subprocess fails with "non-interactive
+    # environment, set CLOUDFLARE_API_TOKEN" (caught by the first
+    # main-branch deploy attempt on 2026-04-30, see git history of
+    # this file). The "preview" name is historical — it was created
+    # for the preview-deploy job. We could rename it to "deploy" or
+    # add a separate "production" environment with the same secrets;
+    # both feel like premature ceremony for a single-operator repo,
+    # so we just reuse the existing one.
+    environment: preview
     permissions:
       contents: read
     concurrency:
