@@ -259,6 +259,17 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
     const submitMs = Date.now();
     const clientCaptureMs = await extractCaptureTime(sourceFile, submitMs);
 
+    // Capture the user's TZ offset (minutes east of UTC) at the
+    // capture moment, so the server can express the reference HMS
+    // in the user's local-clock frame when computing deviation.
+    // PR #126 fix for the "watch on local time gets +3600 s
+    // deviation bias" report. `getTimezoneOffset()` returns minutes
+    // WEST of UTC (Lisbon WEST = −60, NYC EDT = +240) — we negate
+    // to match the server's "east of UTC" convention. Computing
+    // against `new Date(clientCaptureMs)` ensures DST transitions
+    // are handled correctly for the actual moment of capture.
+    const clientTzOffsetMinutes = -new Date(clientCaptureMs).getTimezoneOffset();
+
     // Show "uploading" immediately. The resize runs synchronously
     // (well, microtask-based via canvas.toBlob) BEFORE the network
     // call so users see the progress bar move even on fast networks.
@@ -292,6 +303,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
     const result = await draftVerifiedReading(watchId, {
       image: resized.file,
       clientCaptureMs,
+      clientTzOffsetMinutes,
     });
     clearTimeout(flipToReading);
 
