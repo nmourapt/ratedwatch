@@ -1,51 +1,44 @@
-// Confirmation step for the verified-reading two-step flow (slice #7
-// of PRD #99 — issue #106).
+// Confirmation step for the verified-reading two-step flow (slice
+// #7 of PRD #99 — issue #106). Reworked in PR #122 to:
 //
-// Rendered after `POST /readings/verified/draft` returns. The user
-// sees their photo + the VLM's predicted MM:SS and either:
+//   1. Render full HH:MM:SS in a single row at large size, with
+//      independent up/down adjusters under each component (matches
+//      the user's mental model: "set each digit to what your
+//      watch shows").
 //
-//   1. Nudges ± seconds (within ±30s) to match what the dial actually
-//      reads, then taps Confirm → POSTs /confirm and lands on the
-//      watch detail's history pane.
-//   2. Taps Retake → returns to the capture step. The draft photo on
-//      R2 expires via the 24h lifecycle rule (see
-//      `infra/terraform/r2.tf`) so abandoned drafts don't pile up.
+//   2. Drop the ±30s seconds-only adjustment cap. The cap was
+//      always more about UI nudge than fraud prevention — a
+//      determined cheater knows the rough current time from their
+//      phone clock and can game the value either direction. The
+//      photo audit trail and the rate-limit are the real
+//      defences.
+//
+//   3. Use the new `predicted_hms` from /draft (replacing
+//      `predicted_mm_ss` + `hour_from_server_clock` returned
+//      separately).
 //
 // ## Anti-cheat property (the whole point of this slice)
 //
 // The page MUST NOT show:
 //   * the EXIF reference time
 //   * any computed deviation
-//   * any text that would let the user reverse-engineer the deviation
-//     (e.g. "+5s ahead", "5s drift")
+//   * any text that would let the user reverse-engineer the
+//     deviation (e.g. "+5s ahead", "5s drift")
 //
-// The hour from the server clock IS shown — but as a small prefix
-// ("Reading at 14:") deliberately separated from the prediction
-// display, so the brain has to do non-trivial mental arithmetic to
-// derive a deviation. The +/- buttons let the user shift seconds
-// based on what they see on their watch's dial; they don't know
-// what value would yield a "perfect" drift rate, so the dominant
-// strategy is honesty.
-//
-// The E2E test in `tests/e2e/verified-reading-confirmation.smoke.test.ts`
-// asserts this with a DOM probe (no element matching
-// `[data-testid="deviation"]`, no text matching `/drift|deviation|[+-]\d+s/i`).
-//
-// ## ±30s adjustment cap
-//
-// The server enforces ±30s in `/confirm` (slice #6); we mirror it
-// client-side via `canAdjust` from `verifiedReadingAdjustment.ts` so
-// the buttons disable visually at the limit. UI is convenience;
-// server is security.
+// Showing the full HH:MM:SS doesn't violate this — the user
+// already knows the rough current time from their phone clock,
+// so showing the system's read of their watch doesn't leak the
+// (server-internal) deviation. The E2E test in
+// `tests/e2e/verified-reading-confirmation.smoke.test.ts` asserts
+// no `[data-testid="deviation"]` and no text matching
+// `/drift|deviation|[+-]\d+s/i` — both still hold under the new
+// layout.
 
 import { useState } from "react";
 import {
-  ADJUSTMENT_LIMIT_SECONDS,
-  adjustSeconds,
-  canAdjust,
-  clicksUsed,
-  formatMmSs,
-  type MmSs,
+  adjustComponent,
+  type Hms,
+  type HmsComponent,
 } from "./verifiedReadingAdjustment";
 import {
   confirmVerifiedReading,
@@ -83,23 +76,14 @@ export function VerifiedReadingConfirmation({
   onConfirmed,
   onRetake,
 }: Props) {
-  // The user's working MM:SS — starts at the prediction, mutates as
-  // they nudge. Confirm POSTs whatever `current` is at click time.
-  const [current, setCurrent] = useState<MmSs>(draft.predicted_mm_ss);
+  // The user's working HMS — starts at the prediction, mutates per
+  // component as they tap up/down. Confirm POSTs whatever `current`
+  // is at click time.
+  const [current, setCurrent] = useState<Hms>(draft.predicted_hms);
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: "idle" });
 
-  const used = clicksUsed(draft.predicted_mm_ss, current);
-  const canPlus = canAdjust(draft.predicted_mm_ss, current, 1);
-  const canMinus = canAdjust(draft.predicted_mm_ss, current, -1);
-
-  function handlePlus() {
-    if (!canPlus) return;
-    setCurrent((c) => adjustSeconds(c, 1));
-  }
-
-  function handleMinus() {
-    if (!canMinus) return;
-    setCurrent((c) => adjustSeconds(c, -1));
+  function handleAdjust(component: HmsComponent, delta: 1 | -1) {
+    setCurrent((c) => adjustComponent(c, component, delta));
   }
 
   async function handleConfirm() {
@@ -107,7 +91,7 @@ export function VerifiedReadingConfirmation({
     setSubmitState({ kind: "submitting" });
     const result = await confirmVerifiedReading(watchId, {
       reading_token: draft.reading_token,
-      final_mm_ss: current,
+      final_hms: current,
       is_baseline: isBaseline,
     });
     if (!result.ok) {
@@ -119,30 +103,6 @@ export function VerifiedReadingConfirmation({
     onConfirmed(result.reading);
   }
 
-  // Hour display. Comes from the server clock (the SPA cannot
-  // change it; only the seconds are user-editable) and is rendered
-  // as the leftmost component of the predicted time so the user can
-  // verify it matches what their watch actually shows on the dial.
-  // Critical for the rollover edge cases (e.g. server hour = 11
-  // while the watch reads 10:59:30 — without seeing "10" beside the
-  // ":59:30" prediction, the user can't distinguish the system's
-  // hour assumption from their dial's actual hour).
-  //
-  // ## Anti-cheat tradeoff vs the original "small prefix" design
-  //
-  // The original slice-#7 layout rendered "Reading at HH:" as a tiny
-  // separated label so the user couldn't trivially compose HH:MM:SS
-  // in their head and compare against the EXIF anchor. In practice
-  // the user already knows the rough current time from their phone
-  // clock, so hiding the system's hour assumption added confusion
-  // (rollover ambiguity) without preventing cheating. Showing the
-  // hour does NOT leak the precise computed deviation — that comes
-  // from a HH:MM:SS - HH:MM:SS subtraction the user would have to
-  // do mentally with the EXIF reference (which they still don't
-  // have). The seconds-only ±30s adjustment cap remains the
-  // primary cheat barrier.
-  const hourLabel = String(draft.hour_from_server_clock).padStart(2, "0");
-
   return (
     <div
       data-testid="verified-reading-confirmation"
@@ -151,8 +111,7 @@ export function VerifiedReadingConfirmation({
       <header className="flex flex-col gap-1">
         <h3 className="text-sm font-medium text-ink">Confirm your reading</h3>
         <p className="text-xs text-ink-muted">
-          Adjust if needed, then confirm. The dial reading you submit becomes your
-          reading.
+          Adjust each value to match what your dial shows, then confirm.
         </p>
       </header>
 
@@ -163,74 +122,49 @@ export function VerifiedReadingConfirmation({
         className="max-h-96 w-full rounded-md border border-line object-contain"
       />
 
-      <div className="flex flex-col items-center gap-1 py-2">
-        <div
-          data-testid="prediction-hh-mm-ss"
-          aria-label={`Reading shows ${hourLabel}:${formatMmSs(current)}`}
-          className="font-mono text-5xl font-light tabular-nums text-ink"
-        >
-          {/* Hour: non-editable, comes from the server reference clock
-              (slice #6 of PRD #99). Shown prominently — same size as
-              MM:SS — so the user can verify the rollover-side at a
-              glance against what's on their dial. */}
-          <span data-testid="confirmation-hours" className="text-ink-muted">
-            {hourLabel}
-          </span>
-          <span aria-hidden="true" className="mx-1 text-ink-muted">
+      {/* Big HH:MM:SS row with up/down arrows beneath each
+          component. We render each {▲, NN, ▼} as a column so the
+          buttons line up directly under the digit they affect. */}
+      <div
+        data-testid="prediction-hh-mm-ss"
+        aria-label={`Reading shows ${formatHmsLabel(current)}`}
+        className="flex flex-col items-center gap-2 py-2"
+      >
+        <div className="flex items-center justify-center gap-2 font-mono text-5xl font-light tabular-nums text-ink">
+          <HmsColumn
+            component="h"
+            value={current.h}
+            label="hour"
+            testId="confirmation-hours"
+            onAdjust={handleAdjust}
+          />
+          <span aria-hidden="true" className="self-center text-ink-muted">
             :
           </span>
-          {/* Minutes: predicted by the VLM, NOT user-adjustable. If
-              the dial's minute reading doesn't match what's
-              displayed here, the user retakes — minutes-off-by-one
-              is outside the ±30s seconds nudge. */}
-          <span data-testid="confirmation-minutes">
-            {String(current.m).padStart(2, "0")}
-          </span>
-          <span aria-hidden="true" className="mx-1 text-ink-muted">
+          <HmsColumn
+            component="m"
+            value={current.m}
+            label="minute"
+            testId="confirmation-minutes"
+            onAdjust={handleAdjust}
+          />
+          <span aria-hidden="true" className="self-center text-ink-muted">
             :
           </span>
-          {/* Seconds: predicted by the VLM, user-adjustable via ±
-              buttons within ±30s of the prediction. Visually
-              accent-coloured so it's clearly the actionable element. */}
-          <span data-testid="confirmation-seconds" className="text-accent">
-            {String(current.s).padStart(2, "0")}
-          </span>
+          <HmsColumn
+            component="s"
+            value={current.s}
+            label="second"
+            testId="confirmation-seconds"
+            onAdjust={handleAdjust}
+          />
         </div>
         <span className="text-xs uppercase tracking-wide text-ink-muted">
           {/* Plain English caption — orients the user without
               giving away any deviation hint. Doesn't match the
               anti-cheat regex /drift|deviation|[+-]\d+s/i. */}
-          Tap ± to nudge seconds to match your dial
+          Tap ▲ or ▼ under each digit to match your dial
         </span>
-      </div>
-
-      <div className="flex items-center justify-center gap-4">
-        <button
-          type="button"
-          data-testid="confirmation-minus"
-          aria-label="Decrease seconds by 1"
-          onClick={handleMinus}
-          disabled={!canMinus}
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-line bg-canvas text-2xl font-light text-ink transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          −
-        </button>
-        <span
-          data-testid="confirmation-clicks-used"
-          className="font-mono text-xs text-ink-muted"
-        >
-          ± {used} / {ADJUSTMENT_LIMIT_SECONDS} used
-        </span>
-        <button
-          type="button"
-          data-testid="confirmation-plus"
-          aria-label="Increase seconds by 1"
-          onClick={handlePlus}
-          disabled={!canPlus}
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-line bg-canvas text-2xl font-light text-ink transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          +
-        </button>
       </div>
 
       {submitState.kind === "error" ? (
@@ -266,4 +200,55 @@ export function VerifiedReadingConfirmation({
       </div>
     </div>
   );
+}
+
+interface HmsColumnProps {
+  component: HmsComponent;
+  value: number;
+  /** Plural label for a11y ("hour" / "minute" / "second"). */
+  label: string;
+  /** Test ID applied to the digit element so E2E can assert text. */
+  testId: string;
+  onAdjust: (component: HmsComponent, delta: 1 | -1) => void;
+}
+
+/**
+ * One column of the HH:MM:SS row: ▲ on top, the two-digit value in
+ * the middle, ▼ on the bottom. Each button is a 36×28 tap target
+ * — slightly tighter than the 44×44 a11y minimum, but the column
+ * grid wraps the digit in the middle so the entire column is a
+ * comfortable thumb zone on mobile. The accent colour denotes
+ * "this is the user-actionable part" — same convention as the
+ * pre-PR-#122 design's seconds-only highlighting.
+ */
+function HmsColumn({ component, value, label, testId, onAdjust }: HmsColumnProps) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <button
+        type="button"
+        data-testid={`${testId}-up`}
+        aria-label={`Increase ${label} by 1`}
+        onClick={() => onAdjust(component, 1)}
+        className="inline-flex h-9 w-12 items-center justify-center rounded-md border border-line bg-canvas text-sm text-ink transition-colors hover:border-accent hover:text-accent"
+      >
+        ▲
+      </button>
+      <span data-testid={testId} className="text-accent">
+        {String(value).padStart(2, "0")}
+      </span>
+      <button
+        type="button"
+        data-testid={`${testId}-down`}
+        aria-label={`Decrease ${label} by 1`}
+        onClick={() => onAdjust(component, -1)}
+        className="inline-flex h-9 w-12 items-center justify-center rounded-md border border-line bg-canvas text-sm text-ink transition-colors hover:border-accent hover:text-accent"
+      >
+        ▼
+      </button>
+    </div>
+  );
+}
+
+function formatHmsLabel(hms: Hms): string {
+  return `${String(hms.h).padStart(2, "0")}:${String(hms.m).padStart(2, "0")}:${String(hms.s).padStart(2, "0")}`;
 }

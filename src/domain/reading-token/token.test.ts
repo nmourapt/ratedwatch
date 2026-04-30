@@ -27,7 +27,8 @@ function makePayload(overrides: Partial<ReadingTokenPayload> = {}): ReadingToken
   return {
     photo_r2_key: "drafts/user-123/abcd-1234.jpg",
     anchor_hms: "10:19:34",
-    predicted_mm_ss: { m: 19, s: 34 },
+    reference_ms: Date.now(),
+    predicted_hms: { h: 10, m: 19, s: 34 },
     user_id: "user-123",
     watch_id: "watch-456",
     expires_at_unix: Math.floor(Date.now() / 1000) + READING_TOKEN_TTL_SECONDS,
@@ -49,7 +50,7 @@ describe("readingToken round-trip", () => {
   it("preserves all payload fields exactly", async () => {
     // Canary against a future field-stripping bug in the encoder.
     const payload = makePayload({
-      predicted_mm_ss: { m: 0, s: 59 },
+      predicted_hms: { h: 11, m: 0, s: 59 },
       anchor_hms: "23:00:01",
     });
     const decoded = await verifyReadingToken(
@@ -172,21 +173,12 @@ describe("readingToken malformed input", () => {
 });
 
 describe("readingToken shape validation", () => {
-  it("rejects a payload missing predicted_mm_ss", async () => {
-    // Manually construct a token whose payload omits a required field.
-    // We craft this so the signature is correct (otherwise we'd be
-    // testing tamper detection, not shape validation).
+  // Helper: forge a correctly-signed token from an arbitrary JSON
+  // body. Lets us drive shape-validation tests without re-deriving
+  // the HMAC math in each case.
+  async function forgeSignedToken(bodyJson: string): Promise<string> {
     const enc = new TextEncoder();
-    const bad = JSON.stringify({
-      photo_r2_key: "x",
-      anchor_hms: "10:00:00",
-      // predicted_mm_ss missing
-      user_id: "u",
-      watch_id: "w",
-      expires_at_unix: Math.floor(Date.now() / 1000) + 60,
-      vlm_model: "openai/gpt-5.2",
-    });
-    const payloadB64 = btoa(bad)
+    const payloadB64 = btoa(bodyJson)
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
@@ -204,6 +196,56 @@ describe("readingToken shape validation", () => {
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
-    expect(await verifyReadingToken(`${payloadB64}.${sigB64}`, SECRET)).toBeNull();
+    return `${payloadB64}.${sigB64}`;
+  }
+
+  function baseBody(): Record<string, unknown> {
+    return {
+      photo_r2_key: "x",
+      anchor_hms: "10:00:00",
+      reference_ms: Date.now(),
+      predicted_hms: { h: 10, m: 19, s: 34 },
+      user_id: "u",
+      watch_id: "w",
+      expires_at_unix: Math.floor(Date.now() / 1000) + 60,
+      vlm_model: "openai/gpt-5.2",
+    };
+  }
+
+  it("rejects a payload missing predicted_hms", async () => {
+    const { predicted_hms: _omit, ...rest } = baseBody();
+    void _omit;
+    const tok = await forgeSignedToken(JSON.stringify(rest));
+    expect(await verifyReadingToken(tok, SECRET)).toBeNull();
+  });
+
+  it("rejects a payload missing reference_ms", async () => {
+    const { reference_ms: _omit, ...rest } = baseBody();
+    void _omit;
+    const tok = await forgeSignedToken(JSON.stringify(rest));
+    expect(await verifyReadingToken(tok, SECRET)).toBeNull();
+  });
+
+  it("rejects predicted_hms with out-of-range hour (0)", async () => {
+    const body = { ...baseBody(), predicted_hms: { h: 0, m: 0, s: 0 } };
+    const tok = await forgeSignedToken(JSON.stringify(body));
+    expect(await verifyReadingToken(tok, SECRET)).toBeNull();
+  });
+
+  it("rejects predicted_hms with out-of-range hour (13)", async () => {
+    const body = { ...baseBody(), predicted_hms: { h: 13, m: 0, s: 0 } };
+    const tok = await forgeSignedToken(JSON.stringify(body));
+    expect(await verifyReadingToken(tok, SECRET)).toBeNull();
+  });
+
+  it("rejects predicted_hms with out-of-range minutes/seconds", async () => {
+    const tooBig = { ...baseBody(), predicted_hms: { h: 10, m: 60, s: 0 } };
+    expect(
+      await verifyReadingToken(await forgeSignedToken(JSON.stringify(tooBig)), SECRET),
+    ).toBeNull();
+    const negative = { ...baseBody(), predicted_hms: { h: 10, m: 0, s: -1 } };
+    expect(
+      await verifyReadingToken(await forgeSignedToken(JSON.stringify(negative)), SECRET),
+    ).toBeNull();
   });
 });

@@ -61,9 +61,12 @@ test("verified-reading confirmation: deviation never rendered, ± buttons adjust
   // the <img> renders something visible without hitting R2.
   //
   // Captured state lets the test assert the SPA POSTs the user-
-  // adjusted final_mm_ss, not the predicted MM:SS.
+  // adjusted final_hms, not the predicted HH:MM:SS.
   const FAKE_TOKEN = "fake-token.fake-sig";
-  const PREDICTED = { m: 19, s: 34 };
+  // PR #122: predicted_hms unifies hour + mm + ss in one field.
+  // We pick h=2 (12-hour analog of UTC 14) so the displayed
+  // "Reading at 02:" matches the watch reading the prompt described.
+  const PREDICTED = { h: 2, m: 19, s: 34 };
   const PHOTO_DATA_URL =
     "data:image/png;base64," +
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==";
@@ -76,9 +79,8 @@ test("verified-reading confirmation: deviation never rendered, ± buttons adjust
       contentType: "application/json",
       body: JSON.stringify({
         reading_token: FAKE_TOKEN,
-        predicted_mm_ss: PREDICTED,
+        predicted_hms: PREDICTED,
         photo_url: PHOTO_DATA_URL,
-        hour_from_server_clock: 14,
         reference_source: "server",
         expires_at_unix: Math.floor(Date.now() / 1000) + 300,
       }),
@@ -87,7 +89,7 @@ test("verified-reading confirmation: deviation never rendered, ± buttons adjust
 
   let confirmBody: {
     reading_token: string;
-    final_mm_ss: { m: number; s: number };
+    final_hms: { h: number; m: number; s: number };
     is_baseline?: boolean;
   } | null = null;
   await page.route("**/api/v1/watches/**/readings/verified/confirm", async (route) => {
@@ -159,15 +161,17 @@ test("verified-reading confirmation: deviation never rendered, ± buttons adjust
   await expect(confirmation.getByTestId("confirmation-photo")).toBeVisible();
 
   // Prediction display shows the predicted HH:MM:SS verbatim. Hour
-  // is the server-clock hour from the /draft response (14:xx:xx in
-  // this fixture); minutes + seconds come from the VLM's read.
+  // is the 12-hour-analog conversion of the reference's UTC hour
+  // (PREDICTED.h = 2 → "02"); minutes + seconds come from the
+  // VLM's read.
   const predictionEl = confirmation.getByTestId("prediction-hh-mm-ss");
-  await expect(predictionEl).toContainText("14");
+  await expect(predictionEl).toContainText("02");
   await expect(predictionEl).toContainText("19");
   await expect(predictionEl).toContainText("34");
-  // The hour element is its own testid so the rollover-edge-case
-  // verification is independent of the MM:SS sub-elements.
-  await expect(confirmation.getByTestId("confirmation-hours")).toHaveText("14");
+  // Each component has its own testid for granular assertions.
+  await expect(confirmation.getByTestId("confirmation-hours")).toHaveText("02");
+  await expect(confirmation.getByTestId("confirmation-minutes")).toHaveText("19");
+  await expect(confirmation.getByTestId("confirmation-seconds")).toHaveText("34");
 
   // ---- 4. Anti-cheat DOM probe -----------------------------------
   //
@@ -180,20 +184,34 @@ test("verified-reading confirmation: deviation never rendered, ± buttons adjust
   await expect(confirmation.locator('[data-testid="deviation"]')).toHaveCount(0);
   await expect(confirmation.getByText(/drift|deviation|[+-]\d+\s*s\b/i)).toHaveCount(0);
 
-  // ---- 5. ± buttons adjust seconds in 1s steps -------------------
-  const plusBtn = confirmation.getByTestId("confirmation-plus");
+  // ---- 5. Per-component up/down buttons adjust independently ----
+  //
+  // PR #122 reworked the UX from seconds-only ±30s into per-
+  // component up/down. Each component has its own ▲/▼ pair and
+  // adjustments wrap WITHIN the component (m=59 ▲ → m=0 without
+  // touching h or s). The integration test (server side) covers
+  // the wrap math; here we just verify the buttons hit the right
+  // targets.
+  const secondsUp = confirmation.getByTestId("confirmation-seconds-up");
   for (let i = 0; i < 4; i += 1) {
-    await plusBtn.click();
+    await secondsUp.click();
   }
-  // After 4 clicks: 34 → 35 → 36 → 37 → 38. The minutes display
-  // should still be "19".
   await expect(confirmation.getByTestId("confirmation-seconds")).toHaveText("38");
+  // Hours and minutes should be untouched by seconds adjustments.
+  await expect(confirmation.getByTestId("confirmation-hours")).toHaveText("02");
   await expect(confirmation.getByTestId("confirmation-minutes")).toHaveText("19");
 
-  // The "± X / 30 used" counter ticked along.
-  await expect(confirmation.getByTestId("confirmation-clicks-used")).toContainText("4");
+  // Tap minutes ▲ once — proves component independence + that the
+  // hour doesn't carry.
+  await confirmation.getByTestId("confirmation-minutes-up").click();
+  await expect(confirmation.getByTestId("confirmation-minutes")).toHaveText("20");
+  await expect(confirmation.getByTestId("confirmation-hours")).toHaveText("02");
 
-  // ---- 6. Confirm posts the user-adjusted MM:SS ------------------
+  // Tap hours ▲ once — proves the hour is independently adjustable.
+  await confirmation.getByTestId("confirmation-hours-up").click();
+  await expect(confirmation.getByTestId("confirmation-hours")).toHaveText("03");
+
+  // ---- 6. Confirm posts the user-adjusted HH:MM:SS ---------------
   await confirmation.getByTestId("confirmation-confirm").click();
 
   // Wait for the success banner to swap in (the parent component
@@ -202,8 +220,8 @@ test("verified-reading confirmation: deviation never rendered, ± buttons adjust
   await expect(panel.getByRole("status")).toContainText(/saved/i);
 
   // The mock captured the POST body — assert the SPA sent the
-  // user-adjusted MM:SS, not the predicted one.
+  // user-adjusted HMS, not the predicted one.
   expect(confirmBody).not.toBeNull();
   expect(confirmBody!.reading_token).toBe(FAKE_TOKEN);
-  expect(confirmBody!.final_mm_ss).toEqual({ m: 19, s: 38 });
+  expect(confirmBody!.final_hms).toEqual({ h: 3, m: 20, s: 38 });
 });

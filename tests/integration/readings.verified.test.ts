@@ -167,7 +167,7 @@ async function postConfirm(
   watchId: string,
   body: {
     reading_token: string;
-    final_mm_ss: { m: number; s: number };
+    final_hms: { h: number; m: number; s: number };
     is_baseline?: boolean;
   },
   cookie: string,
@@ -186,9 +186,8 @@ async function postConfirm(
 
 interface DraftResponse {
   reading_token: string;
-  predicted_mm_ss: { m: number; s: number };
+  predicted_hms: { h: number; m: number; s: number };
   photo_url: string;
-  hour_from_server_clock: number;
   reference_source: "exif" | "server";
   expires_at_unix: number;
 }
@@ -238,7 +237,7 @@ const VERIFIED_TIMEOUT = 30_000;
 
 describe("POST /api/v1/watches/:id/readings/verified/draft", () => {
   it.each([["bambino_10_19_34.jpeg"], ["snk803_10_15_40.jpeg"]])(
-    "returns reading_token + predicted_mm_ss for %s",
+    "returns reading_token + predicted_hms for %s",
     async (fixtureName) => {
       const truth = SMOKE_TRUTH[fixtureName]!;
       const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
@@ -259,15 +258,26 @@ describe("POST /api/v1/watches/:id/readings/verified/draft", () => {
 
       // Token shape: <payload>.<sig>
       expect(body.reading_token).toContain(".");
-      expect(body.predicted_mm_ss).toEqual({ m: truth.mm, s: truth.ss });
-      expect(body.hour_from_server_clock).toBe(truth.hh);
+      // Hour comes from the reference timestamp's UTC hour, converted
+      // to 12-hour analog form (1..12). truth.hh is the watch's
+      // displayed local hour (0..23 in the fixture manifest); for
+      // these EXIF-present fixtures the worker's UTC interpretation
+      // matches the camera's local hour by construction (Date()
+      // parsing of naive EXIF strings under TZ=UTC).
+      const expectedH12 = ((truth.hh + 11) % 12) + 1;
+      expect(body.predicted_hms).toEqual({
+        h: expectedH12,
+        m: truth.mm,
+        s: truth.ss,
+      });
       expect(body.photo_url).toContain("/images/drafts/");
       expect(body.photo_url).toContain(owner.userId);
       expect(body.expires_at_unix).toBeGreaterThan(Math.floor(refMs / 1000));
 
       // Critically: NO deviation field on the response. The whole
-      // anti-cheat point is that the user can adjust ± seconds
-      // without seeing the deviation it would produce.
+      // anti-cheat point is that the user can adjust HH/MM/SS
+      // without seeing the deviation those adjustments would
+      // produce.
       expect(body).not.toHaveProperty("deviation_seconds");
 
       // No reading row should have been written yet.
@@ -329,7 +339,8 @@ describe("POST /api/v1/watches/:id/readings/verified/draft", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as DraftResponse;
       expect(body.reference_source).toBe("server");
-      expect(body.hour_from_server_clock).toBe(14);
+      // Server arrival 14:30:15 UTC → 12-hour h = ((14+11)%12)+1 = 2.
+      expect(body.predicted_hms).toEqual({ h: 2, m: 30, s: 15 });
     },
     VERIFIED_TIMEOUT,
   );
@@ -404,7 +415,7 @@ describe("POST /api/v1/watches/:id/readings/verified/draft", () => {
 
 describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
   it(
-    "saves a verified reading with the user's final_mm_ss",
+    "saves a verified reading with the user's final_hms",
     async () => {
       const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
       const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
@@ -423,12 +434,15 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       expect(draftRes.status).toBe(200);
       const draftBody = (await draftRes.json()) as DraftResponse;
 
-      // User adjusts +5s from the prediction. That's well within
-      // the ±30s cap, so confirm should accept.
-      const finalMmSs = { m: truth.mm, s: truth.ss + 5 };
+      // User keeps the predicted hour + minute, nudges seconds +5.
+      const finalHms = {
+        h: draftBody.predicted_hms.h,
+        m: truth.mm,
+        s: truth.ss + 5,
+      };
       const confirmRes = await postConfirm(
         watchId,
-        { reading_token: draftBody.reading_token, final_mm_ss: finalMmSs },
+        { reading_token: draftBody.reading_token, final_hms: finalHms },
         owner.cookie,
       );
       expect(confirmRes.status).toBe(201);
@@ -437,7 +451,7 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       expect(reading.user_id).toBe(owner.userId);
       expect(reading.verified).toBe(true);
       expect(reading.is_baseline).toBe(false);
-      // Final user-submitted mm:ss matches the anchor + 5s, so
+      // Final user-submitted hms matches the anchor + 5s, so
       // deviation should be +5.
       expect(reading.deviation_seconds).toBe(5);
 
@@ -453,6 +467,10 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       expect(row!.vlm_model).toBe("openai/gpt-5.2");
       expect(row!.verified).toBe(1);
       expect(row!.photo_r2_key).toBe(`verified/${owner.userId}/${reading.id}.jpg`);
+      // The token now carries reference_ms exactly, so the saved
+      // reference_timestamp is the exact capture time (not a
+      // reconstructed approximation).
+      expect(row!.reference_timestamp).toBe(refMs);
 
       // Photo moved from drafts/ to verified/.
       const r2 = (env as unknown as TestEnv).WATCH_IMAGES;
@@ -487,8 +505,12 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
         watchId,
         {
           reading_token: draftBody.reading_token,
-          // User adjusts to +10s but baseline overrides → 0.
-          final_mm_ss: { m: truth.mm, s: truth.ss + 10 },
+          // User adjusts +10s but baseline overrides → deviation 0.
+          final_hms: {
+            h: draftBody.predicted_hms.h,
+            m: truth.mm,
+            s: truth.ss + 10,
+          },
           is_baseline: true,
         },
         owner.cookie,
@@ -502,8 +524,12 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
   );
 
   it(
-    "accepts a final_mm_ss exactly 30s from predicted",
+    "accepts arbitrarily large adjustments (no ±30s cap any more)",
     async () => {
+      // PR #122 removed the ±30s cap. The server now accepts any
+      // well-shaped HH:MM:SS triple; the user is responsible for
+      // entering what they see on the dial. This test guards
+      // against accidental reintroduction of a server-side cap.
       const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
       const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
       vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -513,30 +539,41 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
 
       const owner = await registerAndGetCookie();
       const { id: watchId } = await createWatch(
-        { name: "30s boundary", movement_id: movementId },
+        { name: "No cap", movement_id: movementId },
         owner.cookie,
       );
       const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
       const draftBody = (await draftRes.json()) as DraftResponse;
-      // truth.ss = 34, +30 = 64 → wraps to m+1 / s=4
-      const finalSs = (truth.ss + 30) % 60;
-      const finalMm = truth.mm + Math.floor((truth.ss + 30) / 60);
+
+      // User claims their watch is 4 minutes ahead of the
+      // prediction — would have been rejected by the old ±30s cap,
+      // accepted now.
       const confirmRes = await postConfirm(
         watchId,
         {
           reading_token: draftBody.reading_token,
-          final_mm_ss: { m: finalMm, s: finalSs },
+          final_hms: {
+            h: draftBody.predicted_hms.h,
+            m: (truth.mm + 4) % 60,
+            s: truth.ss,
+          },
         },
         owner.cookie,
       );
       expect(confirmRes.status).toBe(201);
+      const reading = (await confirmRes.json()) as ReadingResponseBody;
+      // 4 minutes = 240s. Same hour + same seconds + minutes +4.
+      expect(reading.deviation_seconds).toBe(240);
     },
     VERIFIED_TIMEOUT,
   );
 
   it(
-    "rejects a final_mm_ss 31s from predicted as adjustment_too_large",
+    "computes deviation across hour adjustments via 12-hour wrap",
     async () => {
+      // Reference is 10:19:34. User asserts their watch shows
+      // 11:19:34 — meaning it's 1 hour fast. Deviation should be
+      // +3600s (one hour).
       const truth = SMOKE_TRUTH["bambino_10_19_34.jpeg"]!;
       const refMs = Date.UTC(2026, 3, 29, truth.hh, truth.mm, truth.ss, 0);
       vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -546,28 +583,28 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
 
       const owner = await registerAndGetCookie();
       const { id: watchId } = await createWatch(
-        { name: "31s exceed", movement_id: movementId },
+        { name: "Hour adjust", movement_id: movementId },
         owner.cookie,
       );
       const draftRes = await postDraft(watchId, "bambino_10_19_34.jpeg", owner.cookie);
       const draftBody = (await draftRes.json()) as DraftResponse;
-      const finalSs = (truth.ss + 31) % 60;
-      const finalMm = truth.mm + Math.floor((truth.ss + 31) / 60);
+
       const confirmRes = await postConfirm(
         watchId,
         {
           reading_token: draftBody.reading_token,
-          final_mm_ss: { m: finalMm, s: finalSs },
+          final_hms: {
+            // Predicted h is 10 (12-hour); user nudges to 11.
+            h: (draftBody.predicted_hms.h % 12) + 1 || 1,
+            m: truth.mm,
+            s: truth.ss,
+          },
         },
         owner.cookie,
       );
-      expect(confirmRes.status).toBe(422);
-      const body = (await confirmRes.json()) as {
-        error: string;
-        max_seconds: number;
-      };
-      expect(body.error).toBe("adjustment_too_large");
-      expect(body.max_seconds).toBe(30);
+      expect(confirmRes.status).toBe(201);
+      const reading = (await confirmRes.json()) as ReadingResponseBody;
+      expect(reading.deviation_seconds).toBe(3600);
     },
     VERIFIED_TIMEOUT,
   );
@@ -586,7 +623,8 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       const expiredPayload: ReadingTokenPayload = {
         photo_r2_key: `drafts/${owner.userId}/fake.jpg`,
         anchor_hms: "10:00:00",
-        predicted_mm_ss: { m: 0, s: 30 },
+        reference_ms: Date.now(),
+        predicted_hms: { h: 10, m: 0, s: 30 },
         user_id: owner.userId,
         watch_id: watchId,
         expires_at_unix: Math.floor(Date.now() / 1000) - 1,
@@ -595,7 +633,7 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       const expiredToken = await signReadingToken(expiredPayload, secret);
       const res = await postConfirm(
         watchId,
-        { reading_token: expiredToken, final_mm_ss: { m: 0, s: 30 } },
+        { reading_token: expiredToken, final_hms: { h: 10, m: 0, s: 30 } },
         owner.cookie,
       );
       expect(res.status).toBe(401);
@@ -618,7 +656,8 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
         {
           photo_r2_key: `drafts/${owner.userId}/fake.jpg`,
           anchor_hms: "10:00:00",
-          predicted_mm_ss: { m: 0, s: 30 },
+          reference_ms: Date.now(),
+          predicted_hms: { h: 10, m: 0, s: 30 },
           user_id: owner.userId,
           watch_id: watchId,
           expires_at_unix: Math.floor(Date.now() / 1000) + 60,
@@ -634,7 +673,7 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       }`;
       const res = await postConfirm(
         watchId,
-        { reading_token: tampered, final_mm_ss: { m: 0, s: 30 } },
+        { reading_token: tampered, final_hms: { h: 10, m: 0, s: 30 } },
         owner.cookie,
       );
       expect(res.status).toBe(401);
@@ -660,7 +699,8 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
         {
           photo_r2_key: `drafts/${owner.userId}/fake.jpg`,
           anchor_hms: "10:00:00",
-          predicted_mm_ss: { m: 0, s: 30 },
+          reference_ms: Date.now(),
+          predicted_hms: { h: 10, m: 0, s: 30 },
           user_id: owner.userId,
           watch_id: watchA,
           expires_at_unix: Math.floor(Date.now() / 1000) + 60,
@@ -670,7 +710,7 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       );
       const res = await postConfirm(
         watchB,
-        { reading_token: tokenForA, final_mm_ss: { m: 0, s: 30 } },
+        { reading_token: tokenForA, final_hms: { h: 10, m: 0, s: 30 } },
         owner.cookie,
       );
       expect(res.status).toBe(403);
@@ -687,7 +727,7 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             reading_token: "x.y",
-            final_mm_ss: { m: 0, s: 0 },
+            final_hms: { h: 1, m: 0, s: 0 },
           }),
         },
       ),
@@ -706,7 +746,7 @@ describe("POST /api/v1/watches/:id/readings/verified/confirm", () => {
       const res = await postConfirm(
         watchId,
         // @ts-expect-error — deliberately bad shape
-        { reading_token: 42, final_mm_ss: "nope" },
+        { reading_token: 42, final_hms: "nope" },
         owner.cookie,
       );
       expect(res.status).toBe(400);

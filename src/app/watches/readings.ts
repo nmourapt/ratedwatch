@@ -195,12 +195,17 @@ export interface VerifiedReadingDraftSubmission {
  * Wire shape of the /draft 200 response. Mirrors the route handler
  * in src/server/routes/readings.ts. Critically, this object does NOT
  * include the deviation — see anti-cheat note above.
+ *
+ * PR #122 reworked this from `predicted_mm_ss` + separate
+ * `hour_from_server_clock` (24-hour UTC) into a single
+ * `predicted_hms` (12-hour analog) so the SPA's confirmation page
+ * can pre-populate per-component up/down adjusters in a single
+ * step.
  */
 export interface VerifiedReadingDraft {
   reading_token: string;
-  predicted_mm_ss: { m: number; s: number };
+  predicted_hms: { h: number; m: number; s: number };
   photo_url: string;
-  hour_from_server_clock: number;
   reference_source: "exif" | "server";
   expires_at_unix: number;
 }
@@ -257,7 +262,13 @@ export async function draftVerifiedReading(
 
 export interface ConfirmVerifiedReadingSubmission {
   reading_token: string;
-  final_mm_ss: { m: number; s: number };
+  /**
+   * Full HH:MM:SS the user is asserting their watch displays
+   * (12-hour analog clock — h ∈ [1, 12], m/s ∈ [0, 59]). PR #122
+   * replaced the seconds-only `final_mm_ss` to support
+   * per-component adjustment.
+   */
+  final_hms: { h: number; m: number; s: number };
   is_baseline?: boolean;
 }
 
