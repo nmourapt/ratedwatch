@@ -119,12 +119,28 @@ export function VerifiedReadingConfirmation({
     onConfirmed(result.reading);
   }
 
-  // Hour display: rendered in a small "Reading at HH:" prefix above
-  // the prediction. Deliberately separated from the MM:SS so the
-  // user can't trivially compose hh:mm:ss in their head and compare
-  // against the EXIF reference (which they don't have anyway). The
-  // hour is always padded to 2 digits to avoid different visual
-  // widths between e.g. "9" and "10".
+  // Hour display. Comes from the server clock (the SPA cannot
+  // change it; only the seconds are user-editable) and is rendered
+  // as the leftmost component of the predicted time so the user can
+  // verify it matches what their watch actually shows on the dial.
+  // Critical for the rollover edge cases (e.g. server hour = 11
+  // while the watch reads 10:59:30 — without seeing "10" beside the
+  // ":59:30" prediction, the user can't distinguish the system's
+  // hour assumption from their dial's actual hour).
+  //
+  // ## Anti-cheat tradeoff vs the original "small prefix" design
+  //
+  // The original slice-#7 layout rendered "Reading at HH:" as a tiny
+  // separated label so the user couldn't trivially compose HH:MM:SS
+  // in their head and compare against the EXIF anchor. In practice
+  // the user already knows the rough current time from their phone
+  // clock, so hiding the system's hour assumption added confusion
+  // (rollover ambiguity) without preventing cheating. Showing the
+  // hour does NOT leak the precise computed deviation — that comes
+  // from a HH:MM:SS - HH:MM:SS subtraction the user would have to
+  // do mentally with the EXIF reference (which they still don't
+  // have). The seconds-only ±30s adjustment cap remains the
+  // primary cheat barrier.
   const hourLabel = String(draft.hour_from_server_clock).padStart(2, "0");
 
   return (
@@ -148,28 +164,44 @@ export function VerifiedReadingConfirmation({
       />
 
       <div className="flex flex-col items-center gap-1 py-2">
-        {/* The "Reading at HH:" prefix sits ABOVE the MM:SS, not
-            beside it, so the user's eye doesn't read across as a
-            single HH:MM:SS triple. Deliberate UX choice — see the
-            anti-cheat note at the top of this file. */}
-        <span className="text-xs uppercase tracking-wide text-ink-muted">
-          Reading at {hourLabel}:
-        </span>
         <div
-          data-testid="prediction-mm-ss"
-          aria-label={`Reading shows ${formatMmSs(current)}`}
+          data-testid="prediction-hh-mm-ss"
+          aria-label={`Reading shows ${hourLabel}:${formatMmSs(current)}`}
           className="font-mono text-5xl font-light tabular-nums text-ink"
         >
+          {/* Hour: non-editable, comes from the server reference clock
+              (slice #6 of PRD #99). Shown prominently — same size as
+              MM:SS — so the user can verify the rollover-side at a
+              glance against what's on their dial. */}
+          <span data-testid="confirmation-hours" className="text-ink-muted">
+            {hourLabel}
+          </span>
+          <span aria-hidden="true" className="mx-1 text-ink-muted">
+            :
+          </span>
+          {/* Minutes: predicted by the VLM, NOT user-adjustable. If
+              the dial's minute reading doesn't match what's
+              displayed here, the user retakes — minutes-off-by-one
+              is outside the ±30s seconds nudge. */}
           <span data-testid="confirmation-minutes">
             {String(current.m).padStart(2, "0")}
           </span>
           <span aria-hidden="true" className="mx-1 text-ink-muted">
             :
           </span>
+          {/* Seconds: predicted by the VLM, user-adjustable via ±
+              buttons within ±30s of the prediction. Visually
+              accent-coloured so it's clearly the actionable element. */}
           <span data-testid="confirmation-seconds" className="text-accent">
             {String(current.s).padStart(2, "0")}
           </span>
         </div>
+        <span className="text-xs uppercase tracking-wide text-ink-muted">
+          {/* Plain English caption — orients the user without
+              giving away any deviation hint. Doesn't match the
+              anti-cheat regex /drift|deviation|[+-]\d+s/i. */}
+          Tap ± to nudge seconds to match your dial
+        </span>
       </div>
 
       <div className="flex items-center justify-center gap-4">

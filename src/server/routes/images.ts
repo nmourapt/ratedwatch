@@ -218,3 +218,74 @@ watchImagePublicRoute.get("/:id", async (c) => {
   );
   return new Response(object.body, { status: 200, headers });
 });
+
+// -------------------------------------------------------------------
+// Authed (owner-only): GET /images/drafts/:userId/:filename
+// -------------------------------------------------------------------
+//
+// Serves the draft photo persisted by `POST
+// /api/v1/watches/:id/readings/verified/draft` (slice #6 of PRD #99 —
+// issue #105). The /draft handler returns
+// `photo_url = "${origin}/images/drafts/${user_id}/${uuid}.jpg"`; the
+// SPA's confirmation page (slice #7 — issue #106) renders that URL in
+// an `<img>` tag so the user can verify the captured dial before
+// confirming.
+//
+// Without this route the photo URL 404s and the user can't see what
+// the VLM read — they're flying blind. PR following this issue adds
+// the missing route handler.
+//
+// Access control:
+//   * Anonymous → 404 (don't even leak that the URL exists).
+//   * Authed but `userId` segment !== caller's user.id → 404.
+//   * Owner → 200 + the JPEG bytes, with a `private, no-store`
+//     Cache-Control because drafts are short-lived (24h R2
+//     lifecycle expiry, 5-min reading-token TTL — see slice #6).
+//   * R2 object missing → 404. This happens after `/confirm` moves
+//     the photo to `verified/{user_id}/{reading_id}.jpg`, or after
+//     the 24h lifecycle rule expires an abandoned draft.
+//
+// Filename validation:
+//   * Reject any filename outside the `/^[a-f0-9-]{36}\.jpg$/`
+//     UUID-v4 + .jpg shape we mint in /draft. Prevents path traversal
+//     and arbitrary R2 key probing.
+//
+// Cache-Control: `private, no-store` — drafts are ephemeral and
+// owner-specific; we don't want any cache (browser, Cloudflare edge,
+// or otherwise) to serve a stale draft after the user's confirmed
+// the reading.
+
+const DRAFT_FILENAME_PATTERN = /^[a-f0-9-]{36}\.jpg$/i;
+
+export const verifiedDraftImageRoute = new Hono<{ Bindings: Bindings }>();
+
+verifiedDraftImageRoute.get("/:userId/:filename", async (c) => {
+  const userIdSegment = c.req.param("userId");
+  const filename = c.req.param("filename");
+  if (!userIdSegment || !filename || !DRAFT_FILENAME_PATTERN.test(filename)) {
+    return c.body(null, 404);
+  }
+
+  // Resolve session without forcing one — owner check below decides.
+  const auth = getAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const callerId = (session?.user as { id: string } | undefined)?.id ?? null;
+  if (callerId === null || callerId !== userIdSegment) {
+    return c.body(null, 404);
+  }
+
+  const r2Key = `drafts/${userIdSegment}/${filename}`;
+  const object = await c.env.WATCH_IMAGES.get(r2Key);
+  if (!object) {
+    return c.body(null, 404);
+  }
+
+  const headers = new Headers();
+  headers.set("content-type", object.httpMetadata?.contentType ?? "image/jpeg");
+  if (object.httpEtag) {
+    headers.set("etag", object.httpEtag);
+  }
+  // No-store on drafts: ephemeral + owner-specific.
+  headers.set("cache-control", "private, no-store");
+  return new Response(object.body, { status: 200, headers });
+});
