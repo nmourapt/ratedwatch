@@ -252,11 +252,28 @@ function DebugPanel({
   const wrapped = (((raw + 21600) % 43200) + 43200) % 43200;
   const projectedDeviation = wrapped - 21600;
 
+  const exifKeysSummary =
+    debug.exifKeys.length === 0
+      ? "(empty)"
+      : debug.exifKeys.length > 6
+        ? `${debug.exifKeys.slice(0, 6).join(", ")}, … (+${debug.exifKeys.length - 6})`
+        : debug.exifKeys.join(", ");
   const rows: Array<[string, string]> = [
+    [
+      "File (iOS handed SPA)",
+      `${debug.fileMimeType}, .${debug.fileExtension}, ${debug.fileSize} bytes`,
+    ],
+    ["File magic (first 12 bytes)", debug.fileMagicHex || "(empty)"],
+    ["exifr keys returned", exifKeysSummary],
     ["Photo EXIF DateTimeOriginal", debug.exifIso ?? "(none)"],
     ["Capture source", debug.captureSource],
     ["EXIF / fallback ms", `${debug.rawCaptureMs}  →  ${fmtIso(debug.rawCaptureMs)}`],
+    ["Date.now() at file picked", `${debug.pickedAtMs}  →  ${fmtIso(debug.pickedAtMs)}`],
     ["SPA Date.now() at submit", `${debug.submitMs}  →  ${fmtIso(debug.submitMs)}`],
+    [
+      "Pick-to-submit gap",
+      `${((debug.submitMs - debug.pickedAtMs) / 1000).toFixed(2)} s`,
+    ],
     ["NTP skew", skewLine],
     [
       "Sent client_capture_ms",

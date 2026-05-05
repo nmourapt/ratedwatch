@@ -77,6 +77,22 @@ export interface ExtractedCaptureTime {
    * exact value the iPhone wrote into the file.
    */
   exifIso?: string;
+  /**
+   * Diagnostic envelope (PR #130). All-or-nothing — populated
+   * whenever the file was inspected at all. Helps the debug panel
+   * surface "iOS gave us format X with EXIF keys Y" so we can see
+   * where in the iOS → SPA → exifr chain the timestamp goes
+   * missing.
+   */
+  diag?: {
+    fileMimeType: string;
+    fileExtension: string;
+    fileSize: number;
+    /** Space-separated hex bytes, e.g. "FF D8 FF E0 00 10 ..." */
+    fileMagicHex: string;
+    /** All keys exifr returned (often non-empty even when DateTimeOriginal is missing). */
+    exifKeys: string[];
+  };
 }
 
 /**
@@ -121,45 +137,91 @@ export async function extractCaptureTimeRich(
   // input shape so we always go through it. This is one extra copy
   // up-front, but on the SPA side the file is typically <2 MB and
   // ArrayBuffer reads are essentially free.
+  // PR #130: capture diagnostic info up-front (mime type, name,
+  // size) so the debug panel can show what iOS handed us even when
+  // exifr extraction fails. Stays attached to the result regardless
+  // of which branch we end up returning through.
+  const fileMimeType = file.type || "(unknown)";
+  const fileExtension = file.name.includes(".")
+    ? file.name.slice(file.name.lastIndexOf(".") + 1).toUpperCase()
+    : "(none)";
+  const fileSize = file.size;
+
   let buffer: ArrayBuffer;
   try {
     buffer = await file.arrayBuffer();
   } catch {
-    return { ms: fallbackMs, source: "fallback" };
+    return {
+      ms: fallbackMs,
+      source: "fallback",
+      diag: { fileMimeType, fileExtension, fileSize, fileMagicHex: "", exifKeys: [] },
+    };
   }
-  if (buffer.byteLength === 0) return { ms: fallbackMs, source: "fallback" };
+  if (buffer.byteLength === 0) {
+    return {
+      ms: fallbackMs,
+      source: "fallback",
+      diag: { fileMimeType, fileExtension, fileSize, fileMagicHex: "", exifKeys: [] },
+    };
+  }
 
-  // We disable IFD0 / GPS / IFD1 / interop and parse only the EXIF
-  // segment (where DateTimeOriginal and CreateDate live). The shorter
-  // `{ pick: [...] }` form is BROKEN in this exifr lite build
-  // (`undefined is not iterable` at setupGlobalFilters) — see the
-  // discovery in PR #124. The segment-on form is the workaround that
-  // lets the parser skip the expensive segments while still finding
-  // the two tags we want.
-  let parsed: { DateTimeOriginal?: unknown; CreateDate?: unknown } | undefined;
+  const fileMagicHex = magicHex(buffer, 12);
+
+  // PR #130: switched from segment-on options to default (full
+  // exifr behavior) for HEIC compatibility. The default parses
+  // ifd0 + exif + gps which adds a ~100µs of work per call but
+  // covers HEIC variants that segment-on misses. The previous
+  // segment-on form was a holdover from the lite build's broken
+  // pick: option workaround (PR #124); now that we're on full,
+  // default is fine.
+  let parsed: Record<string, unknown> | undefined;
   try {
-    parsed = (await exifrParse(buffer, {
-      ifd0: false,
-      exif: true,
-      gps: false,
-      interop: false,
-      ifd1: false,
-    })) as typeof parsed;
+    parsed = await exifrParse(buffer);
   } catch {
-    return { ms: fallbackMs, source: "fallback" };
+    return {
+      ms: fallbackMs,
+      source: "fallback",
+      diag: { fileMimeType, fileExtension, fileSize, fileMagicHex, exifKeys: [] },
+    };
   }
-  if (!parsed) return { ms: fallbackMs, source: "fallback" };
+  const exifKeys = parsed ? Object.keys(parsed) : [];
+  if (!parsed) {
+    return {
+      ms: fallbackMs,
+      source: "fallback",
+      diag: { fileMimeType, fileExtension, fileSize, fileMagicHex, exifKeys },
+    };
+  }
   // Prefer DateTimeOriginal (the moment the shutter fired); fall back
   // to CreateDate (some pipelines — HEIC, certain Android cameras —
   // populate only one of the two).
   const dto = parsed.DateTimeOriginal ?? parsed.CreateDate;
   const ms = toMs(dto);
-  if (ms === null) return { ms: fallbackMs, source: "fallback" };
+  if (ms === null) {
+    return {
+      ms: fallbackMs,
+      source: "fallback",
+      diag: { fileMimeType, fileExtension, fileSize, fileMagicHex, exifKeys },
+    };
+  }
   return {
     ms,
     source: "exif",
     exifIso: dto instanceof Date ? dto.toISOString() : String(dto),
+    diag: { fileMimeType, fileExtension, fileSize, fileMagicHex, exifKeys },
   };
+}
+
+/**
+ * Format the first `n` bytes of `buffer` as space-separated upper-
+ * case hex. Used to identify the actual on-disk file format
+ * regardless of what the MIME type claims.
+ */
+function magicHex(buffer: ArrayBuffer, n: number): string {
+  const view = new Uint8Array(buffer, 0, Math.min(n, buffer.byteLength));
+  return Array.from(view)
+    .map((b) => b.toString(16).toUpperCase().padStart(2, "0"))
+    .join(" ");
 }
 
 // Defensive: exifr usually returns a JS Date for revivable date

@@ -78,12 +78,19 @@ import { estimateClockSkew, type ClockSkewResult } from "./ntpSync";
 // which input is producing the wrong deviation. Remove this once
 // the bug is diagnosed.
 export interface VerifiedReadingDebugInfo {
-  /** EXIF DateTimeOriginal as ISO string, or "(no EXIF)". */
+  /** EXIF DateTimeOriginal as ISO string, or null when none. */
   exifIso: string | null;
   /** Where the captured timestamp came from. */
   captureSource: ExtractedCaptureSource;
   /** What `extractCaptureTime` returned (before NTP correction). */
   rawCaptureMs: number;
+  /**
+   * `Date.now()` captured at the file-picker `onChange` boundary —
+   * tighter approximation of shutter time than `submitMs` for the
+   * fallback path (when EXIF is unreadable, e.g. iOS Safari's
+   * HEIC→JPEG conversion strips DateTimeOriginal). Added in PR #130.
+   */
+  pickedAtMs: number;
   /** SPA's `Date.now()` at the moment of submit. */
   submitMs: number;
   /** Result from the NTP-style estimator (full failure detail when failed). */
@@ -92,6 +99,31 @@ export interface VerifiedReadingDebugInfo {
   clientCaptureMs: number;
   /** TZ offset minutes east of UTC sent as `client_tz_offset_minutes`. */
   clientTzOffsetMinutes: number;
+  /**
+   * The File's MIME type as iOS handed it to the SPA. "image/heic"
+   * means the iPhone gave us the original HEIC; "image/jpeg" means
+   * iOS converted at the picker (which usually strips EXIF).
+   */
+  fileMimeType: string;
+  /** File extension (sniffed from `file.name`), e.g. "HEIC", "JPG". */
+  fileExtension: string;
+  /** File size in bytes, as the SPA received it pre-resize. */
+  fileSize: number;
+  /**
+   * First 12 bytes of the file as hex, separated by spaces. The
+   * leading bytes identify the actual format regardless of what the
+   * MIME claims:
+   *   FF D8 FF              JPEG SOI
+   *   00 00 00 ?? 66 74 79  HEIC/HEIF (ftyp box)
+   *   89 50 4E 47           PNG
+   */
+  fileMagicHex: string;
+  /**
+   * The list of EXIF keys exifr returned, or empty array when nothing
+   * parseable. Helps distinguish "exifr couldn't parse this format"
+   * from "exifr parsed the format but found no DateTimeOriginal".
+   */
+  exifKeys: string[];
 }
 import type { VerifiedReadingErrorMessage } from "./verifiedReadingErrors";
 
@@ -116,7 +148,23 @@ type SubmitProgress = "uploading" | "reading" | "saving";
 
 type UiState =
   | { kind: "idle" }
-  | { kind: "chosen"; file: File; previewUrl: string }
+  | {
+      kind: "chosen";
+      file: File;
+      previewUrl: string;
+      /**
+       * `Date.now()` captured at the file-picker `onChange` callback
+       * — i.e. when iOS hands the file to the SPA, just after the
+       * user taps "Use Photo" in the camera review. Used as a tighter
+       * fallback than submit-time `Date.now()` for the case where
+       * EXIF is missing (iOS converting HEIC → JPEG strips
+       * DateTimeOriginal in some configurations). Closer to the
+       * shutter moment than submit-time by however long the user
+       * spends on the SPA's confirmation page (review-the-prediction-
+       * before-clicking-submit).
+       */
+      pickedAtMs: number;
+    }
   | {
       kind: "submitting";
       file: File;
@@ -260,7 +308,18 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
   const handleFileChosen = useCallback(
     (file: File) => {
       const previewUrl = setPreview(file);
-      setState({ kind: "chosen", file, previewUrl });
+      // Capture `Date.now()` at the file-picker boundary. On a
+      // fresh iPhone capture this fires when the user taps "Use
+      // Photo" in the camera review, which is the closest non-
+      // EXIF approximation we have to the shutter moment. Any
+      // SPA-side time spent reviewing the prediction afterwards
+      // doesn't add bias to `pickedAtMs` (only to `submitMs`).
+      setState({
+        kind: "chosen",
+        file,
+        previewUrl,
+        pickedAtMs: Date.now(),
+      });
     },
     [setPreview],
   );
@@ -286,13 +345,19 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
     // camera's authoritative shutter timestamp. PR #124 fix for the
     // upload-latency bias: this value gets sent to the server as
     // `client_capture_ms`, bounded against arrival, and used as the
-    // reference. When EXIF is missing (HEIC variants, screenshots,
-    // already-stripped photos), we fall back to `Date.now()` here —
-    // still much closer to the actual capture moment than the
-    // server-arrival fallback (which lags by upload latency, 5-15 s
-    // on cellular).
+    // reference. When EXIF is missing — which iOS Safari triggers
+    // when it converts iPhone HEIC → JPEG at the file picker
+    // boundary, stripping DateTimeOriginal in the process — we fall
+    // back to `pickedAtMs`, the `Date.now()` captured at the file-
+    // picker `onChange` (= just after the user taps "Use Photo" in
+    // the iOS camera review). That's typically within 1-2 s of the
+    // shutter, vs `submitMs` (= when they tap our submit button)
+    // which adds the SPA confirmation-page review time too. Per-
+    // reading bias drops from "shutter-to-submit" to "shutter-to-
+    // Use-Photo-tap" — much smaller. PR #130.
+    const pickedAtMs = state.kind === "chosen" ? state.pickedAtMs : Date.now();
     const submitMs = Date.now();
-    const captureRich = await extractCaptureTimeRich(sourceFile, submitMs);
+    const captureRich = await extractCaptureTimeRich(sourceFile, pickedAtMs);
     const rawCaptureMs = captureRich.ms;
 
     // PR #127: estimate the iPhone-vs-NTP clock skew via a
@@ -377,10 +442,16 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           exifIso: captureRich.exifIso ?? null,
           captureSource: captureRich.source,
           rawCaptureMs,
+          pickedAtMs,
           submitMs,
           skew: skewResult,
           clientCaptureMs,
           clientTzOffsetMinutes,
+          fileMimeType: captureRich.diag?.fileMimeType ?? "(no diag)",
+          fileExtension: captureRich.diag?.fileExtension ?? "(no diag)",
+          fileSize: captureRich.diag?.fileSize ?? 0,
+          fileMagicHex: captureRich.diag?.fileMagicHex ?? "",
+          exifKeys: captureRich.diag?.exifKeys ?? [],
         },
       });
       return;
@@ -484,11 +555,18 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
 
   function handleRetry() {
     if (state.kind !== "error") return;
-    // Same photo, fresh attempt — used for transport_error.
+    // Same photo, fresh attempt — used for transport_error. We
+    // RE-pick `Date.now()` here because the original pickedAtMs is
+    // gone (the error state didn't carry it). For a transport-
+    // error retry the photo is sometimes seconds-to-minutes old at
+    // this point, so this fallback isn't perfect — but it's only
+    // used when EXIF extraction also fails, which is the same
+    // boat as the original submit.
     setState({
       kind: "chosen",
       file: state.file,
       previewUrl: state.previewUrl,
+      pickedAtMs: Date.now(),
     });
     void handleSubmit();
   }
