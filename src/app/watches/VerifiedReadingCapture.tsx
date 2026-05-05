@@ -67,6 +67,7 @@ import {
 } from "./readings";
 import { maybeResize } from "./resizePhoto";
 import { extractCaptureTime } from "./extractCaptureTime";
+import { estimateClockSkew } from "./ntpSync";
 import type { VerifiedReadingErrorMessage } from "./verifiedReadingErrors";
 
 interface Props {
@@ -257,7 +258,22 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
     // server-arrival fallback (which lags by upload latency, 5-15 s
     // on cellular).
     const submitMs = Date.now();
-    const clientCaptureMs = await extractCaptureTime(sourceFile, submitMs);
+    const rawCaptureMs = await extractCaptureTime(sourceFile, submitMs);
+
+    // PR #127: estimate the iPhone-vs-NTP clock skew via a
+    // /api/v1/_time round-trip and correct the captured timestamp
+    // before sending. Without this, an iPhone running a few seconds
+    // ahead of NTP truth (real-world failure mode on cellular-only
+    // devices, after airplane-mode toggles, or in spotty Wi-Fi)
+    // bakes that bias into every saved deviation. The estimator
+    // never throws — on network error or implausible response we
+    // skip the correction and submit the raw `rawCaptureMs`. The
+    // server's existing ±5 min / +1 min bound on /draft is the
+    // backstop: a wildly off timestamp gets 422 there regardless.
+    const skewResult = await estimateClockSkew("/api/v1/_time");
+    const clientCaptureMs = skewResult.ok
+      ? rawCaptureMs + skewResult.skewMs
+      : rawCaptureMs;
 
     // Capture the user's TZ offset (minutes east of UTC) at the
     // capture moment, so the server can express the reference HMS
