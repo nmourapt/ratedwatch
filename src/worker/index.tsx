@@ -30,6 +30,7 @@ import {
 import { leaderboardRoute } from "@/server/routes/leaderboard";
 import { meRoute } from "@/server/routes/me";
 import { movementsRoute } from "@/server/routes/movements";
+import { timeRoute } from "@/server/routes/time";
 import { outRoute } from "@/server/routes/out";
 import { readingsByIdRoute, readingsByWatchRoute } from "@/server/routes/readings";
 import { seoRoute } from "@/server/routes/seo";
@@ -303,6 +304,11 @@ app.all("/api/v1/auth/*", (c) => {
 // auth gate and the public movements taxonomy search (slice 7);
 // later slices add watches/readings here.
 app.route("/api/v1/me", meRoute);
+// Server-clock probe used by the SPA's NTP-style sync to estimate
+// iPhone-vs-NTP clock skew before submitting `client_capture_ms` on
+// /draft (PR #127). Public, no auth, sub-millisecond response so the
+// SPA can attribute round-trip time entirely to network latency.
+app.route("/api/v1/_time", timeRoute);
 app.route("/api/v1/movements", movementsRoute);
 // Global leaderboard + per-movement leaderboard (filter via query param).
 // Public — no auth middleware. See src/server/routes/leaderboard.ts.
