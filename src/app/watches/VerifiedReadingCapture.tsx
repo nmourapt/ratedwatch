@@ -66,8 +66,33 @@ import {
   type VerifiedReadingDraft,
 } from "./readings";
 import { maybeResize } from "./resizePhoto";
-import { extractCaptureTime } from "./extractCaptureTime";
-import { estimateClockSkew } from "./ntpSync";
+import {
+  extractCaptureTimeRich,
+  type ExtractedCaptureSource,
+} from "./extractCaptureTime";
+import { estimateClockSkew, type ClockSkewResult } from "./ntpSync";
+
+// TEMPORARY (PR #128): bundle of timestamp/diagnostic data the
+// SPA collects during the verified-reading flow. Surfaced to the
+// user via a debug panel on the confirmation page so we can see
+// which input is producing the wrong deviation. Remove this once
+// the bug is diagnosed.
+export interface VerifiedReadingDebugInfo {
+  /** EXIF DateTimeOriginal as ISO string, or "(no EXIF)". */
+  exifIso: string | null;
+  /** Where the captured timestamp came from. */
+  captureSource: ExtractedCaptureSource;
+  /** What `extractCaptureTime` returned (before NTP correction). */
+  rawCaptureMs: number;
+  /** SPA's `Date.now()` at the moment of submit. */
+  submitMs: number;
+  /** Result from the NTP-style estimator (full failure detail when failed). */
+  skew: ClockSkewResult;
+  /** What we actually sent as `client_capture_ms` (post-correction). */
+  clientCaptureMs: number;
+  /** TZ offset minutes east of UTC sent as `client_tz_offset_minutes`. */
+  clientTzOffsetMinutes: number;
+}
 import type { VerifiedReadingErrorMessage } from "./verifiedReadingErrors";
 
 interface Props {
@@ -107,6 +132,15 @@ type UiState =
       kind: "confirming";
       isBaseline: boolean;
       draft: VerifiedReadingDraft;
+      /**
+       * TEMPORARY: timestamp diagnostics surfaced to the user via a
+       * debug panel on the confirmation page. Helps us figure out
+       * which link in the EXIF → NTP → server-reference chain is
+       * producing the wrong deviation. Remove this once the
+       * underlying bug is identified — the panel is unhelpful UX
+       * for normal users.
+       */
+      debug: VerifiedReadingDebugInfo;
     }
   | { kind: "success"; reading: Reading }
   | {
@@ -258,7 +292,8 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
     // server-arrival fallback (which lags by upload latency, 5-15 s
     // on cellular).
     const submitMs = Date.now();
-    const rawCaptureMs = await extractCaptureTime(sourceFile, submitMs);
+    const captureRich = await extractCaptureTimeRich(sourceFile, submitMs);
+    const rawCaptureMs = captureRich.ms;
 
     // PR #127: estimate the iPhone-vs-NTP clock skew via a
     // /api/v1/_time round-trip and correct the captured timestamp
@@ -338,6 +373,15 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
         kind: "confirming",
         isBaseline,
         draft: result.draft,
+        debug: {
+          exifIso: captureRich.exifIso ?? null,
+          captureSource: captureRich.source,
+          rawCaptureMs,
+          submitMs,
+          skew: skewResult,
+          clientCaptureMs,
+          clientTzOffsetMinutes,
+        },
       });
       return;
     }
@@ -706,6 +750,7 @@ export function VerifiedReadingCapture({ watchId, onSubmitted }: Props) {
           isBaseline={state.isBaseline}
           onConfirmed={handleConfirmed}
           onRetake={handleRetakeFromConfirmation}
+          debug={state.debug}
         />
       ) : null}
 

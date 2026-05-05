@@ -49,12 +49,38 @@
 import { parse as exifrParse } from "exifr/dist/lite.esm.mjs";
 
 /**
+ * Source of the returned capture-time. Useful for debug panels:
+ *
+ *   * `exif` — DateTimeOriginal (or CreateDate) from the photo's
+ *     EXIF segment was usable.
+ *   * `fallback` — no parseable EXIF found (HEIC variants exifr-lite
+ *     can't decode, screenshots, privacy-stripped photos). The
+ *     caller's `fallbackMs` was used.
+ */
+export type ExtractedCaptureSource = "exif" | "fallback";
+
+export interface ExtractedCaptureTime {
+  /** Unix ms used as the moment-of-capture. */
+  ms: number;
+  /** Where it came from. */
+  source: ExtractedCaptureSource;
+  /**
+   * The raw EXIF Date as an ISO string (UTC), present only when
+   * `source === "exif"`. Surfaced so the debug panel can show the
+   * exact value the iPhone wrote into the file.
+   */
+  exifIso?: string;
+}
+
+/**
  * Extract a capture-time timestamp (unix ms) for the given photo
  * file. Prefers EXIF DateTimeOriginal (or `CreateDate` as a
  * fallback for cameras that only set one); falls back to
  * `fallbackMs` otherwise.
  *
  * Always resolves to a finite number — never null, never throws.
+ * Backward-compatible wrapper kept so callers that only need the
+ * ms can read it directly via `.ms`.
  *
  * @param file        The photo as picked from the camera or gallery.
  *                    Read directly; do NOT pass the canvas-resized
@@ -68,6 +94,20 @@ export async function extractCaptureTime(
   file: File,
   fallbackMs: number,
 ): Promise<number> {
+  const result = await extractCaptureTimeRich(file, fallbackMs);
+  return result.ms;
+}
+
+/**
+ * Same as {@link extractCaptureTime} but returns rich info about
+ * the source — exposes the EXIF ISO string when present so the
+ * SPA's debug panel can show the iPhone's wall-clock vs the
+ * server's NTP-corrected reference.
+ */
+export async function extractCaptureTimeRich(
+  file: File,
+  fallbackMs: number,
+): Promise<ExtractedCaptureTime> {
   // Read the file into an ArrayBuffer first. exifr's lite build can
   // accept a Blob in browsers (Workers tests run in workerd which is
   // not quite a browser), but ArrayBuffer is the universally-supported
@@ -78,9 +118,9 @@ export async function extractCaptureTime(
   try {
     buffer = await file.arrayBuffer();
   } catch {
-    return fallbackMs;
+    return { ms: fallbackMs, source: "fallback" };
   }
-  if (buffer.byteLength === 0) return fallbackMs;
+  if (buffer.byteLength === 0) return { ms: fallbackMs, source: "fallback" };
 
   // We disable IFD0 / GPS / IFD1 / interop and parse only the EXIF
   // segment (where DateTimeOriginal and CreateDate live). The shorter
@@ -99,14 +139,20 @@ export async function extractCaptureTime(
       ifd1: false,
     })) as typeof parsed;
   } catch {
-    return fallbackMs;
+    return { ms: fallbackMs, source: "fallback" };
   }
-  if (!parsed) return fallbackMs;
+  if (!parsed) return { ms: fallbackMs, source: "fallback" };
   // Prefer DateTimeOriginal (the moment the shutter fired); fall back
   // to CreateDate (some pipelines — HEIC, certain Android cameras —
   // populate only one of the two).
-  const ms = toMs(parsed.DateTimeOriginal) ?? toMs(parsed.CreateDate);
-  return ms ?? fallbackMs;
+  const dto = parsed.DateTimeOriginal ?? parsed.CreateDate;
+  const ms = toMs(dto);
+  if (ms === null) return { ms: fallbackMs, source: "fallback" };
+  return {
+    ms,
+    source: "exif",
+    exifIso: dto instanceof Date ? dto.toISOString() : String(dto),
+  };
 }
 
 // Defensive: exifr usually returns a JS Date for revivable date
