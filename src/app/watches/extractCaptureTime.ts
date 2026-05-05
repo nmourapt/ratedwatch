@@ -46,7 +46,14 @@
 // fall back to `fallbackMs`. We log nothing on failure because
 // non-EXIF photos are a normal user flow, not an error condition.
 
-import { parse as exifrParse } from "exifr/dist/lite.esm.mjs";
+// PR #129: switched from `exifr/dist/lite.esm.mjs` to the full
+// build because lite's HEIC EXIF extractor has gaps that leave
+// DateTimeOriginal undefined for the HEIC variants iPhone Camera
+// produces by default. The full build (~75 KB minified vs lite's
+// ~45 KB) has complete HEIC support. The Worker side stays on lite
+// (the byte-EXIF path there is structurally dead since the SPA's
+// canvas-resize strips EXIF anyway — keeping Worker bundle small).
+import { parse as exifrParse } from "exifr/dist/full.esm.mjs";
 
 /**
  * Source of the returned capture-time. Useful for debug panels:
