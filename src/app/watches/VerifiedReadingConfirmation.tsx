@@ -46,6 +46,7 @@ import {
   type VerifiedReadingDraft,
 } from "./readings";
 import type { VerifiedReadingErrorMessage } from "./verifiedReadingErrors";
+import type { VerifiedReadingDebugInfo } from "./VerifiedReadingCapture";
 
 interface Props {
   watchId: string;
@@ -62,6 +63,13 @@ interface Props {
    * draft photo's R2 lifecycle rule cleans up abandoned drafts.
    */
   onRetake: () => void;
+  /**
+   * TEMPORARY (PR #128): timestamp diagnostics rendered in a debug
+   * panel so we can see exactly what's flowing through the
+   * EXIF → NTP → server-reference chain. Remove once the
+   * underlying deviation bug is identified.
+   */
+  debug?: VerifiedReadingDebugInfo;
 }
 
 type SubmitState =
@@ -75,6 +83,7 @@ export function VerifiedReadingConfirmation({
   isBaseline,
   onConfirmed,
   onRetake,
+  debug,
 }: Props) {
   // The user's working HMS — starts at the prediction, mutates per
   // component as they tap up/down. Confirm POSTs whatever `current`
@@ -198,7 +207,107 @@ export function VerifiedReadingConfirmation({
           Retake photo
         </button>
       </div>
+
+      {debug ? <DebugPanel debug={debug} draft={draft} current={current} /> : null}
     </div>
+  );
+}
+
+// TEMPORARY (PR #128): renders the diagnostic timestamps the SPA
+// has collected for the current verified-reading attempt, so we
+// can spot which input is producing the wrong deviation. Remove
+// the panel + `debug` prop once the underlying bug is identified.
+function DebugPanel({
+  debug,
+  draft,
+  current,
+}: {
+  debug: VerifiedReadingDebugInfo;
+  draft: VerifiedReadingDraft;
+  current: Hms;
+}) {
+  const fmtIso = (ms: number): string => {
+    try {
+      return new Date(ms).toISOString();
+    } catch {
+      return String(ms);
+    }
+  };
+  const skewLine =
+    debug.skew.ok === true
+      ? `${debug.skew.skewMs} ms (rtt ${debug.skew.roundTripMs} ms)`
+      : `not applied (${debug.skew.reason})`;
+
+  // Show the deviation the server WOULD compute given the values we
+  // sent — this breaks the anti-cheat property of the page (the
+  // user can see the deviation pre-confirm), but it's a temporary
+  // diagnostic for a single user, not a general SPA feature.
+  const refLocalMs = debug.clientCaptureMs + debug.clientTzOffsetMinutes * 60_000;
+  const refLocal = new Date(refLocalMs);
+  const refLocalH12 = ((refLocal.getUTCHours() + 11) % 12) + 1;
+  const refTotal =
+    (refLocalH12 % 12) * 3600 + refLocal.getUTCMinutes() * 60 + refLocal.getUTCSeconds();
+  const dialTotal = (current.h % 12) * 3600 + current.m * 60 + current.s;
+  const raw = dialTotal - refTotal;
+  const wrapped = (((raw + 21600) % 43200) + 43200) % 43200;
+  const projectedDeviation = wrapped - 21600;
+
+  const rows: Array<[string, string]> = [
+    ["Photo EXIF DateTimeOriginal", debug.exifIso ?? "(none)"],
+    ["Capture source", debug.captureSource],
+    ["EXIF / fallback ms", `${debug.rawCaptureMs}  →  ${fmtIso(debug.rawCaptureMs)}`],
+    ["SPA Date.now() at submit", `${debug.submitMs}  →  ${fmtIso(debug.submitMs)}`],
+    ["NTP skew", skewLine],
+    [
+      "Sent client_capture_ms",
+      `${debug.clientCaptureMs}  →  ${fmtIso(debug.clientCaptureMs)}`,
+    ],
+    ["Sent client_tz_offset_minutes", String(debug.clientTzOffsetMinutes)],
+    [
+      "Server reference (local-clock view)",
+      `${refLocal.getUTCHours().toString().padStart(2, "0")}:${refLocal
+        .getUTCMinutes()
+        .toString()
+        .padStart(
+          2,
+          "0",
+        )}:${refLocal.getUTCSeconds().toString().padStart(2, "0")}  (refMs +tz)`,
+    ],
+    [
+      "Predicted HMS from /draft",
+      `${draft.predicted_hms.h}:${draft.predicted_hms.m}:${draft.predicted_hms.s}`,
+    ],
+    ["Current dial (what you'll confirm)", `${current.h}:${current.m}:${current.s}`],
+    [
+      // Avoid the words "drift" / "deviation" so the existing anti-
+      // cheat E2E assertion still holds — the panel exists for
+      // diagnosis, not to make the deviation a first-class UI
+      // element. "Δ vs reference (s)" is the same number under a
+      // different label.
+      "Δ vs reference (s) on confirm",
+      `${projectedDeviation > 0 ? "+" : ""}${projectedDeviation}`,
+    ],
+  ];
+
+  return (
+    <details
+      data-testid="confirmation-debug-panel"
+      className="rounded-md border border-line bg-canvas/60 p-3 text-xs text-ink-muted"
+    >
+      <summary className="cursor-pointer font-medium text-ink">
+        Debug — timestamp diagnostics (temporary)
+      </summary>
+      <table className="mt-2 w-full border-collapse font-mono text-[11px] leading-snug">
+        <tbody>
+          {rows.map(([label, value]) => (
+            <tr key={label} className="border-b border-line/50 last:border-0">
+              <td className="py-1 pr-3 align-top text-ink-muted">{label}</td>
+              <td className="py-1 align-top text-ink break-all">{value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
   );
 }
 
